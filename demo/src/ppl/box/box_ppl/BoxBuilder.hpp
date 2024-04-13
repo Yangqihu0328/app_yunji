@@ -71,6 +71,7 @@ protected:
     std::unique_ptr<CBoxRecorder> m_dispRecorder;
 
     std::vector<std::unique_ptr<CDispatcher>> m_arrDispatcher;
+    //rgn patch观察者也是多路
     std::vector<IObserverUniquePtr> m_arrDispatchObserver;
 
     // primary

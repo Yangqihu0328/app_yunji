@@ -44,13 +44,17 @@ static AX_VOID normalizeMinMaxAvg(AX_U32 data[], AX_U32 size, AX_U32& min, AX_U3
 }
 #endif
 
+//写文件线程
 AX_VOID CStreamRecorder::ProcThread(AX_VOID*) {
     // constexpr AX_U32 MAX_TICK_NUM = 100;
     // AX_U32 ticks[MAX_TICK_NUM];
     // AX_U32 i = 0;
+    //相当于这个写线程一直在执行，但是会进行等待数据过来
     while (1) {
+        //肯定要上锁
         std::unique_lock<std::mutex> lck(m_mtxBuf);
         while (0 == m_writeBuf->len && m_ProcThread.IsRunning()) {
+            //看一下哪个地方唤醒m_cvWrite这个条件变量，也就是如果程序结束了，这个唤醒这里。
             m_cvWrite.wait(lck);
         }
 
@@ -59,10 +63,12 @@ AX_VOID CStreamRecorder::ProcThread(AX_VOID*) {
         }
 
         // AX_U64 nTick1 = GetTickCount();
+        //写数据没问题，肯定会阻塞写完
         m_file.Write(m_writeBuf->buf, m_writeBuf->len);
         m_writeBuf->len = 0;
 
         // ready to swap
+        //这个写完了，m_cvCache去唤醒哪个条件变量
         m_cvCache.notify_one();
 
         // AX_U64 nTick2 = GetTickCount();
@@ -76,28 +82,38 @@ AX_VOID CStreamRecorder::ProcThread(AX_VOID*) {
     }
 }
 
+//相当于重载IStream的OnRecvVideoData函数
+//而这个接收函数呢，就是把数据通过m_cacheBuf传给写线程
 AX_BOOL CStreamRecorder::OnRecvVideoData(AX_S32 nCookie, const AX_U8* pData, AX_U32 nLen, AX_U64 nPTS) {
     AX_S32 nLeft = nLen;
     const AX_U8* pBuff = pData;
     while (nLeft > 0) {
         AX_S32 nFree = m_cacheBuf->cap - m_cacheBuf->len;
+        //两者相互对应
         if (0 == nFree) {
             // buf is full, wait last write done and swap
+            //上锁等待，也就是这个是多线程，同个channel的数据过来也要等上个channel完成才能进来
             std::unique_lock<std::mutex> lck(m_mtxBuf);
+            //也就是要等待缓存的条件变量可以了，对应的写buf是空的
             if (!m_cvCache.wait_for(lck, std::chrono::milliseconds(5), [&]() -> bool { return (0 == m_writeBuf->len); })) {
                 LOG_M_W(TAG, "vdGrp%02d last write %d bytes timeout, abandon %d bytes", m_stAttr.nCookie, m_writeBuf->len, nLeft);
                 break;
             }
 
+            //这个地方呢，就是把m_cacheBuf缓存的数据放到m_writeBuf进行去写。。
+            //然后m_cacheBuf就保存缓存数据
             std::swap(m_cacheBuf, m_writeBuf);
             nFree = m_cacheBuf->cap;
 
             // start to write new buffer
+            //这个地方唤醒写的条件变量，也就是只有m_writeBuf有数据之后才去唤醒。
             m_cvWrite.notify_one();
         }
 
+        //数据拷贝到m_cacheBuf
         AX_S32 nSize = (nLeft > nFree) ? nFree : nLeft;
         if (nSize > 0) {
+            //m_cacheBuf->len要变化，不然每次都是同个地方
             memcpy(&m_cacheBuf->buf[m_cacheBuf->len], pBuff, nSize);
             m_cacheBuf->len += nSize;
             nLeft -= nSize;
@@ -180,6 +196,7 @@ AX_BOOL CStreamRecorder::Stop(AX_VOID) {
     m_ProcThread.Stop();
     {
         std::lock_guard<std::mutex> lck(m_mtxBuf);
+        //m_cvWrite通知唤醒
         m_cvWrite.notify_one();
     }
     m_ProcThread.Join();

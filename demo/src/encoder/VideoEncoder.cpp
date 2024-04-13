@@ -42,8 +42,11 @@ AX_BOOL CVideoEncoder::DeInit() {
     return AX_TRUE;
 }
 
+
+//只有一个channel
 AX_BOOL CVideoEncoder::Start(STAGE_START_PARAM_PTR pStartParams) {
     LOG_MM_I(VENC, "+++");
+    //0
     AX_S32 ret = AX_VENC_CreateChn(GetChannel(), &m_tVencChnAttr);
     if (AX_SUCCESS != ret) {
         LOG_M_E(VENC, "[%d] AX_VENC_CreateChn failed, ret=0x%x", GetChannel(), ret);
@@ -52,6 +55,7 @@ AX_BOOL CVideoEncoder::Start(STAGE_START_PARAM_PTR pStartParams) {
 
     StartRecv();
 
+    //开启接收数据线程
     StartWorkThread();
 
     SetSendFlag(AX_TRUE);
@@ -133,6 +137,7 @@ AX_VOID CVideoEncoder::StopWorkThread() {
 AX_VOID CVideoEncoder::RegObserver(IObserver* pObserver) {
     if (nullptr != pObserver) {
         OBS_TRANS_ATTR_T tTransAttr;
+        //观察者也是绑定channel
         tTransAttr.nChannel = m_tVideoConfig.nChannel;
         tTransAttr.nWidth = m_tVideoConfig.nWidth;
         tTransAttr.nHeight = m_tVideoConfig.nHeight;
@@ -158,6 +163,7 @@ AX_VOID CVideoEncoder::UnregObserver(IObserver* pObserver) {
     }
 }
 
+//调用之前venc绑定的观察者，相当于这里进行回调
 AX_VOID CVideoEncoder::NotifyAll(AX_U32 nChannel, AX_VOID* pStream) {
     if (nullptr == pStream) {
         return;

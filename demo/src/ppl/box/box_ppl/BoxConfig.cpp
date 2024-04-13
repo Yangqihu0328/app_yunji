@@ -38,6 +38,7 @@ string CBoxConfig::GetExecPath(AX_VOID) {
 
 AX_BOOL CBoxConfig::Init(AX_VOID) {
     string strIniPath = GetExecPath() + BOX_RES_PATH + "box.conf";
+    //相当于这里完成初始化
     if (!m_Ini.Load(strIniPath)) {
         return AX_FALSE;
     }
@@ -56,15 +57,18 @@ STREAM_CONFIG_T CBoxConfig::GetStreamConfig(AX_VOID) {
         sprintf(szKey, "chn%d depth", i);
         conf.nChnDepth[i] = m_Ini.GetIntValue(SECT, szKey, 8);
     }
+    //这个要使用默认为0，后面会经常考虑到
     conf.nDefaultFps = m_Ini.GetIntValue(SECT, "default fps", 0);
+    //默认为frame
     conf.nInputMode = m_Ini.GetIntValue(SECT, "input mode", 0);
-
+    //vdec使用私有pool
     conf.nUserPool = m_Ini.GetIntValue(SECT, "user pool", 1);
     if (conf.nUserPool > 2) {
         conf.nUserPool = 1;
     }
 
     conf.nMaxStreamBufSize = m_Ini.GetIntValue(SECT, "max stream buf size", 0x200000);
+    //也就是下面的stream*填再多也没用，受限于count
     AX_U32 nCount = m_Ini.GetIntValue(SECT, "count", 1);
     if (nCount > 0) {
         conf.v.resize(nCount);
@@ -81,6 +85,7 @@ STREAM_CONFIG_T CBoxConfig::GetStreamConfig(AX_VOID) {
     }
 
     /* SATA */
+    //存储路径
     conf.strSataPath = m_Ini.GetStringValue(SECT, "sata path", "");
     if (!conf.strSataPath.empty()) {
         if (conf.strSataPath[conf.strSataPath.length() - 1] != '/') {
@@ -88,16 +93,19 @@ STREAM_CONFIG_T CBoxConfig::GetStreamConfig(AX_VOID) {
         }
     }
 
+    //设置文件大小M
     conf.nSataFileSize = m_Ini.GetIntValue(SECT, "max sata file size", 100);
     if (conf.nSataFileSize > 0) {
         conf.nSataFileSize *= (1024 * 1024);
     }
 
+    //设置空间大小
     conf.nMaxSpaceSize = m_Ini.GetIntValue(SECT, "max space size", 300);
     if (conf.nMaxSpaceSize > 0) {
         conf.nMaxSpaceSize *= (1024 * 1024);
     }
 
+    //vdec直接unlink vo,因为叠加rgn
     conf.nLinkMode = m_Ini.GetIntValue(SECT, "linked mode", 0);
 
     return conf; /* RVO: optimized by compiler */
@@ -111,11 +119,14 @@ DETECT_CONFIG_T CBoxConfig::GetDetectConfig(AX_VOID) {
     conf.nW = m_Ini.GetIntValue(SECT, "width", 960);
     conf.nH = m_Ini.GetIntValue(SECT, "height", 640);
     conf.nSkipRate = m_Ini.GetIntValue(SECT, "skip rate", 1);
+    //每一路算法的fifo，这个buf不知道从哪来的，没见分配
     conf.nDepth = m_Ini.GetIntValue(SECT, "fifo depth", 1);
     conf.nVnpuMode = m_Ini.GetIntValue(SECT, "npu mode", 3);
+    //这个地方只是取3，应该是要跟随grp num才对
     conf.nChannelNum = m_Ini.GetIntValue(SECT, "channel num", 1);
     conf.nChannelNum = AX_MIN(conf.nChannelNum, 32);
 
+    //读取每一路channel的算法配置，暂时就两种算法，人车非和人脸并且可配置跟踪
     for (AX_S32 i = 0; i < conf.nChannelNum; ++i) {
         std::string str = "channel" + std::to_string(i) + " attr";
 
@@ -147,27 +158,33 @@ DISPVO_CONFIG_T CBoxConfig::GetDispVoConfig(const std::string &SECT) {
     // const AX_CHAR *SECT = "DISPC";
 
     conf.nDevId = m_Ini.GetIntValue(SECT, "dev", -1);
+    //这个hdmi就是为了设置分辨率的宽高
     conf.nHDMI = m_Ini.GetIntValue(SECT, "HDMI", 10);
+    //设置layaer的vb要求
     conf.nLayerDepth = m_Ini.GetIntValue(SECT, "layer depth", 3);
     /* if 0, vo using default tolerance, VO_LAYER_TOLERATION_DEF = 10*1000*1000 */
     conf.nTolerance = m_Ini.GetIntValue(SECT, "tolerance", 0);
     conf.bShowLogo = (AX_BOOL)m_Ini.GetIntValue(SECT, "show logo", 1);
     conf.bShowNoVideo = (AX_BOOL)m_Ini.GetIntValue(SECT, "show no video", 1);
+    //可以配置显示log以及配置图片
     conf.strResDirPath = GetExecPath() + BOX_RES_PATH + "res";
     conf.strBmpPath = conf.strResDirPath + "/font.bmp";
-
+    //配置record，对应了开启一个服务
     conf.bRecord = (AX_BOOL)m_Ini.GetIntValue(SECT, "record enable", 0);
+    //记录的话，需要多两个vb?
     if (conf.bRecord && conf.nLayerDepth < 5) {
         /* VO -> VENC: increase more VB */
         conf.nLayerDepth = 5;
     }
 
+    //这个地方是否与stream的stat配置类似？这个地方在确定一下
     conf.strRecordPath = m_Ini.GetStringValue(SECT, "record path", "");
     conf.nMaxRecordSize = m_Ini.GetIntValue(SECT, "max record size", 1024);
     conf.bRecordMuxer = (AX_BOOL)m_Ini.GetIntValue(SECT, "record muxer", 1);
 
     conf.nDispType = (AX_BOOL)m_Ini.GetIntValue(SECT, "disp type", 2);
 
+    //默认同显，如果配置disp1才是异显
     conf.bOnlineMode = (AX_BOOL)m_Ini.GetIntValue(SECT, "online mode", 0);
 
     return conf; /* RVO: optimized by compiler */
@@ -187,7 +204,9 @@ VENC_CONFIG_T CBoxConfig::GetVencConfig(AX_VOID) {
         conf.nPayloadType = PT_H264;
     }
 
+    //这个码率控制数据量
     conf.nBitRate = m_Ini.GetIntValue(SECT, "bitrate", 8192);
+    //看看后面是不是等于fps
     conf.nGop = m_Ini.GetIntValue(SECT, "gop", 0);
     strValue = m_Ini.GetStringValue(SECT, "rc type", "CBR");
     if (string::npos != strValue.find("AVBR")) {

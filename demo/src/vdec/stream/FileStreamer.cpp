@@ -22,12 +22,15 @@ AX_VOID CFileStreamer::DemuxThread(AX_VOID* pArg) {
     AX_S32 ret;
     const AX_S32 nCookie = m_stInfo.nCookie;
     AX_U64 nPTS;
+    //先使用配置文件的nForceFps，然后再使用视频解析出来的帧率，用来计算pts时间戳
     AX_U32 nPTSIntv = 1000000 / ((m_nForceFps > 0) ? m_nForceFps : m_stInfo.nFps);
 
     std::default_random_engine e(time(0));
     std::uniform_int_distribution<unsigned> u(0, m_nMaxSendNaluIntervalMilliseconds);
 
+    //相当于有多少路，就有多少个线程。
     while (m_DemuxThread.IsRunning()) {
+        //读取数据存在avpkt，相当于读取完一个视频之后，重新再次读取
         ret = av_read_frame(m_pAvFmtCtx, m_pAvPkt);
         if (ret < 0) {
             if (AVERROR_EOF == ret) {
@@ -55,6 +58,7 @@ AX_VOID CFileStreamer::DemuxThread(AX_VOID* pArg) {
 
         } else {
             if (m_pAvPkt->stream_index == m_nVideoIndex) {
+                //该帧进行比特流过滤。
                 ret = av_bsf_send_packet(m_pAvBSFCtx, m_pAvPkt);
                 if (ret < 0) {
                     av_packet_unref(m_pAvPkt);
@@ -63,8 +67,10 @@ AX_VOID CFileStreamer::DemuxThread(AX_VOID* pArg) {
                 }
 
                 while (ret >= 0) {
+                    //这里是循环读取音视频数据
                     ret = av_bsf_receive_packet(m_pAvBSFCtx, m_pAvPkt);
                     if (ret < 0) {
+                        //表示读取出错或者读取到最后，然后退出循环。
                         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
                             break;
                         }
@@ -72,28 +78,40 @@ AX_VOID CFileStreamer::DemuxThread(AX_VOID* pArg) {
                         av_packet_unref(m_pAvPkt);
                         LOG_M_E(DEMUX, "av_bsf_receive_packet(stream %d) fail, error: %d", nCookie, ret);
 
+                        //有意思的是这个地方，状态不更新设置false会怎么样？只是计数器没有加1
                         UpdateStatus(AX_FALSE);
                         return;
                     }
 
+                    //计数播放多少次
                     ++m_stStat.nCount;
 
+                    //第一帧或者是没有帧率
                     if (1 == m_stStat.nCount || 0 == m_stInfo.nFps) {
                         /* 1st frame or unknown fps */
+                        //获取当前的时间戳
                         AX_SYS_GetCurPTS(&nPTS);
                     } else {
+                        //之后的每一帧都加上时间戳，前面设置强制或者默认值帧率
+                        //时间戳这里暂时没问题
                         nPTS += nPTSIntv;
                     }
 
                     // LOG_M_C(DEMUX, "pts = %lld", nPTS);
-
+                    //这个list比较复杂，在于继承基类
+                    //相当于我就是接受最上层传递的grp数量来创建n个线程来解析视频
+                    //而与外界连接就是通过cookie来通信，这个m_lstObs肯定是基类控制的以及m_bSyncObs这个同步，这个很关键
+                    //遍历观察者，也就由顶层绑定观察者在数据处理，而这个观察者就是保存文件的观察者，如果没有的话，相当于不接收数据保存。
                     for (auto&& m : m_lstObs) {
+                        //必须同步之后之后才接收数据
                         if (!m->OnRecvVideoData(nCookie, m_pAvPkt->data, m_pAvPkt->size, nPTS) && m_bSyncObs) {
                             break;
                         }
                     }
 
+                    //最大间隔
                     if (m_nMaxSendNaluIntervalMilliseconds > 0) {
+                        //大于10ms就休眠，不然就不休息
                         AX_U32 ms = u(e);
                         if (ms > 10) {
                         //  LOG_M_C(DEMUX, "sleep for %d ms", ms);
@@ -114,6 +132,7 @@ AX_VOID CFileStreamer::DemuxThread(AX_VOID* pArg) {
 AX_BOOL CFileStreamer::Init(const STREAMER_ATTR_T& stAttr) {
     LOG_M_D(DEMUX, "%s: stream %d +++", __func__, stAttr.nCookie);
 
+    //先确定fps
     m_nForceFps = stAttr.nForceFps;
     m_nMaxSendNaluIntervalMilliseconds = stAttr.nMaxSendNaluIntervalMilliseconds;
     // #ifdef __SLT__
@@ -128,6 +147,7 @@ AX_BOOL CFileStreamer::Init(const STREAMER_ATTR_T& stAttr) {
     m_stInfo.nCookie = stAttr.nCookie;
     m_stInfo.nWidth = stAttr.nMaxWidth;
     m_stInfo.nHeight = stAttr.nMaxHeight;
+    //默认值，这个地方要注意之后
     m_stInfo.nFps = 30; /* default fps */
 
     m_stStat.bStarted = AX_FALSE;
@@ -137,6 +157,7 @@ AX_BOOL CFileStreamer::Init(const STREAMER_ATTR_T& stAttr) {
     AVCodecID eCodecID{AV_CODEC_ID_H264};
 
     AX_S32 ret = 0;
+    //这个地方很熟悉，使用的是ffmpeg的接口
     m_pAvFmtCtx = avformat_alloc_context();
     if (!m_pAvFmtCtx) {
         LOG_M_E(DEMUX, "avformat_alloc_context(stream %d) failed!", nCookie);
@@ -157,6 +178,7 @@ AX_BOOL CFileStreamer::Init(const STREAMER_ATTR_T& stAttr) {
         goto __FAIL__;
     }
 
+    //判断流是否为视频类型
     for (AX_U32 i = 0; i < m_pAvFmtCtx->nb_streams; i++) {
         if (AVMEDIA_TYPE_VIDEO == m_pAvFmtCtx->streams[i]->codecpar->codec_type) {
             m_nVideoIndex = i;
@@ -168,6 +190,7 @@ AX_BOOL CFileStreamer::Init(const STREAMER_ATTR_T& stAttr) {
         LOG_M_E(DEMUX, "%s has no video stream %d!", m_stInfo.strPath.c_str(), nCookie);
         goto __FAIL__;
     } else {
+        //再确定编码格式
         AVStream* pAvs = m_pAvFmtCtx->streams[m_nVideoIndex];
         eCodecID = pAvs->codecpar->codec_id;
         switch (eCodecID) {
@@ -185,16 +208,19 @@ AX_BOOL CFileStreamer::Init(const STREAMER_ATTR_T& stAttr) {
         m_stInfo.nWidth = pAvs->codecpar->width;
         m_stInfo.nHeight = pAvs->codecpar->height;
 
+        //也就是看视频里面的有没有平均帧率
         if (pAvs->avg_frame_rate.den == 0 || (pAvs->avg_frame_rate.num == 0 && pAvs->avg_frame_rate.den == 1)) {
             m_stInfo.nFps = (AX_U32)(round(av_q2d(pAvs->r_frame_rate)));
         } else {
             m_stInfo.nFps = (AX_U32)(round(av_q2d(pAvs->avg_frame_rate)));
         }
 
+        //存在60的限制
         if (m_stInfo.nFps > 60) {
             m_stInfo.nFps = 60;
         }
 
+        //实在没有取30fps
         if (0 == m_stInfo.nFps) {
             m_stInfo.nFps = 30;
             LOG_M_W(DEMUX, "stream %d fps is 0, set to %d fps", nCookie, m_stInfo.nFps);
@@ -210,6 +236,7 @@ AX_BOOL CFileStreamer::Init(const STREAMER_ATTR_T& stAttr) {
         goto __FAIL__;
     }
 
+    //卡顿可能两个影响，一个是帧率，第二个就是这个时间戳同步
     if ((AV_CODEC_ID_H264 == eCodecID) || (AV_CODEC_ID_HEVC == eCodecID)) {
         const AVBitStreamFilter* m_pBSFilter = av_bsf_get_by_name((AV_CODEC_ID_H264 == eCodecID) ? "h264_mp4toannexb" : "hevc_mp4toannexb");
         if (!m_pBSFilter) {
@@ -249,6 +276,7 @@ __FAIL__:
 AX_BOOL CFileStreamer::DeInit(AX_VOID) {
     LOG_M_D(DEMUX, "%s: stream %d +++", __func__, m_stInfo.nCookie);
 
+    //这个线程看看在哪里用的
     if (m_DemuxThread.IsRunning()) {
         LOG_M_E(DEMUX, "%s: demux thread is still running", __func__);
         return AX_FALSE;
@@ -277,11 +305,13 @@ AX_BOOL CFileStreamer::DeInit(AX_VOID) {
     return AX_TRUE;
 }
 
+//每一个流都有对应的
 AX_BOOL CFileStreamer::Start(AX_VOID) {
     LOG_M_D(DEMUX, "%s: stream %d +++", __func__, m_stInfo.nCookie);
 
     AX_CHAR szName[32];
     sprintf(szName, "AppDemux%d", m_stInfo.nCookie);
+    //这个线程实现先不管，先看线程做了什么事情
     if (!m_DemuxThread.Start([this](AX_VOID* pArg) -> AX_VOID { DemuxThread(pArg); }, nullptr, szName)) {
         LOG_M_E(DEMUX, "%s: create demux thread of stream %d fail", __func__, m_stInfo.nCookie);
         return AX_FALSE;

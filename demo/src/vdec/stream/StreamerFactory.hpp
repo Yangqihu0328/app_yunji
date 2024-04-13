@@ -25,9 +25,15 @@ class CStreamerFactory : public CAXSingleton<CStreamerFactory> {
     friend class CAXSingleton<CStreamerFactory>;
 
 public:
+    //传引用
     IStreamerHandlerPtr CreateHandler(const std::string& strPath) noexcept {
         std::string s = strPath;
+        //转成小写
         std::transform(s.begin(), s.end(), s.begin(), (int (*)(int))tolower);
+        //确定是rtsp流还是文件，这个地方就是
+        //也就是Cstreambasehandler是继承与istreamhandle,现在cstream派生出来cfile和crtsp
+        //现在返回的是基类指针
+        //相当于这个分配内存空间创建，返回值是基类指针类型
         STREAM_TYPE_E eType = (s.find("rtsp:") != std::string::npos) ? STREAM_TYPE_E::RTSP : STREAM_TYPE_E::FILE;
         switch (eType) {
             case STREAM_TYPE_E::FILE:

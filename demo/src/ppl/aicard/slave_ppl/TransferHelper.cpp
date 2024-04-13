@@ -135,25 +135,32 @@ AX_BOOL CTransferHelper::Init(const TRANSFER_ATTR_T& stAttr) {
     LOG_MM_I(TRANSFER, "+++");
 
     m_tInitAttr = stAttr;
+    //根据多少路，确定channel的数量
     AX_U32 nDataChannelCount = stAttr.nMaxVideoCount * 2/* send + recv */;
 
+    //确定channel数量，buff size以及trace和simulate标志位
+    //一层层的封装，从transfer--pcie adapter -- pcie opearator -- 真正的pcie接口 --底层pcie硬件接口
     if (!CPcieAdapter::GetInstance()->Init(nDataChannelCount + SHARED_PORT_NUMBER, stAttr.nBuffSize * 1024, stAttr.bEnableSimulateDetRets, stAttr.nTraceData, stAttr.nRetryCount)) {
         return AX_FALSE;
     }
 
     for (AX_U8 i = 0; i < stAttr.nMaxVideoCount + SHARED_PORT_NUMBER; i++) {
         // TODO: Not distinguish from stream and control command now
+        //buffer数量
         m_mapRecvData[i].pRingBuffer = new CAXRingBuffer(stAttr.nBuffSize * 1024, stAttr.nBuffCount);
 
+        //创建三个线程，这个线程创建很有意思
         m_vecThreadRecv.push_back(new CAXThread());
         m_vecThreadDispatch.push_back(new CAXThread());
         m_vecThreadSend.push_back(new CAXThread());
 
         m_mapRecvThreadParams[i] = make_tuple(i, i);
         m_mapDispThreadParams[i] = make_tuple(i, i);
+        //发送的index是加上全部接收
         m_mapSendThreadParams[i] = make_tuple(i, (i < SHARED_PORT_NUMBER ? i : i + stAttr.nMaxVideoCount));
     }
 
+    //这个hang住，再细看一下
     if (!HandShake()) {
         return AX_FALSE;
     }
@@ -269,7 +276,9 @@ AX_BOOL CTransferHelper::RegCommandObserver(IObserver* pObs) {
 }
 
 AX_BOOL CTransferHelper::HandShake(AX_VOID) {
+    //接受数据
     if (CPcieAdapter::GetInstance()->RecvHandShakePacket()) {
+        //发送数据给自己
         return CPcieAdapter::GetInstance()->SendHandShakeFeedback();
     }
 

@@ -55,6 +55,7 @@ AX_BOOL CBoxAppSys::DeInit(AX_VOID) {
     return AX_TRUE;
 }
 
+
 AX_BOOL CBoxAppSys::InitAppLog(const string& strAppName) {
     APP_LOG_ATTR_T stAttr;
     memset(&stAttr, 0, sizeof(stAttr));
@@ -84,7 +85,9 @@ AX_BOOL CBoxAppSys::DeInitAppLog(AX_VOID) {
     return AX_TRUE;
 }
 
+//SYS,VDEC,VENC,IVPS,DISP,NPU初始化
 AX_BOOL CBoxAppSys::InitSysMods(AX_VOID) {
+    //就是定义vector，绑定函数，名字以及初始化控制的变量，统一控制模块的初始化
     m_arrMods.clear();
     m_arrMods.reserve(8);
     m_arrMods.push_back({AX_FALSE, "SYS", bind(&CBoxAppSys::APP_SYS_Init, this), bind(&CBoxAppSys::APP_SYS_DeInit, this)});
@@ -97,6 +100,7 @@ AX_BOOL CBoxAppSys::InitSysMods(AX_VOID) {
 #endif
     m_arrMods.push_back({AX_FALSE, "NPU", bind(&CBoxAppSys::APP_NPU_Init, this), bind(&CBoxAppSys::APP_NPU_DeInit, this)});
 
+    //上面绑定，这里执行，相当于不同的写法而已。
     for (auto& m : m_arrMods) {
         AX_S32 ret = m.Init();
         if (0 != ret) {
@@ -149,8 +153,10 @@ AX_S32 CBoxAppSys::APP_VDEC_Init(AX_VOID) {
 AX_S32 CBoxAppSys::APP_VENC_Init(AX_VOID) {
     AX_VENC_MOD_ATTR_T stModAttr;
     memset(&stModAttr, 0, sizeof(stModAttr));
+    //视频编码
     stModAttr.enVencType = AX_VENC_VIDEO_ENCODER;
     stModAttr.stModThdAttr.bExplicitSched = AX_FALSE;
+    //总共线程
     stModAttr.stModThdAttr.u32TotalThreadNum = 1;
     AX_S32 ret = AX_VENC_Init(&stModAttr);
     if (0 != ret) {
@@ -170,6 +176,7 @@ AX_S32 CBoxAppSys::APP_SYS_Init(AX_VOID) {
 
     AX_APP_Log_SetSysModuleInited(AX_TRUE);
 
+    //注意是pool模块退出
     ret = AX_POOL_Exit();
     if (0 != ret) {
         LOG_E("%s: AX_POOL_Exit() fail, ret = 0x%x", __func__, ret);

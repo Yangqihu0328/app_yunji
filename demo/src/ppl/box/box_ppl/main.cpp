@@ -26,6 +26,7 @@
 
 static AX_VOID DisableDynamicMallocShrink(AX_S32 nKB) {
     printf("%s to %d KB\n", __func__, nKB);
+    //M_TRIM_THRESHOLD是分配释放的最顶层内存的最大数量
     mallopt(M_TRIM_THRESHOLD, nKB*1024);
 }
 
@@ -66,6 +67,7 @@ static void ignore_sig_pipe(void) {
 }
 
 int main(int argc, char const *argv[]) {
+    //三次之后强制性退出
     signal(SIGINT, exit_handler);
     signal(SIGQUIT, exit_handler);
     ignore_sig_pipe();
@@ -92,10 +94,12 @@ int main(int argc, char const *argv[]) {
         gIsRunning = true;
         int nRunCount = 0;
         while (gIsRunning) {
+            //时间类
             CElapsedTimer::GetInstance()->mSleep(1000);
             if (++nRunCount > 30) {
                 // Release memory back to the system every 30 seconds.
                 // https://linux.die.net/man/3/malloc_trim
+                //也就是释放堆顶的内存，把内存还给OS，只保持最小的内存给堆顶
                 malloc_trim(0);
 
                 nRunCount = 0;

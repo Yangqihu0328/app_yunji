@@ -13,6 +13,7 @@ using namespace std;
 
 AX_VOID CAXStage::StageThreadFunc(AX_VOID* pArg) {
     while (m_StageThread.IsRunning()) {
+        //frame出队
         CAXFrame* pFrame{nullptr};
         if (!m_qFrame.Pop(pFrame, -1)) {
             continue;

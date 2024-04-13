@@ -32,6 +32,7 @@ AX_BOOL CAiCardSlvBuilder::Init(AX_VOID) {
         return AX_FALSE;
     }
 
+    //后面配置文件相关都在CAiCardSlvConfig类中
     /* [1]: Load configuration */
     VDEC_CONFIG_T tVdecConfig = pConfig->GetVdecConfig();
     DETECT_CONFIG_T tDetectConfig = pConfig->GetDetectConfig();
@@ -39,12 +40,14 @@ AX_BOOL CAiCardSlvBuilder::Init(AX_VOID) {
     m_nDecodeGrpCount = tVdecConfig.nDecodeGrps;
     m_bSimulateDetRets = tDetectConfig.bEnableSimulator;
 
+    //系统媒体类和NPU
     /* [2]: Init system */
     AICARD_SLV_SYS_ATTR_T tSysAttr{.nMaxGrp = (AX_U32)m_nDecodeGrpCount};
     if (!m_sys.Init(tSysAttr, "AiCardSlv")) {
         return AX_FALSE;
     }
 
+    //仿真就开启检测
     if (!m_bSimulateDetRets) {
         /* [3]: Init detector */
         if (!InitDetector(tDetectConfig)) {
@@ -53,6 +56,7 @@ AX_BOOL CAiCardSlvBuilder::Init(AX_VOID) {
     }
 
     /* [4]: Init video decoder */
+    //再次开启decode？配置了channel 1
     tVdecConfig.arrChnW[DETECT_CHN] = tDetectConfig.nW;
     tVdecConfig.arrChnH[DETECT_CHN] = tDetectConfig.nH;
     if (!InitDecoder(tVdecConfig)) {
@@ -78,6 +82,7 @@ AX_BOOL CAiCardSlvBuilder::InitDetector(const DETECT_CONFIG_T &tDetectConfig) {
     }
 
     DETECTOR_ATTR_T tDetectAttr;
+    //这个decoder的grp属性在其他地方传进来
     tDetectAttr.nGrpCount = m_nDecodeGrpCount;
     tDetectAttr.nSkipRate = tDetectConfig.nSkipRate;
     tDetectAttr.nW = tDetectConfig.nW;
@@ -115,20 +120,25 @@ AX_BOOL CAiCardSlvBuilder::InitTransHelper() {
         return AX_FALSE;
     }
 
+    //基本使用默认值作为PCIE
     PCIE_CONFIG_T tPcieConfig = CAiCardSlvConfig::GetInstance()->GetPCIECofnig();
 
     TRANSFER_ATTR_T tAttr;
     tAttr.nMaxVideoCount = m_nDecodeGrpCount;
+    //1920*1080*3/1024/100=7KB,预留600KB足够了
     tAttr.nBuffCount = tPcieConfig.nBuffCount;
     tAttr.nBuffSize = tPcieConfig.nBuffSize;
     tAttr.nSendTimeout = tPcieConfig.nSendTimeout;
     tAttr.nRecvTimeout = tPcieConfig.nRecvTimeout;
+    //为什么这里需要确定是否仿真呢？
     tAttr.bEnableSimulateDetRets = m_bSimulateDetRets;
+    //这个标志位有什么用
     tAttr.nTraceData  = tPcieConfig.nTraceData;
     tAttr.nRetryCount = tPcieConfig.nRetryCount;
     if (!m_transHelper->Init(tAttr)) {
         return AX_FALSE;
     } else {
+        //这种设计就是直接传递这个类的智能指针
         m_transHelper->RegStreamObserver(m_vdec.get());
         m_transHelper->RegCommandObserver(m_vdecCtrlObserver.get());
         if (!m_bSimulateDetRets) {
@@ -172,6 +182,7 @@ AX_BOOL CAiCardSlvBuilder::InitDecoder(const VDEC_CONFIG_T &tVdecConfig) {
 
         /* FILE: playback + frame or stream mode according configuration */
         tGrpAttr.eDecodeMode = AX_VDEC_DISPLAY_MODE_PLAYBACK;
+        //确定是frame还是stream
         if (0 == tVdecConfig.nInputMode) {
             tGrpAttr.enInputMode = AX_VDEC_INPUT_MODE_FRAME;
             tGrpAttr.nMaxStreamBufSize = tGrpAttr.nMaxWidth * tGrpAttr.nMaxHeight * 2;
@@ -287,6 +298,7 @@ AX_BOOL CAiCardSlvBuilder::DeInit(AX_VOID) {
         }                   \
     } while (0)
 
+    //pcie数据传输
     DESTORY_INSTANCE(m_transHelper);
 
     /* If private pool, destory consumer before producer */

@@ -55,10 +55,14 @@ class CDetectResult : public CAXSingleton<CDetectResult> {
     friend class CAXSingleton<CDetectResult>;
 
 public:
+    //这种都是要上锁，因为设计到多线程，因为在其他地方get的时候，就出现同时访问同个变量。
+    //并且这里的m_mapRlts是公用的
     AX_BOOL Set(AX_S32 nGrp, const DETECT_RESULT_T& fhvp) {
         std::lock_guard<std::mutex> lck(m_mtx);
+        //CDetectResult是公用的，因此才要加锁处理
         m_mapRlts[nGrp] = fhvp;
 
+        //每个类型计数
         for (AX_U32 i = 0; i < fhvp.nCount; ++i) {
             ++m_arrCount[fhvp.item[i].eType];
         }
