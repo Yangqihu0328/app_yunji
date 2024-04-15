@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
             CNVRConfigParser::GetInstance()->SetTestSuiteRunMode(eMode);
 
             // nvr framework initialize
+            //选择检测数据源是vpss还是vdec，默认是vdec，因为rtsp经过解码送给nvr
             if (!CAXNVRFramework::GetInstance()->Init(cmd_parser.get<AX_S32>("detectsrc"),
                                                     cmd_parser.get<AX_S32>("log"))) {
                 break;

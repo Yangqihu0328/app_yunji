@@ -91,6 +91,7 @@ AX_BOOL CAXNVRDisplayCtrl::Init(const AX_NVR_VO_INFO_T &stAttr) {
         }
 
         // qt fb
+        //配置framebuffer 0
         if (m_stAttr.stVoAttr.s32FBIndex[0] != -1) {
             AX_S32 s32Ret = this->initFramebuffer(stArea.u32Width, stArea.u32Height, m_stAttr.stVoAttr.s32FBIndex[0]);
             if (s32Ret != 0) {
@@ -99,6 +100,7 @@ AX_BOOL CAXNVRDisplayCtrl::Init(const AX_NVR_VO_INFO_T &stAttr) {
             }
         }
 
+        //画框没用framebuffer 1
         if (m_stAttr.stVoAttr.s32FBIndex[1] != -1) {
             // paint fb
             AX_CHAR fbPath[32];
@@ -108,6 +110,7 @@ AX_BOOL CAXNVRDisplayCtrl::Init(const AX_NVR_VO_INFO_T &stAttr) {
             AX_NVR_FB_INIT_PARAM_T fbParam;
             fbParam.enPixFmt = AX_FORMAT_ARGB1555;
             fbParam.pFBPath = fbPath;
+            //跟随输入
             fbParam.nWidth = stArea.u32Width;
             fbParam.nHeight = stArea.u32Height;
             fbParam.nColorDraw = (fbParam.enPixFmt == AX_FORMAT_ARGB1555) ?

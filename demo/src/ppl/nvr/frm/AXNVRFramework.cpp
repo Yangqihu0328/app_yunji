@@ -368,6 +368,7 @@ CAXNVRDisplayCtrl *CAXNVRFramework::initPrimaryDispCtrl(AX_VOID) {
     stPrimaryAttr.stVoAttr.uiLayer = 0;
 
     if (!m_stDetectCfg.bEnable) {
+        //直接vo2disp，相当于节省VB,就是vo输出的数据可以拿出来进行画框之后再送给DISP，相当于需要占用多一块VB
         /* if no need to draw rects, change to AX_VO_LAYER_OUT_TO_LINK to not push into layer fifo to speed up VB */
         stPrimaryAttr.stVoAttr.bLinkVo2Disp = AX_TRUE;
     } else {
@@ -378,10 +379,12 @@ CAXNVRDisplayCtrl *CAXNVRFramework::initPrimaryDispCtrl(AX_VOID) {
     stPrimaryAttr.stVoAttr.s32FBIndex[1] = m_stPrimaryCfg.nFBRect;
     stPrimaryAttr.stVoAttr.enIntfType = AX_VO_INTF_HDMI;
     stPrimaryAttr.stVoAttr.enIntfSync = (AX_VO_INTF_SYNC_E)m_stPrimaryCfg.nHDMI;
+    //layer需要5张vb？这个地方是为什么
     stPrimaryAttr.stVoAttr.nLayerDepth = m_stPrimaryCfg.nLayerDepth;
     stPrimaryAttr.stVoAttr.nBgClr = 0x202020; // ((44 << 2) << 20) |((44 << 2) << 10) |(44 << 2);
     stPrimaryAttr.stVoAttr.nDetectW = m_stDetectCfg.nW;
     stPrimaryAttr.stVoAttr.nDetectH = m_stDetectCfg.nH;
+    //默认online
     stPrimaryAttr.stVoAttr.enVoMode = (m_stPrimaryCfg.nOnlineMode ? AX_VO_MODE_ONLINE : AX_VO_MODE_OFFLINE);
     CAXNVRDisplayCtrl *pPrimaryDispCtrl = nullptr;
     pPrimaryDispCtrl = new (std::nothrow) CAXNVRDisplayCtrl;
