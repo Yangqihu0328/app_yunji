@@ -17,6 +17,12 @@
 #include "PcieAdapter.hpp"
 #include "ax_skel_api.h"
 
+#define AX_SAMPLE 1
+
+#ifdef AX_SAMPLE
+#include "ax_engine_api.h"
+#endif
+
 #define DETECTOR_MAX_CHN_NUM 3
 
 typedef struct DETECTOR_CHN_ATTR_S {
@@ -59,10 +65,78 @@ typedef struct {
     AX_U32 nSkelChn;
 } SKEL_FRAME_PRIVATE_DATA_T;
 
+#ifdef AX_SAMPLE
+struct ax_joint_runner_ax650_handle_t
+{
+    AX_ENGINE_HANDLE handle;
+    AX_ENGINE_IO_INFO_T *io_info;
+    AX_ENGINE_IO_T io_data;
+
+    unsigned int algo_width, algo_height;
+    int algo_colorformat;
+};
+
+typedef struct
+{
+    std::string sName;
+    unsigned int nIdx;
+    std::vector<unsigned int> vShape;
+    int nSize;
+    unsigned long phyAddr;
+    void *pVirAddr;
+} ax_runner_tensor_t;
+
+typedef struct _image_t
+{
+    unsigned long long int pPhy; // image physical address
+    void *pVir;
+    unsigned int nSize;
+    unsigned int nWidth;
+    unsigned int nHeight;
+    union
+    {
+        int tStride_H, tStride_W, tStride_C;
+    };
+} axdl_image_t;
+
+typedef struct _bbox_t
+{
+    float x, y, w, h;
+} axdl_bbox_t;
+
+typedef struct _results_t
+{
+    int mModelType; // MODEL_TYPE_E
+    int bObjTrack;
+    int nObjSize;
+
+    int bPPHumSeg;
+
+    int bYolopv2Mask;
+
+    int nCrowdCount;
+
+    int niFps /*inference*/, noFps /*osd*/;
+
+} axdl_results_t;
+
+typedef struct {
+  float x, y, w, h;
+} box;
+
+typedef struct {
+  box bbox;
+  int cls;
+  float score;
+  int batch_idx;
+} detection;
+#endif
+
 /**
  * @brief
  *
  */
+
 class CDetector {
 public:
     CDetector(AX_VOID) = default;
@@ -72,6 +146,14 @@ public:
 
     AX_BOOL InitSkel();
     AX_BOOL DeInitSkel();
+
+    #ifdef AX_SAMPLE
+    AX_BOOL InitEngineHandle();
+    AX_BOOL DeInitEngineHandle();
+    
+    int inference(axdl_image_t *pstFrame, const axdl_bbox_t *crop_resize_box);
+    std::vector<detection> post_process(std::vector<detection> dets);
+    #endif
 
     AX_BOOL Start(AX_VOID);
     AX_BOOL Stop(AX_VOID);
@@ -91,6 +173,31 @@ protected:
     AX_BOOL SwitchAiAttr();
 
 protected:
+    #ifdef AX_SAMPLE
+    // detection
+    float PROB_THRESHOLD = 0.4f;
+    float NMS_THRESHOLD = 0.45f;
+    int CLASS_NUM = 80;
+    std::vector<float> ANCHORS = {12, 16, 19, 36, 40, 28,
+                                  36, 75, 76, 55, 72, 146,
+                                  142, 110, 192, 243, 459, 401};
+    std::vector<int> STRIDES = {8, 16, 32};
+    std::vector<const char*> CLASS_NAMES = {
+        "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
+        "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+        "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+        "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
+        "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+        "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+        "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
+        "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
+        "hair drier", "toothbrush"};
+    
+    struct ax_joint_runner_ax650_handle_t *m_handle = nullptr;
+    std::vector<ax_runner_tensor_t> minput_tensors; // handle input tensors
+    std::vector<ax_runner_tensor_t> mtensors; // handle result output tensors
+    #endif
+
     CAXLockQ<CAXFrame>* m_arrFrameQ{nullptr};
     DETECTOR_ATTR_T m_stAttr;
     DETECTOR_ATTR_T m_stSwitchingAttr;
