@@ -18,6 +18,15 @@
 #include "ElapsedTimer.hpp"
 #include "PcieAdapter.hpp"
 
+#ifdef AX_SAMPLE
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <complex>
+#include <math.h>
+#include <algorithm>
+#include <iostream>
+#endif
+
 using namespace std;
 #define DETECTOR "SKEL"
 
@@ -112,6 +121,69 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
             }
         }
 
+#ifdef AX_SAMPLE
+        axdl_image_t tSrcFrame{0};
+        tSrcFrame.nWidth = axFrame.stFrame.stVFrame.stVFrame.u32Width;
+        tSrcFrame.nHeight = axFrame.stFrame.stVFrame.stVFrame.u32Height;
+        tSrcFrame.pVir = axFrame.stFrame.stVFrame.stVFrame.u64VirAddr;
+        tSrcFrame.pPhy = axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0];
+        // tSrcFrame.tStride_W = axFrame.stFrame.stVFrame.stVFrame.u32PicStride;
+        tSrcFrame.nSize = axFrame.stFrame.stVFrame.stVFrame.u32FrameSize;
+        inference(&tSrcFrame, nullptr);
+        // 10. get result
+        std::vector<detection> dets;
+        dets = post_process(dets);
+        fprintf(stdout, "--------------------------------------\n");
+
+         DETECT_RESULT_T fhvp;
+        // fhvp.nSeqNum = pstResult->nFrameId;
+        fhvp.nW = 1920;
+        fhvp.nH = 1080;
+        fhvp.nSeqNum = axFrame.stFrame.stVFrame.stVFrame.u64SeqNum;
+        fhvp.nGrpId = axFrame.nGrp;
+        fhvp.nCount = dets.size();
+        printf("dets size: %d\n", dets.size());
+        
+        AX_U32 index = 0;
+        for (AX_U32 i = 0; i < fhvp.nCount && index < MAX_DETECT_RESULT_COUNT; ++i) {
+            // if (pstResult->pstObjectItems[i].eTrackState != AX_SKEL_TRACK_STATUS_NEW &&
+            //     pstResult->pstObjectItems[i].eTrackState != AX_SKEL_TRACK_STATUS_UPDATE) {
+            //     continue;
+            // }
+
+            if (0 == strcmp(CLASS_NAMES[dets[i].cls], "person")) {
+                fhvp.item[index].eType = DETECT_TYPE_BODY;
+            } else if (0 == strcmp(CLASS_NAMES[dets[i].cls], "car")) {
+                fhvp.item[index].eType = DETECT_TYPE_VEHICLE;
+            } else if (0 == strcmp("pstResult->pstObjectItems[i].pstrObjectCategory", "cycle")) {
+                fhvp.item[index].eType = DETECT_TYPE_CYCLE;
+            } else if (0 == strcmp("pstResult->pstObjectItems[i].pstrObjectCategory", "face")) {
+                fhvp.item[index].eType = DETECT_TYPE_FACE;
+            } else if (0 == strcmp("pstResult->pstObjectItems[i].pstrObjectCategory", "plate")) {
+                fhvp.item[index].eType = DETECT_TYPE_PLATE;
+            } else {
+                // LOG_M_W(DETECTOR, "unknown detect result %s of vdGrp %d frame %lld (skel %lld)",
+                //         pstResult->pstObjectItems[i].pstrObjectCategory, fhvp.nGrpId, fhvp.nSeqNum, pstResult->nFrameId);
+                fhvp.item[index].eType = DETECT_TYPE_UNKNOWN;
+            }
+
+            // fhvp.item[index].nTrackId = pstResult->pstObjectItems[i].nTrackId;
+            
+            
+            fhvp.item[index].tBox = {dets[i].bbox.x, dets[i].bbox.y, dets[i].bbox.w, dets[i].bbox.h};
+            // std::cout << "bbox x: " << dets[i].bbox.x << "\n"
+            // << "bbox y: " << dets[i].bbox.y << "\n"
+            // << "bbox w: " << dets[i].bbox.w << "\n"
+            // << "bbox h: " << dets[i].bbox.h << std::endl;
+            index++;
+        }
+
+        fhvp.nCount = index;
+        printf("nCount: %d **********************\n", fhvp.nCount);
+        /* save fhvp result */
+        CDetectResult::GetInstance()->Set(fhvp.nGrpId, fhvp);
+    
+#else
         SKEL_FRAME_PRIVATE_DATA_T *pPrivData = m_skelData.borrow();
         if (!pPrivData) {
             LOG_M_E(DETECTOR, "%s: borrow skel frame private data fail", __func__);
@@ -144,9 +216,11 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
 
             m_skelData.giveback(pPrivData);
         }
+#endif
     }
 
     LOG_M_D(DETECTOR, "%s: ---", __func__);
+
 }
 
 AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr, AX_BOOL bSimulateDetRets /*= AX_FALSE*/) {
@@ -357,12 +431,436 @@ AX_BOOL CDetector::DeInitSkel(AX_VOID) {
     return AX_TRUE;
 }
 
+#ifdef AX_SAMPLE
+#define AX_CMM_ALIGN_SIZE 128
+
+const char *AX_CMM_SESSION_NAME = "ax-pipeline-npu";
+
+typedef enum
+{
+    AX_ENGINE_ABST_DEFAULT = 0,
+    AX_ENGINE_ABST_CACHED = 1,
+} AX_ENGINE_ALLOC_BUFFER_STRATEGY_T;
+
+typedef std::pair<AX_ENGINE_ALLOC_BUFFER_STRATEGY_T, AX_ENGINE_ALLOC_BUFFER_STRATEGY_T> INPUT_OUTPUT_ALLOC_STRATEGY;
+
+void free_io_index(AX_ENGINE_IO_BUFFER_T *io_buf, int index)
+{
+    for (int i = 0; i < index; ++i)
+    {
+        AX_ENGINE_IO_BUFFER_T *pBuf = io_buf + i;
+        AX_SYS_MemFree(pBuf->phyAddr, pBuf->pVirAddr);
+    }
+}
+
+void free_io(AX_ENGINE_IO_T *io)
+{
+    for (size_t j = 0; j < io->nInputSize; ++j)
+    {
+        AX_ENGINE_IO_BUFFER_T *pBuf = io->pInputs + j;
+        AX_SYS_MemFree(pBuf->phyAddr, pBuf->pVirAddr);
+    }
+    for (size_t j = 0; j < io->nOutputSize; ++j)
+    {
+        AX_ENGINE_IO_BUFFER_T *pBuf = io->pOutputs + j;
+        AX_SYS_MemFree(pBuf->phyAddr, pBuf->pVirAddr);
+    }
+    delete[] io->pInputs;
+    delete[] io->pOutputs;
+}
+
+static inline int prepare_io(AX_ENGINE_IO_INFO_T *info, AX_ENGINE_IO_T *io_data, INPUT_OUTPUT_ALLOC_STRATEGY strategy)
+{
+    memset(io_data, 0, sizeof(*io_data));
+    io_data->pInputs = new AX_ENGINE_IO_BUFFER_T[info->nInputSize];
+    memset(io_data->pInputs, 0, sizeof(AX_ENGINE_IO_BUFFER_T) * info->nInputSize);
+    io_data->nInputSize = info->nInputSize;
+
+    auto ret = 0;
+    for (int i = 0; i < (int)info->nInputSize; ++i)
+    {
+        auto meta = info->pInputs[i];
+        auto buffer = &io_data->pInputs[i];
+        if (strategy.first == AX_ENGINE_ABST_CACHED)
+        {
+            ret = AX_SYS_MemAllocCached((AX_U64*)(&buffer->phyAddr), &buffer->pVirAddr, meta.nSize, AX_CMM_ALIGN_SIZE, (const AX_S8*)(AX_CMM_SESSION_NAME));
+        }
+        else
+        {
+            ret = AX_SYS_MemAlloc((AX_U64*)(&buffer->phyAddr), &buffer->pVirAddr, meta.nSize, AX_CMM_ALIGN_SIZE, (const AX_S8*)(AX_CMM_SESSION_NAME));
+        }
+
+        if (ret != 0)
+        {
+            free_io_index(io_data->pInputs, i);
+            fprintf(stderr, "Allocate input{%d} { phy: %p, vir: %p, size: %lu Bytes }. fail \n", i, (void*)buffer->phyAddr, buffer->pVirAddr, (long)meta.nSize);
+            return ret;
+        }
+    }
+
+    io_data->pOutputs = new AX_ENGINE_IO_BUFFER_T[info->nOutputSize];
+    memset(io_data->pOutputs, 0, sizeof(AX_ENGINE_IO_BUFFER_T) * info->nOutputSize);
+    io_data->nOutputSize = info->nOutputSize;
+    for (int i = 0; i < (int)info->nOutputSize; ++i)
+    {
+        auto meta = info->pOutputs[i];
+        auto buffer = &io_data->pOutputs[i];
+        buffer->nSize = meta.nSize;
+        if (strategy.second == AX_ENGINE_ABST_CACHED)
+        {
+            ret = AX_SYS_MemAllocCached((AX_U64*)(&buffer->phyAddr), &buffer->pVirAddr, meta.nSize, AX_CMM_ALIGN_SIZE, (const AX_S8*)(AX_CMM_SESSION_NAME));
+        }
+        else
+        {
+            ret = AX_SYS_MemAlloc((AX_U64*)(&buffer->phyAddr), &buffer->pVirAddr, meta.nSize, AX_CMM_ALIGN_SIZE, (const AX_S8*)(AX_CMM_SESSION_NAME));
+        }
+        if (ret != 0)
+        {
+            fprintf(stderr, "Allocate output{%d} { phy: %p, vir: %p, size: %lu Bytes }. fail \n", i, (void*)buffer->phyAddr, buffer->pVirAddr, (long)meta.nSize);
+            free_io_index(io_data->pInputs, io_data->nInputSize);
+            free_io_index(io_data->pOutputs, i);
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
+AX_BOOL CDetector::InitEngineHandle() {
+    if (m_handle)
+    {
+        return AX_FALSE;
+    }
+    m_handle = new ax_joint_runner_ax650_handle_t;
+
+    // 1. init engine
+    int ret = 0;
+
+    // 2. load model
+    auto *file_fp = fopen(m_stAttr.szModelPath, "r");
+    if (!file_fp)
+    {
+        printf("Read model(%s) file failed.\n", m_stAttr.szModelPath);
+        return AX_FALSE;
+    }
+    fseek(file_fp, 0, SEEK_END);
+    int model_size = ftell(file_fp);
+    fclose(file_fp);
+    int fd = open(m_stAttr.szModelPath, O_RDWR, 0644);
+    void *mmap_add = mmap(NULL, model_size, PROT_WRITE, MAP_SHARED, fd, 0);
+
+    // 3. create handle
+    printf("MODEL PATH: %s\n", m_stAttr.szModelPath);
+    
+    ret = AX_ENGINE_CreateHandle(&m_handle->handle, mmap_add, model_size);
+    if (0 != ret)
+    {
+        printf("AX_ENGINE_CreateHandle 0x%x", ret);
+        return AX_FALSE;
+    }
+    printf("Engine creating handle is done.\n");
+    munmap(mmap_add, model_size);
+
+    // 4. create context
+    ret = AX_ENGINE_CreateContext(m_handle->handle);
+    if (0 != ret)
+    {
+        printf("AX_ENGINE_CreateContext 0x%x", ret);
+        return AX_FALSE;
+    }
+    printf("Engine creating context is done.\n");
+
+    // 5. set io
+
+    ret = AX_ENGINE_GetIOInfo(m_handle->handle, &m_handle->io_info);
+    if (0 != ret)
+    {
+        return AX_FALSE;
+    }
+    printf("Engine get io info is done. \n");
+
+    // 6. alloc io
+    ret = prepare_io(m_handle->io_info, &m_handle->io_data, std::make_pair(AX_ENGINE_ABST_DEFAULT, AX_ENGINE_ABST_DEFAULT));
+    if (0 != ret)
+    {
+        return AX_FALSE;
+    }
+    printf("Engine alloc io is done. \n");
+
+    for (size_t i = 0; i < m_handle->io_info->nOutputSize; i++)
+    {  
+        ax_runner_tensor_t tensor;
+        tensor.nIdx = i;
+        tensor.sName = std::string(m_handle->io_info->pOutputs[i].pName);
+        tensor.nSize = m_handle->io_info->pOutputs[i].nSize;
+        
+        for (size_t j = 0; j < m_handle->io_info->pOutputs[i].nShapeSize; j++)
+        {
+            tensor.vShape.push_back(m_handle->io_info->pOutputs[i].pShape[j]);
+        }
+        tensor.phyAddr = m_handle->io_data.pOutputs[i].phyAddr;
+        tensor.pVirAddr = m_handle->io_data.pOutputs[i].pVirAddr;
+        mtensors.push_back(tensor);
+    }
+
+    for (size_t i = 0; i < m_handle->io_info->nInputSize; i++)
+    {
+        ax_runner_tensor_t tensor;
+        tensor.nIdx = i;
+        tensor.sName = std::string(m_handle->io_info->pInputs[i].pName);
+        tensor.nSize = m_handle->io_info->pInputs[i].nSize;
+        for (size_t j = 0; j < m_handle->io_info->pInputs[i].nShapeSize; j++)
+        {
+            tensor.vShape.push_back(m_handle->io_info->pInputs[i].pShape[j]);
+        }
+        tensor.phyAddr = m_handle->io_data.pInputs[i].phyAddr;
+        tensor.pVirAddr = m_handle->io_data.pInputs[i].pVirAddr;
+        minput_tensors.push_back(tensor);
+    }
+    return AX_TRUE;
+}
+
+AX_BOOL CDetector::DeInitEngineHandle() {
+    if (m_handle && m_handle->handle)
+    {
+        free_io(&m_handle->io_data);
+        AX_ENGINE_DestroyHandle(m_handle->handle);
+    }
+    delete m_handle;
+    m_handle = nullptr;
+    AX_ENGINE_Deinit();
+}
+
+int CDetector::inference(axdl_image_t *pstFrame, const axdl_bbox_t *crop_resize_box)
+{   
+    memcpy(minput_tensors[0].pVirAddr, pstFrame->pVir, minput_tensors[0].nSize);
+    return AX_ENGINE_RunSync(m_handle->handle, &m_handle->io_data);
+}
+
+typedef struct {
+  ax_runner_tensor_t *output;
+  int num_anchors, h, w, bbox_len, batch = 1, layer_idx;
+} detectLayer;
+
+static const char *coco_names[] = {
+    "person",        "bicycle",       "car",           "motorbike",
+    "aeroplane",     "bus",           "train",         "truck",
+    "boat",          "traffic light", "fire hydrant",  "stop sign",
+    "parking meter", "bench",         "bird",          "cat",
+    "dog",           "horse",         "sheep",         "cow",
+    "elephant",      "bear",          "zebra",         "giraffe",
+    "backpack",      "umbrella",      "handbag",       "tie",
+    "suitcase",      "frisbee",       "skis",          "snowboard",
+    "sports ball",   "kite",          "baseball bat",  "baseball glove",
+    "skateboard",    "surfboard",     "tennis racket", "bottle",
+    "wine glass",    "cup",           "fork",          "knife",
+    "spoon",         "bowl",          "banana",        "apple",
+    "sandwich",      "orange",        "broccoli",      "carrot",
+    "hot dog",       "pizza",         "donut",         "cake",
+    "chair",         "sofa",          "pottedplant",   "bed",
+    "diningtable",   "toilet",        "tvmonitor",     "laptop",
+    "mouse",         "remote",        "keyboard",      "cell phone",
+    "microwave",     "oven",          "toaster",       "sink",
+    "refrigerator",  "book",          "clock",         "vase",
+    "scissors",      "teddy bear",    "hair drier",    "toothbrush"};
+
+static float anchors_[3][3][2] = {{{10, 13}, {16, 30}, {33, 23}},
+                                  {{30, 61}, {62, 45}, {59, 119}},
+                                  {{116, 90}, {156, 198}, {373, 326}}};
+
+template <typename T> int argmax(const T *data, size_t len, size_t stride = 1) {
+  int maxIndex = 0;
+  for (size_t i = 1; i < len; i++) {
+    int idx = i * stride;
+    if (data[maxIndex * stride] < data[idx]) {
+      maxIndex = i;
+    }
+  }
+  return maxIndex;
+}
+
+static float sigmoid(float x) { return 1.0 / (1 + expf(-x)); }
+
+float calIou(box a, box b) {
+    float area1 = a.w * a.h;
+    float area2 = b.w * b.h;
+    float wi = std::min((a.x + a.w), (b.x + b.w)) -
+                    std::max((a.x), (b.x));
+    float hi = std::min((a.y + a.h), (b.y + b.h)) -
+                    std::max((a.y), (b.y));
+    float area_i = std::max(wi, 0.0f) * std::max(hi, 0.0f);
+    return area_i / (area1 + area2 - area_i);
+}
+
+void correctYoloBoxes(detection *dets, int det_num, int image_h, int image_w,
+                      int input_height, int input_width) {
+  int restored_w;
+  int restored_h;
+  float resize_ratio;
+  if (((float)input_width / image_w) < ((float)input_height / image_h)) {
+    restored_w = input_width;
+    restored_h = (image_h * input_width) / image_w;
+  } else {
+    restored_h = input_height;
+    restored_w = (image_w * input_height) / image_h;
+  }
+  resize_ratio = ((float)image_w / restored_w);
+
+  for (int i = 0; i < det_num; ++i) {
+    box bbox = dets[i].bbox;
+    int b = dets[i].batch_idx;
+    bbox.x = (bbox.x - (input_width - restored_w) / 2.) * resize_ratio;
+    bbox.y = (bbox.y - (input_height - restored_h) / 2.) * resize_ratio;
+    bbox.w *= resize_ratio;
+    bbox.h *= resize_ratio;
+    dets[i].bbox = bbox;
+  }
+}
+
+void NMS(detection *dets, int *total, float thresh) {
+  if (*total) {
+    std::sort(dets, dets + *total - 1,
+              [](detection &a, detection &b) { return b.score < a.score; });
+    int new_count = *total;
+    for (int i = 0; i < *total; ++i) {
+      detection &a = dets[i];
+      if (a.score == 0)
+        continue;
+      for (int j = i + 1; j < *total; ++j) {
+        detection &b = dets[j];
+        if (dets[i].batch_idx == dets[j].batch_idx && b.score != 0 &&
+            dets[i].cls == dets[j].cls && calIou(a.bbox, b.bbox) > thresh) {
+          b.score = 0;
+          new_count--;
+        }
+      }
+    }
+    for (int i = 0, j = 0; i < *total && j < new_count; ++i) {
+      detection &a = dets[i];
+      if (a.score == 0)
+        continue;
+      dets[j] = dets[i];
+      ++j;
+    }
+    *total = new_count;
+  }
+}
+
+void generate_proposals_yolov5(int stride, const float* feat, float prob_threshold, std::vector<detection>& objects,
+                                          int letterbox_cols, int letterbox_rows, const float* anchors, float prob_threshold_unsigmoid, int cls_num = 80)
+{
+    int anchor_num = 3;
+    int feat_w = letterbox_cols / stride;
+    int feat_h = letterbox_rows / stride;
+    int anchor_group;
+    if (stride == 8)
+        anchor_group = 1;
+    if (stride == 16)
+        anchor_group = 2;
+    if (stride == 32)
+        anchor_group = 3;
+
+    auto feature_ptr = feat;
+
+    for (int h = 0; h <= feat_h - 1; h++)
+    {
+        for (int w = 0; w <= feat_w - 1; w++)
+        {
+            for (int a = 0; a <= anchor_num - 1; a++)
+            {
+                if (feature_ptr[4] < prob_threshold_unsigmoid)
+                {
+                    feature_ptr += (cls_num + 5);
+                    continue;
+                }
+
+                //process cls score
+                int class_index = 0;
+                float class_score = 0;
+                for (int s = 0; s <= cls_num - 1; s++)
+                {
+                    float score = feature_ptr[s + 5];
+                    if (score > class_score)
+                    {
+                        class_index = s;
+                        class_score = score;
+                    }
+                }
+                //process box score
+                float box_score = feature_ptr[4];
+                float final_score = sigmoid(box_score) * sigmoid(class_score);
+
+                if (final_score >= prob_threshold)
+                {
+                    float dx = sigmoid(feature_ptr[0]);
+                    float dy = sigmoid(feature_ptr[1]);
+                    float dw = sigmoid(feature_ptr[2]);
+                    float dh = sigmoid(feature_ptr[3]);
+                    float pred_cx = (dx * 2.0f - 0.5f + w) * stride;
+                    float pred_cy = (dy * 2.0f - 0.5f + h) * stride;
+                    float anchor_w = anchors[(anchor_group - 1) * 6 + a * 2 + 0];
+                    float anchor_h = anchors[(anchor_group - 1) * 6 + a * 2 + 1];
+                    float pred_w = dw * dw * 4.0f * anchor_w;
+                    float pred_h = dh * dh * 4.0f * anchor_h;
+                    float x0 = pred_cx - pred_w * 0.5f;
+                    float y0 = pred_cy - pred_h * 0.5f;
+                    float x1 = pred_cx + pred_w * 0.5f;
+                    float y1 = pred_cy + pred_h * 0.5f;
+                    
+                    
+                    detection obj;
+                    obj.bbox.x = x0;
+                    obj.bbox.y = y0;
+                    obj.bbox.w = x1 - x0;
+                    obj.bbox.h = y1 - y0;
+                    obj.cls = class_index;
+                    obj.score = final_score;
+                    objects.push_back(obj);
+                }
+
+                feature_ptr += (cls_num + 5);
+            }
+        }
+    }
+}
+
+std::vector<detection> CDetector::post_process(std::vector<detection> dets)
+{
+    const float ANCHORS[18] = {10, 13, 16, 30, 33, 23, 30, 61, 62, 45, 59, 119, 116, 90, 156, 198, 373, 326};
+    AX_ENGINE_IO_INFO_T* io_info = m_handle->io_info;
+    AX_ENGINE_IO_T *io_data = &m_handle->io_data;
+    float prob_threshold_u_sigmoid = -1.0f * (float)std::log((1.0f / PROB_THRESHOLD) - 1.0f);
+    for (uint32_t i = 0; i < io_info->nOutputSize; ++i)
+    {
+        auto& output = io_data->pOutputs[i];
+        auto& info = io_info->pOutputs[i];
+        auto ptr = (float*)output.pVirAddr;
+
+        int32_t stride = (1 << i) * 8;
+        generate_proposals_yolov5(stride, ptr, PROB_THRESHOLD, dets, 640, 640, ANCHORS, prob_threshold_u_sigmoid);
+    }
+    std::cout << dets.size() << std::endl;
+    int count = dets.size();
+
+    NMS(dets.data(), &count, 0.5);
+    std::vector<detection> res;
+    for (int i = 0; i < count; i++) {
+        res.push_back(dets[i]);
+    }
+    return res;
+}
+#endif
+
 AX_BOOL CDetector::Start(AX_VOID) {
     LOG_MM_C(DETECTOR, "+++");
-
+    
+    #ifdef AX_SAMPLE
+    InitEngineHandle();
+    #else
     if (!InitSkel()) {
         return AX_FALSE;
     }
+    #endif
 
     if (!m_DetectThread.Start([this](AX_VOID *pArg) -> AX_VOID { RunDetect(pArg); }, this, "AppDetect", SCHED_FIFO, 99)) {
         LOG_M_E(DETECTOR, "%s: create detect thread fail", __func__);
@@ -391,10 +889,14 @@ AX_BOOL CDetector::Stop(AX_VOID) {
             ClearQueue(i);
         }
     }
-
+    
+    #ifdef AX_SAMPLE
+    DeInitEngineHandle();
+    #else
     if (!DeInitSkel()) {
         return AX_FALSE;
     }
+    #endif
 
     LOG_MM_C(DETECTOR, "---");
     return AX_TRUE;
