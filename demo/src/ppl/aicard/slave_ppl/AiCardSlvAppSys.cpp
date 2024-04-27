@@ -68,7 +68,6 @@ AX_BOOL CAiCardSlvAppSys::InitAppLog(const string& strAppName) {
     stAttr.nLv = APP_LOG_WARN;
     strncpy(stAttr.szAppName, strAppName.c_str(), arraysize(stAttr.szAppName) - 1);
 
-    //确实读取配置log文件
     AX_CHAR* env1 = getenv("APP_LOG_TARGET");
     if (env1) {
         stAttr.nTarget = atoi(env1);
@@ -79,7 +78,6 @@ AX_BOOL CAiCardSlvAppSys::InitAppLog(const string& strAppName) {
         stAttr.nLv = atoi(env2);
     }
 
-    //相当于代码修改log等级，并且是爱芯的AXlog
     return (0 == AX_APP_Log_Init(&stAttr)) ? AX_TRUE : AX_FALSE;
 }
 
@@ -91,9 +89,6 @@ AX_BOOL CAiCardSlvAppSys::DeInitAppLog(AX_VOID) {
 AX_BOOL CAiCardSlvAppSys::InitSysMods(AX_VOID) {
     m_arrMods.clear();
     m_arrMods.reserve(3);
-    //初始化系统很简单，真的就是init和deinit，只初始化SYS,NPU,VDENC模块
-    //将当前类实例（即this指针）的APP_NPU_Init成员函数绑定为一个可调用对象，用于模块的初始化操作。
-    //这里是用std::function<AX_S32(AX_VOID)> Init = bind(&CAiCardSlvAppSys::APP_SYS_Init, this)；
     m_arrMods.push_back({AX_FALSE, "SYS", bind(&CAiCardSlvAppSys::APP_SYS_Init, this), bind(&CAiCardSlvAppSys::APP_SYS_DeInit, this)});
     m_arrMods.push_back({AX_FALSE, "VDEC", bind(&CAiCardSlvAppSys::APP_VDEC_Init, this), AX_VDEC_Deinit});
     m_arrMods.push_back({AX_FALSE, "NPU", bind(&CAiCardSlvAppSys::APP_NPU_Init, this), bind(&CAiCardSlvAppSys::APP_NPU_DeInit, this)});
@@ -117,7 +112,6 @@ AX_BOOL CAiCardSlvAppSys::DeInitSysMods(AX_VOID) {
         return AX_TRUE;
     }
 
-    //反向逆初始化，先逆初始化NPU,再到VDENC,最后是系统
     for (AX_S32 i = (AX_S32)(nSize - 1); i >= 0; --i) {
         if (m_arrMods[i].bInited) {
             AX_S32 ret = m_arrMods[i].DeInit();

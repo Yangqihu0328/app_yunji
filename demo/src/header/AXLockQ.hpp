@@ -22,7 +22,6 @@ public:
     virtual ~CAXLockQ(AX_VOID) = default;
 
     AX_VOID SetCapacity(AX_S32 nCapacity) {
-        //这个地方就是线程尝试加锁m_mtx会失败，被阻塞，直到m_nCapacity被赋值完成或者函数结束之后才解锁。
         std::lock_guard<std::mutex> lck(m_mtx);
         m_nCapacity = (nCapacity < 0) ? (AX_U32)-1 : nCapacity;
     }
@@ -58,7 +57,6 @@ public:
         return AX_TRUE;
     }
 
-    //就是需要加入了多线程保证机制
     AX_BOOL Pop(T& m, AX_S32 nTimeOut = -1) {
         std::unique_lock<std::mutex> lck(m_mtx);
         AX_BOOL bAvail{AX_TRUE};
@@ -67,11 +65,8 @@ public:
                 bAvail = AX_FALSE;
             } else {
                 if (nTimeOut < 0) {
-                    //条件变量等待，需要用互斥锁保证线程是安全的，这个lambda函数是等待函数
-                    //需要等待队列非空或者被唤醒状态的一个条件即可。主要是方便退出
                     m_cv.wait(lck, [this]() -> bool { return !m_q.empty() || m_bWakeup; });
                 } else {
-                    //这个加上了超时机制而已
                     m_cv.wait_for(lck, std::chrono::milliseconds(nTimeOut), [this]() -> bool { return !m_q.empty() || m_bWakeup; });
                 }
 
@@ -80,7 +75,6 @@ public:
             }
         }
 
-        //取最前面的出队列。
         if (bAvail) {
             m = m_q.front();
             m_q.pop();

@@ -18,7 +18,6 @@ typedef struct {
     AX_U32 nMaxGrp;
 } BOX_APP_SYS_ATTR_T;
 
-//直接将媒体全做在一起了
 class CBoxAppSys {
 public:
     CBoxAppSys(AX_VOID) = default;

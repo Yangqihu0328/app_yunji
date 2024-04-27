@@ -76,7 +76,7 @@ static int __ping4(const char *ip, int timeout /* seconds */) {
 
     c = sendto(sock, packet, sizeof(packet), 0, (struct sockaddr *)&saddr, sizeof(struct sockaddr_in));
     if (c < 0 || c != sizeof(packet)) {
-        LOG("sendto socket fail, %s", strerror(errno));
+        //LOG("sendto socket fail, %s", strerror(errno));
         close(sock);
         return -1;
     }

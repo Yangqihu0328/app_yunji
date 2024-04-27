@@ -59,6 +59,14 @@ AX_NVR_RECT_T ScaleLabel::CalcMoveRect() {
         rectCrop.w = ALIGN_DOWN(int(m_nLabelCropW / x_scale_factor), 2);
         rectCrop.h = ALIGN_DOWN(int(m_nLabelCropH / y_scale_factor), 2);
 
+    #if 0
+        LOG_MM_C(TAG, "move (%d, %d) -> (%d, %d), label: (%d, %d) %dx%d, %dx%d, img: %dx%d => (%d, %d) %dx%d", \
+                        m_ptPre.rx(), m_ptPre.ry(), m_ptEnd.rx(), m_ptEnd.ry(), \
+                        m_nLabelCropX, m_nLabelCropY, m_nLabelCropW, m_nLabelCropH,
+                        width(), height(), nImageW, nImageH, \
+                        rectCrop.x, rectCrop.y, rectCrop.w, rectCrop.h);
+    #endif
+
     } while(0);
 
     return rectCrop;
@@ -100,6 +108,13 @@ AX_NVR_RECT_T ScaleLabel::CalcCropRect() {
         rectCrop.y = ALIGN_DOWN(int(m_nLabelCropY / y_scale_factor), 2);
         rectCrop.w = ALIGN_DOWN(int(m_nLabelCropW / x_scale_factor), 2);
         rectCrop.h = ALIGN_DOWN(int(m_nLabelCropH / y_scale_factor), 2);
+
+    #if 0
+        LOG_MM_C(TAG, "crop (%d, %d) -> (%d, %d), %dx%d, img: %dx%d => (%d, %d) %dx%d", \
+                        m_ptBegin.rx(), m_ptBegin.ry(), m_ptEnd.rx(), m_ptEnd.ry(), \
+                        width(), height(), nImageW, nImageH, \
+                        rectCrop.x, rectCrop.y, rectCrop.w, rectCrop.h);
+    #endif
     } while(0);
 
     return rectCrop;
@@ -338,3 +353,9 @@ void ScaleLabel::mouseDoubleClickEvent(QMouseEvent *ev) {
     }
 }
 
+void ScaleLabel::resizeEvent(QResizeEvent *event) {
+    /* update current window size */
+    m_nLastWidth = width();
+    m_nLastHeight = height();
+    return QWidget::resizeEvent(event);
+}

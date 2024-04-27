@@ -39,6 +39,9 @@ AX_NVR_RECORD_CONFIG_T CNVRConfigParser::GetRecordConfig(AX_VOID) {
     conf.strPath = m_iniConfig.GetStringValue(SECT, "path", "");
     conf.uMaxDevSpace = m_iniConfig.GetIntValue(SECT, "max space", 128);
     conf.uMaxFilePeriod = m_iniConfig.GetIntValue(SECT, "max period", 1);
+    // Do not support IDR backward playback anymore.
+    // conf.bOnlyIFrameOnReverse = m_iniConfig.GetIntValue(SECT, "iframe only", 1) ? AX_TRUE : AX_FALSE;
+    conf.bOnlyIFrameOnReverse = AX_FALSE;
 
     return conf;
 }
@@ -51,6 +54,7 @@ AX_NVR_RPATROL_CONFIG_T CNVRConfigParser::GetRoundPatrolConfig(AX_VOID) {
     conf.enType = (AX_NVR_RPATROL_TYPE)m_iniConfig.GetIntValue(SECT, "type", 0);
     conf.enSpliteType = (AX_NVR_VO_SPLITE_TYPE)m_iniConfig.GetIntValue(SECT, "split", 1);
     conf.uIntelval = m_iniConfig.GetIntValue(SECT, "interval", 5);
+    conf.nStrategy = m_iniConfig.GetIntValue(SECT, "strategy", 0);
 
     return conf;
 }
@@ -61,6 +65,7 @@ AX_VOID CNVRConfigParser::SetRoundPatrolConfig(AX_NVR_RPATROL_CONFIG_T &conf) {
     m_iniConfig.SetIntValue(SECT, "type", (AX_U32)conf.enType);
     m_iniConfig.SetIntValue(SECT, "split", (AX_U32)conf.enSpliteType);
     m_iniConfig.SetIntValue(SECT, "interval", conf.uIntelval);
+    m_iniConfig.SetIntValue(SECT, "strategy", conf.nStrategy);
 }
 
 AX_NVR_DETECT_CONFIG_T CNVRConfigParser::GetDetectConfig(AX_VOID) {

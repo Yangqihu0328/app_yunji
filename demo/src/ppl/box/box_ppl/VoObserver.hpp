@@ -20,19 +20,15 @@
  */
 class CVoObserver final : public IObserver {
 public:
-    //原来传递的m_disp是作为这个的构造函数，第二个参数就是作为channel为1
     CVoObserver(CVo* pSink, AX_U32 nChn) noexcept : m_pSink(pSink), m_nChn(nChn){};
     virtual ~CVoObserver(AX_VOID) = default;
 
-    //disp patch回调的是这个OnRecvData.相当于把数据发送出去，也就是disp和disp的channel要一样。
     AX_BOOL OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nChn, AX_VOID* pData) override {
         if (nullptr == pData) {
             return AX_FALSE;
         }
-        //只有channel1有效
         if (m_nChn == nChn) {
             CAXFrame* pFrame = (CAXFrame*)pData;
-            //这里就是vo把数据发送出去。这个也是channel1发送
             return m_pSink->SendFrame(m_pSink->GetVideoChn(nGrp), *pFrame, -1);
         } else {
             return AX_TRUE;

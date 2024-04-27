@@ -32,12 +32,22 @@ AX_BOOL CAXNVRFramework::Init(AX_U32 nDetectType, AX_U32 loglevel) {
         memset(&stLog, 0, sizeof(stLog));
         stLog.nTarget = APP_LOG_TARGET_STDOUT;
         stLog.nLv = nLogLevel;
+
+        AX_CHAR* env = getenv("APP_LOG_TARGET");
+        if (env) {
+            stLog.nTarget = atoi(env);
+        }
+
         strcpy(stLog.szAppName, "nvr");
         nRet = AX_APP_Log_Init(&stLog);
         if (0 != nRet) {
             printf("AX_APP_Log_Init failed, ret = 0x%x\n", nRet);
         } else {
             printf("[SUCCESS]AX_APP_Log_Init\n");
+
+            if (stLog.nTarget & APP_LOG_TARGET_SYSLOG) {
+                AX_APP_Log_SetSysModuleInited(AX_TRUE);
+            }
         }
 
         // read config
@@ -85,6 +95,10 @@ AX_BOOL CAXNVRFramework::Init(AX_U32 nDetectType, AX_U32 loglevel) {
         }
 
         if (!this->initIvps()) {
+            break;
+        }
+
+        if (!this->initVenc()) {
             break;
         }
 
@@ -204,6 +218,13 @@ AX_VOID CAXNVRFramework::DeInit() {
     AX_VDEC_Deinit();
     // AX_POOL_Exit();
     AX_SYS_Deinit();
+
+    AX_CHAR* env = getenv("APP_LOG_TARGET");
+    if (env) {
+        if (atoi(env) & APP_LOG_TARGET_SYSLOG) {
+            AX_APP_Log_SetSysModuleInited(AX_FALSE);
+        }
+    }
     AX_APP_Log_DeInit();
 }
 
@@ -304,8 +325,7 @@ AX_BOOL CAXNVRFramework::StartRoundPatrol(AX_VOID) {
 
     // m_pSecondaryDispCtrl->SetStartIndex(m_stRPratrolCfg.u32LayoutSplitCntIndex);
     m_pSecondaryDispCtrl->SetStartIndex(0);
-    m_pSecondaryDispCtrl->StopFBChannels();
-    if (!m_pSecondaryDispCtrl->UpdateViewRound(AX_NVR_VIEW_CHANGE_TYPE::UPDATE)) {
+    if (!m_pSecondaryDispCtrl->UpdateViewRound(AX_NVR_VIEW_CHANGE_TYPE::SHOW)) {
         return AX_FALSE;
     }
 
@@ -314,36 +334,101 @@ AX_BOOL CAXNVRFramework::StartRoundPatrol(AX_VOID) {
         vecDevID.emplace_back(i);
     }
 
-    bRet = m_pPreviewCtrl->StartRoundPatrol(m_pSecondaryDispCtrl, vecDevID);
-    m_pSecondaryDispCtrl->StartFBChannels();
+    bRet = m_pPreviewCtrl->StartRoundPatrol(vecDevID);
 
     return bRet;
 }
 
 AX_VOID CAXNVRFramework::StopRoundPatrol(AX_VOID) {
-    m_pSecondaryDispCtrl->StopFBChannels();
-    m_pPreviewCtrl->StopRoundPatrol();
+    vector<AX_NVR_DEV_ID> vecDevID;
+    for (int i = m_nStartDevId; i < (AX_S32)m_pSecondaryDispCtrl->GetCurrentLayoutCnt(); ++i) {
+        vecDevID.emplace_back(i);
+    }
+
+    m_pPreviewCtrl->StopRoundPatrol(vecDevID);
     m_pSecondaryDispCtrl->UpdateViewRound(AX_NVR_VIEW_CHANGE_TYPE::HIDE);
 }
 
 AX_BOOL CAXNVRFramework::UpdateRoundPatrol(AX_VOID) {
     AX_BOOL bRet = AX_FALSE;
 
-    m_pSecondaryDispCtrl->StopFBChannels();
-    m_pPreviewCtrl->StopRoundPatrol();
-
-    vector<AX_NVR_DEV_ID> vecDevID;
+    vector<AX_NVR_DEV_ID> vecLastDevID;
+    vector<AX_NVR_DEV_ID> vecNextDevID;
+    vector<AX_NVR_DEV_ID> vecUpdDevID;
+    vector<AX_NVR_DEV_ID> vecStartDevID;
+    vector<AX_NVR_DEV_ID> vecStopDevID;
     if (m_stRPratrolCfg.enType == AX_NVR_RPATROL_TYPE::SPLIT) {
+        for (int i = m_nStartDevId; i < (AX_S32)m_pSecondaryDispCtrl->GetCurrentLayoutCnt(); ++i) {
+            vecLastDevID.emplace_back(i);
+        }
+
         if (!m_pSecondaryDispCtrl->UpdateViewRound(AX_NVR_VIEW_CHANGE_TYPE::UPDATE)) {
             return AX_FALSE;
         }
+
         for (int i = m_nStartDevId; i < (AX_S32)m_pSecondaryDispCtrl->GetCurrentLayoutCnt(); ++i) {
-            vecDevID.emplace_back(i);
+            vecNextDevID.emplace_back(i);
+        }
+
+        for (auto& nLastDev : vecLastDevID) {
+            AX_BOOL bExist = AX_FALSE;
+            for (auto& nNextDev : vecNextDevID) {
+                if (nLastDev == nNextDev) {
+                    bExist = AX_TRUE;
+                    break;
+                }
+            }
+
+            if (bExist) {
+                vecUpdDevID.emplace_back(nLastDev);
+            } else {
+                vecStopDevID.emplace_back(nLastDev);
+            }
+        }
+
+        for (auto& nNextDev : vecNextDevID) {
+            if (nNextDev >= MAX_DEVICE_ROUNDPATROL_COUNT) {
+                continue;
+            }
+
+            AX_BOOL bExist = AX_FALSE;
+            for (auto& nLastDev : vecLastDevID) {
+                if (nNextDev == nLastDev) {
+                    bExist = AX_TRUE;
+                    break;
+                }
+            }
+
+            if (!bExist) {
+                vecStartDevID.emplace_back(nNextDev);
+            }
+        }
+
+        /* Stop no more exist channels */
+        bRet = m_pPreviewCtrl->StopRoundPatrol(vecStopDevID);
+        if (!bRet) {
+            LOG_MM_E(TAG, "Stop round patrol failed.");
+        }
+
+        /* Update exist channel resolution according to vo display */
+        bRet = m_pPreviewCtrl->UpdateRoundPatrolPreview(vecUpdDevID);
+        if (!bRet) {
+            LOG_MM_E(TAG, "Update round patrol failed.");
+        }
+
+        /* Start new channels, and notice that VDEC channels would be start keeping output resolution as input */
+        bRet = m_pPreviewCtrl->StartRoundPatrol(vecStartDevID);
+        if (!bRet) {
+            LOG_MM_E(TAG, "Start round patrol failed.");
+        }
+
+        /* Update new started channels whose VDEC channel output resolution should be calculated according to vo display */
+        bRet = m_pPreviewCtrl->UpdateRoundPatrolPreview(vecStartDevID);
+        if (!bRet) {
+            LOG_MM_E(TAG, "Update round patrol failed.");
         }
     }
 
-    bRet = m_pPreviewCtrl->StartRoundPatrol(m_pSecondaryDispCtrl, vecDevID);
-    m_pSecondaryDispCtrl->StartFBChannels();
     return bRet;
 }
 
@@ -368,7 +453,6 @@ CAXNVRDisplayCtrl *CAXNVRFramework::initPrimaryDispCtrl(AX_VOID) {
     stPrimaryAttr.stVoAttr.uiLayer = 0;
 
     if (!m_stDetectCfg.bEnable) {
-        //直接vo2disp，相当于节省VB,就是vo输出的数据可以拿出来进行画框之后再送给DISP，相当于需要占用多一块VB
         /* if no need to draw rects, change to AX_VO_LAYER_OUT_TO_LINK to not push into layer fifo to speed up VB */
         stPrimaryAttr.stVoAttr.bLinkVo2Disp = AX_TRUE;
     } else {
@@ -379,12 +463,10 @@ CAXNVRDisplayCtrl *CAXNVRFramework::initPrimaryDispCtrl(AX_VOID) {
     stPrimaryAttr.stVoAttr.s32FBIndex[1] = m_stPrimaryCfg.nFBRect;
     stPrimaryAttr.stVoAttr.enIntfType = AX_VO_INTF_HDMI;
     stPrimaryAttr.stVoAttr.enIntfSync = (AX_VO_INTF_SYNC_E)m_stPrimaryCfg.nHDMI;
-    //layer需要5张vb？这个地方是为什么
     stPrimaryAttr.stVoAttr.nLayerDepth = m_stPrimaryCfg.nLayerDepth;
     stPrimaryAttr.stVoAttr.nBgClr = 0x202020; // ((44 << 2) << 20) |((44 << 2) << 10) |(44 << 2);
     stPrimaryAttr.stVoAttr.nDetectW = m_stDetectCfg.nW;
     stPrimaryAttr.stVoAttr.nDetectH = m_stDetectCfg.nH;
-    //默认online
     stPrimaryAttr.stVoAttr.enVoMode = (m_stPrimaryCfg.nOnlineMode ? AX_VO_MODE_ONLINE : AX_VO_MODE_OFFLINE);
     CAXNVRDisplayCtrl *pPrimaryDispCtrl = nullptr;
     pPrimaryDispCtrl = new (std::nothrow) CAXNVRDisplayCtrl;
@@ -423,6 +505,22 @@ AX_BOOL CAXNVRFramework::initIvps(AX_VOID) {
     return AX_TRUE;
 }
 
+AX_BOOL CAXNVRFramework::initVenc(AX_VOID) {
+    // - venc
+    AX_VENC_MOD_ATTR_T stModAttr;
+    memset(&stModAttr, 0, sizeof(stModAttr));
+    stModAttr.enVencType = AX_VENC_VIDEO_ENCODER;
+    stModAttr.stModThdAttr.bExplicitSched = AX_FALSE;
+    stModAttr.stModThdAttr.u32TotalThreadNum = 1;
+    AX_S32 nRet = AX_VENC_Init(&stModAttr);
+    if (0 != nRet) {
+        LOG_M_E(TAG, "AX_VENC_Init fail, ret = 0x%x", nRet);
+        return AX_FALSE;
+    }
+
+    return AX_TRUE;
+}
+
 CDataStreamRecord *CAXNVRFramework::initDataStreamRecord(AX_VOID) {
     // record
     CDataStreamRecord *pRecord = new(std::nothrow) CDataStreamRecord;
@@ -450,6 +548,7 @@ CDataStreamPlay *CAXNVRFramework::initDataStreamPlayback(AX_VOID) {
         stAttr.strParentDir = m_stRecordCfg.strPath;
         stAttr.uMaxDevCnt = MAX_DEVICE_COUNT;
         stAttr.uStreamCnt = MAX_DEVICE_STREAM_COUNT;
+        stAttr.bOnlyIFrameOnReverse = m_stRecordCfg.bOnlyIFrameOnReverse;
 
         /* In case test suite enabled, playback streams exist under directory configured in test_suite.json */
         AX_NVR_TEST_SUITE_CONFIG_T tTsCfg = CNVRConfigParser::GetInstance()->GetTestSuiteConfig();

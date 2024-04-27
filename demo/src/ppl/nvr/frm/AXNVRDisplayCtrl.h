@@ -15,6 +15,7 @@
 
 #include <vector>
 #include <tuple>
+#include <random>
 
 using namespace std;
 
@@ -61,17 +62,14 @@ public:
 
     void SetStartIndex(AX_U32 nStartndex) {
         m_nCurrentLayoutIndex = nStartndex;
-        if (m_nCurrentLayoutIndex >= NVR_MAX_LAYOUT_NUM) {
+        if (m_nCurrentLayoutIndex >= (AX_S32)NVR_MAX_LAYOUT_NUM) {
             m_nCurrentLayoutIndex = NVR_MAX_LAYOUT_NUM - 1;
         }
     };
 
     AX_U32 GetCurrentLayoutCnt() {
         AX_U32 nCurrentLayoutCnt = 1;
-        int index = m_nCurrentLayoutIndex - 1;
-        if (index < 0) index = NVR_MAX_LAYOUT_NUM - 1;
-
-        switch (m_szLayoutVideos[index])
+        switch (m_szLayoutVideos[m_nCurrentLayoutIndex])
         {
         case AX_NVR_VO_SPLITE_TYPE::ONE:
             nCurrentLayoutCnt = 1;
@@ -112,7 +110,8 @@ private:
                                                                 AX_NVR_VO_SPLITE_TYPE::EIGHT,
                                                                 AX_NVR_VO_SPLITE_TYPE::SIXTEEN,
                                                                 AX_NVR_VO_SPLITE_TYPE::THIRTYSIX};
-    AX_U32 m_nCurrentLayoutIndex = 0;
+    AX_S32 m_nCurrentLayoutIndex = 0;
+    AX_S32 m_nRoundPatrolDirection = 1;
 
     AX_S32 initFramebuffer(AX_U32 u32Width, AX_U32 u32Height, AX_U32 u32FbIndex);
     AX_BOOL initPollingLayout(AX_U32 u32Width, AX_U32 u32Height);
@@ -123,8 +122,8 @@ private:
     AX_VOID createFbChannels(AX_VOID);
     AX_VOID destoryFbChannels(AX_VOID);
     AX_NVR_RECT_T mapRect(AX_NVR_RECT_T &rect1920x1080, int dst_width=3840, int dst_height=2160);
+    AX_S32 getNextLayout();
 
     AX_BOOL m_bRoundPatrolStop = AX_FALSE;
-
 
 };

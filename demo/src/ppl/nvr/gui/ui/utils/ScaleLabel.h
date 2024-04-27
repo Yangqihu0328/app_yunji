@@ -17,7 +17,7 @@ private:
     // virtual void wheelEvent(QWheelEvent *envent) override;
     virtual void mouseReleaseEvent(QMouseEvent *ev) override;
     void paintEvent(QPaintEvent *event) override;
-
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     bool m_bZoomAndMove = false;

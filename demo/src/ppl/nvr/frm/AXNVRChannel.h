@@ -14,8 +14,11 @@
 
 #include "detector.hpp"
 #include "ivps.hpp"
+#include "venc.hpp"
 #include "region.hpp"
 #include "rtspstream.hpp"
+#include "streamContainer.hpp"
+#include "streamTransfer.hpp"
 #include "datastream_record.hpp"
 #include "datastream_play.hpp"
 
@@ -153,7 +156,7 @@ public:
     // const AX_NVR_CHN_ATTR_T& GetAttr(AX_VOID) const;
     // AX_VOID SetAttr(const AX_NVR_CHN_ATTR_T &attr);
 
-    AX_BOOL StartRtsp(const std::string &strURL, AX_BOOL bRecord, AX_BOOL bForce = AX_TRUE);
+    AX_BOOL StartRtsp(const std::string &strURL, AX_BOOL bRecord, AX_BOOL bForce = AX_TRUE, AX_S32 nCookie = -1);
     AX_BOOL StopRtsp(AX_BOOL bForce = AX_FALSE);
 
     AX_BOOL StartFile(AX_U32 nDate, AX_U32 nTime, AX_S32 nReverse = -1);
@@ -161,6 +164,11 @@ public:
 
     AX_BOOL StartDisp(VO_LAYER nVoLayer, VO_CHN nVoChannel, const AX_VO_RECT_T &stRect);
     AX_BOOL StopDisp(AX_VOID);
+
+    AX_BOOL InitReversePlaybackModules(AX_U32 nWidth, AX_U32 nHeight, AX_F32 fFps, AX_U32 nGop, AX_PAYLOAD_TYPE_E enPayload);
+    AX_BOOL DeInitReversePlaybackModules();
+    AX_BOOL StartReversePlaybackLinkages();
+    AX_BOOL StopReversePlaybackLinkages();
 
     //
     AX_BOOL EnableDetect(AX_BOOL bEnable) {return AX_TRUE;};
@@ -173,6 +181,7 @@ public:
     AX_BOOL Show(AX_VOID) {return AX_TRUE;};
 
     //
+    AX_BOOL UpdateRPatrolRect(const AX_VO_RECT_T &stRect);
     AX_BOOL UpdateFps(AX_F32 fFactor);
     AX_BOOL UpdateRect(const AX_VO_RECT_T &stRect);
     AX_BOOL Crop(const AX_VO_RECT_T &stRect, const AX_IVPS_RECT_T &stCropRect, AX_BOOL bCrop);
@@ -193,13 +202,20 @@ protected:
     AX_NVR_CHN_STATE m_enState = AX_NVR_CHN_STATE::IDLE;
 
     AX_MOD_INFO_T m_stModeInfoVdec;
+    AX_MOD_INFO_T m_stModeInfoVdec2;
     AX_MOD_INFO_T m_stModeInfoIvps;
+    AX_MOD_INFO_T m_stModeInfoIvps2;
+    AX_MOD_INFO_T m_stModeInfoVenc;
     AX_MOD_INFO_T m_stModeInfoVo;
 
     CRtspStream m_objRtspStream;
     CFFMpegStream m_objFFMpegStream;
     CVDEC m_objVdec;
+    CVDEC m_objVdec2;
     CIVPS m_objIvps;
+    CIVPS m_objIvps2;
+    CVENC m_objVenc;
+    CVideoStreamTransfer m_objStreamTrans;
     CRegion m_objRegion;
     CRegionObserver m_objRgnObs;
     CDataStreamObserver m_objRecordObs;
@@ -209,9 +225,13 @@ private:
     AX_VOID set_state(AX_NVR_CHN_STATE enStatus);
     AX_BOOL set_fps(VO_LAYER nVoLayer, VO_CHN nVoChannel, AX_F32 fFps, AX_F32 fFactor = 1.0f);
     AX_BOOL clean(VO_LAYER nVoLayer, VO_CHN nVoChannel);
-    AX_BOOL init_rtsp(const std::string &strURL);
+    AX_BOOL init_rtsp(const std::string &strURL, AX_S32 nCookie);
     AX_BOOL init_ffmpeg(AX_VOID);
     AX_BOOL init_vdec(AX_PAYLOAD_TYPE_E enPayload, AX_U32 nWidth, AX_U32 nHeight, const AX_VO_SIZE_T &voSize, AX_VDEC_GRP vdGrp = INVALID_VDEC_GRP);
+    AX_BOOL init_vdec2(AX_PAYLOAD_TYPE_E enPayload, AX_U32 nWidth, AX_U32 nHeight, const AX_VO_SIZE_T &voSize, AX_VDEC_GRP vdGrp = INVALID_VDEC_GRP);
+    AX_BOOL init_venc(AX_PAYLOAD_TYPE_E enPayload, AX_U32 nWidth, AX_U32 nHeight, AX_U32 nFPS, VENC_GRP veGrp = INVALID_VENC_GRP);
     AX_BOOL init_ivps(AX_U32 nSrcW, AX_U32 nSrcH, const AX_VO_RECT_T &voChnWin, AX_IVPS_GRP ivGrp = INVALID_IVPS_GRP);
+    AX_BOOL init_ivps2(AX_U32 nSrcW, AX_U32 nSrcH, AX_IVPS_GRP ivGrp = INVALID_IVPS_GRP);
+    AX_BOOL init_transfer(AX_U32 nFps, AX_U32 nGop, VENC_GRP veGrp = INVALID_VENC_GRP);
     AX_BOOL init_region(AX_S32 nGrp, AX_U32 nSrcW, AX_U32 nSrcH, const AX_VO_RECT_T &voChnWin);
 };

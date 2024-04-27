@@ -23,6 +23,7 @@ using namespace std;
 #include "ax_base_type.h"
 #include "ax_ivps_api.h"
 #include "AXNVRDisplayCtrl.h"
+#include "NVRConfigParser.h"
 #include "region.hpp"
 
 #define TAG "NVRDISP"
@@ -34,6 +35,9 @@ using namespace std;
 #ifndef ALIGN_DOWN
 #define ALIGN_DOWN(x, align) ((x) & ~((align)-1))
 #endif
+
+std::default_random_engine g_random_engine;
+std::uniform_int_distribution<AX_U32> g_random_uniform(0, NVR_MAX_LAYOUT_NUM - 1);
 
 namespace {
 
@@ -83,6 +87,7 @@ AX_BOOL CAXNVRDisplayCtrl::Init(const AX_NVR_VO_INFO_T &stAttr) {
         }
 
         m_stAttr = stAttr;
+        g_random_engine.seed(time(0));
 
         AX_U32 nHz = 0;
         AX_VO_RECT_T stArea;
@@ -91,7 +96,6 @@ AX_BOOL CAXNVRDisplayCtrl::Init(const AX_NVR_VO_INFO_T &stAttr) {
         }
 
         // qt fb
-        //配置framebuffer 0
         if (m_stAttr.stVoAttr.s32FBIndex[0] != -1) {
             AX_S32 s32Ret = this->initFramebuffer(stArea.u32Width, stArea.u32Height, m_stAttr.stVoAttr.s32FBIndex[0]);
             if (s32Ret != 0) {
@@ -100,7 +104,6 @@ AX_BOOL CAXNVRDisplayCtrl::Init(const AX_NVR_VO_INFO_T &stAttr) {
             }
         }
 
-        //画框没用framebuffer 1
         if (m_stAttr.stVoAttr.s32FBIndex[1] != -1) {
             // paint fb
             AX_CHAR fbPath[32];
@@ -110,7 +113,6 @@ AX_BOOL CAXNVRDisplayCtrl::Init(const AX_NVR_VO_INFO_T &stAttr) {
             AX_NVR_FB_INIT_PARAM_T fbParam;
             fbParam.enPixFmt = AX_FORMAT_ARGB1555;
             fbParam.pFBPath = fbPath;
-            //跟随输入
             fbParam.nWidth = stArea.u32Width;
             fbParam.nHeight = stArea.u32Height;
             fbParam.nColorDraw = (fbParam.enPixFmt == AX_FORMAT_ARGB1555) ?
@@ -402,30 +404,13 @@ AX_BOOL CAXNVRDisplayCtrl::UpdateView(const ax_nvr_channel_vector vecViewChns,
                         break;
                     }
                 }
-
-                // this->createFbChannels();
             }
             // MIN/MAX does not change the actual layout count of VO, only UpdateRect, AX_VO_HideChn and AX_VO_ShowChn
             else if (AX_NVR_VIEW_CHANGE_TYPE::MIN == enChangeType || enChangeType == AX_NVR_VIEW_CHANGE_TYPE::MAX) {
 
                 VO_CHN nVoChn = 0; // vo channel while AX_NVR_VIEW_CHANGE_TYPE::MAX state
-                // Step 0. hide all channels
-                {
-                    // this->destoryFbChannels();
 
-                    VO_ATTR_T attr = m_pVo->GetAttr();
-                    for (AX_U32 i = 0; i < attr.stChnInfo.nCount; ++i) {
-                        if (!m_pVo->HideChn(i)) {
-                            bbRet = AX_FALSE;
-                            break;
-                        }
-                    }
-                    if (!bbRet) {
-                        break;
-                    }
-                }
-
-                // Step 1. Update all channels
+                // Step 0. Update all channels
                 {
                     VO_ATTR_T attr = m_pVo->GetAttr();
                     AX_VO_RECT_T stArea;
@@ -446,7 +431,6 @@ AX_BOOL CAXNVRDisplayCtrl::UpdateView(const ax_nvr_channel_vector vecViewChns,
                         }
 
                         attr.stChnInfo.arrChns[nVoChn].u32Priority = m_stAttr.u32Priority;
-                        // attr.stChnInfo.arrCropRect[nVoChn] = {0, 0, 0, 0};
                     }
 
                     if (!m_pVo->UpdateChnInfo(attr.stChnInfo)) {
@@ -455,11 +439,24 @@ AX_BOOL CAXNVRDisplayCtrl::UpdateView(const ax_nvr_channel_vector vecViewChns,
                     }
                 }
 
+                // Step 1. hide all channels
+                {
+                    VO_ATTR_T attr = m_pVo->GetAttr();
+                    for (AX_U32 i = 0; i < attr.stChnInfo.nCount; ++i) {
+                        if (!m_pVo->HideChn(i)) {
+                            bbRet = AX_FALSE;
+                            break;
+                        }
+                    }
+                    if (!bbRet) {
+                        break;
+                    }
+                }
+
                 // Step 2. Update all channels
                 {
                     VO_ATTR_T attr = m_pVo->GetAttr();
                     for (AX_U32 i = 0; i < attr.stChnInfo.nCount; ++i) {
-
                         if (AX_NVR_VIEW_CHANGE_TYPE::MIN == enChangeType) {
                             if (!m_pVo->ShowChn(i)) {
                                 bbRet = AX_FALSE;
@@ -478,8 +475,6 @@ AX_BOOL CAXNVRDisplayCtrl::UpdateView(const ax_nvr_channel_vector vecViewChns,
                         break;
                     }
                 }
-
-                // this->createFbChannels();
             }
         }
         bRet = bbRet;
@@ -500,35 +495,10 @@ AX_BOOL CAXNVRDisplayCtrl::UpdateViewRound(AX_NVR_VIEW_CHANGE_TYPE enChangeType)
         b4K = is4K(attr.enIntfSync, stArea);
     }
 
-    if (AX_NVR_VIEW_CHANGE_TYPE::HIDE == enChangeType) {
-        if (!m_bRoundPatrolStop) {
-
-            m_pVo->Stop();
-            m_pVo->DeInit();
-
-            // VO_ATTR_T attr = m_pVo->GetAttr();
-            // for (AX_U32 i = 0; i < attr.stChnInfo.nCount; ++i) {
-            //     m_pVo->ClearChn(i);
-            //     m_pVo->DisableChn(i);
-            // }
-            // AX_VO_UnBindVideoLayer(attr.voLayer, attr.dev);
-
-            m_nCurrentLayoutIndex = 0;
-            m_bRoundPatrolStop = AX_TRUE;
-        }
-    }
-    else if (AX_NVR_VIEW_CHANGE_TYPE::UPDATE == enChangeType) {
-
+    if (AX_NVR_VIEW_CHANGE_TYPE::SHOW == enChangeType) {
         if (m_bRoundPatrolStop) {
-
             m_pVo->Init(m_stAttr.stVoAttr);
             m_pVo->Start();
-
-            // VO_ATTR_T attr = m_pVo->GetAttr();
-            // AX_VO_BindVideoLayer(attr.voLayer, attr.dev);
-            // for (AX_U32 i = 0; i < attr.stChnInfo.nCount; ++i) {
-            //     m_pVo->EnableChn(i, attr.stChnInfo.arrChns[i]);
-            // }
 
             m_bRoundPatrolStop = AX_FALSE;
         }
@@ -548,9 +518,42 @@ AX_BOOL CAXNVRDisplayCtrl::UpdateViewRound(AX_NVR_VIEW_CHANGE_TYPE enChangeType)
             stChnInfo.arrChns[i].u32Priority = m_stAttr.u32Priority;
         }
 
-        m_nCurrentLayoutIndex += 1;
-        if (m_nCurrentLayoutIndex >= NVR_MAX_LAYOUT_NUM) {
+        if (!m_pVo->UpdateChnInfo(stChnInfo)) {
+            return AX_FALSE;
+        }
+    }
+    else if (AX_NVR_VIEW_CHANGE_TYPE::HIDE == enChangeType) {
+        if (!m_bRoundPatrolStop) {
+            m_pVo->Stop();
+            m_pVo->DeInit();
+
             m_nCurrentLayoutIndex = 0;
+            m_bRoundPatrolStop = AX_TRUE;
+        }
+    }
+    else if (AX_NVR_VIEW_CHANGE_TYPE::UPDATE == enChangeType) {
+        if (m_bRoundPatrolStop) {
+            m_pVo->Init(m_stAttr.stVoAttr);
+            m_pVo->Start();
+
+            m_bRoundPatrolStop = AX_FALSE;
+        }
+
+        m_nCurrentLayoutIndex = getNextLayout();
+
+        VO_CHN_INFO_T stChnInfo;
+        AX_NVR_VO_SPLITE_TYPE enSplitType = m_szLayoutVideos[m_nCurrentLayoutIndex];
+        vector<AX_NVR_RECT_T> vecVoRectIn = m_mapPollingLayout[enSplitType];
+        m_vecRect = vecVoRectIn;
+        stChnInfo.nCount = vecVoRectIn.size();
+        for (int i = 0; i < (int)vecVoRectIn.size(); ++i) {
+            auto vorect = vecVoRectIn[i];
+            if (b4K) {
+                vorect = mapRect(vorect, stArea.u32Width, stArea.u32Height);
+            }
+            stChnInfo.arrChns[i].stRect = {ALIGN_UP(vorect.x, 2), ALIGN_UP(vorect.y, 2), ALIGN_DOWN(vorect.w, 8), ALIGN_DOWN(vorect.h, 2)};
+            stChnInfo.arrChns[i].u32FifoDepth = m_stAttr.u32PreviewFifoDepth;
+            stChnInfo.arrChns[i].u32Priority = m_stAttr.u32Priority;
         }
 
         if (!m_pVo->UpdateChnInfo(stChnInfo)) {
@@ -1147,7 +1150,6 @@ AX_VOID CAXNVRDisplayCtrl::destoryFbChannels(AX_VOID) {
     // m_pFbPaint->Stop();
 }
 
-
 AX_NVR_RECT_T CAXNVRDisplayCtrl::mapRect(AX_NVR_RECT_T &rect1920x1080, int dst_width, int dst_height) {
 
     int x1 = rect1920x1080.x * dst_width / 1920;
@@ -1168,3 +1170,33 @@ AX_NVR_RECT_T CAXNVRDisplayCtrl::mapRect(AX_NVR_RECT_T &rect1920x1080, int dst_w
     return rect3840x2160;
 }
 
+AX_S32 CAXNVRDisplayCtrl::getNextLayout() {
+    AX_NVR_RPATROL_CONFIG_T tConfig = CNVRConfigParser::GetInstance()->GetRoundPatrolConfig();
+
+    AX_S32 nNext = m_nCurrentLayoutIndex;
+    switch (tConfig.nStrategy) {
+        case 0: { /* ascending */
+            nNext = (nNext + 1) % NVR_MAX_LAYOUT_NUM;
+            break;
+        }
+        case 1: { /* round */
+            nNext += 1 * m_nRoundPatrolDirection;
+            if (nNext >= (AX_S32)NVR_MAX_LAYOUT_NUM) {
+                nNext = (AX_S32)NVR_MAX_LAYOUT_NUM - 2;
+                m_nRoundPatrolDirection = -1;
+            } else if (nNext < 0) {
+                nNext = 1;
+                m_nRoundPatrolDirection = 1;
+            }
+            break;
+        }
+        case 2: { /* random */
+            while ((nNext = g_random_uniform(g_random_engine)) == m_nCurrentLayoutIndex) {
+            }
+            break;
+        }
+        default: break;
+    }
+
+    return nNext;
+}

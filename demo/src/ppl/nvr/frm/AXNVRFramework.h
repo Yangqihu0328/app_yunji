@@ -88,6 +88,8 @@ private:
     CAXNVRDisplayCtrl *initPrimaryDispCtrl(AX_VOID);
     AX_BOOL initVdec(AX_VOID);
     AX_BOOL initIvps(AX_VOID);
+    AX_BOOL initVenc(AX_VOID);
+
     AX_BOOL initDetect(int nDetectType);
     CDataStreamRecord *initDataStreamRecord(AX_VOID);
     CDataStreamPlay *initDataStreamPlayback(AX_VOID);

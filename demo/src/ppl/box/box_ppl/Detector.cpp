@@ -35,17 +35,13 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
 
     DETECT_RESULT_T fhvp;
     // fhvp.nSeqNum = pstResult->nFrameId;
-    //原始宽高，目标数量
     fhvp.nW = pstResult->nOriginalWidth;
     fhvp.nH = pstResult->nOriginalHeight;
-    fhvp.nCount = pstResult->nObjectSize;
-    //user data里面才是存了grp id相关，这样子才能解耦
     fhvp.nSeqNum = pPrivData->nSeqNum;
     fhvp.nGrpId = pPrivData->nGrpId;
-    
+    fhvp.nCount = pstResult->nObjectSize;
 
     AX_U32 index = 0;
-    //最大检测64个，遍历所有的数量
     for (AX_U32 i = 0; i < fhvp.nCount && index < MAX_DETECT_RESULT_COUNT; ++i) {
         if (pstResult->pstObjectItems[i].eTrackState != AX_SKEL_TRACK_STATUS_NEW &&
             pstResult->pstObjectItems[i].eTrackState != AX_SKEL_TRACK_STATUS_UPDATE) {
@@ -68,9 +64,7 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
             fhvp.item[index].eType = DETECT_TYPE_UNKNOWN;
         }
 
-        //还有跟踪id
         fhvp.item[index].nTrackId = pstResult->pstObjectItems[i].nTrackId;
-        //框
         fhvp.item[index].tBox = pstResult->pstObjectItems[i].stRect;
         index++;
     }
@@ -78,21 +72,12 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
     fhvp.nCount = index;
 
     /* save fhvp result */
-    //相当于保存为最终结构体，也就是设计的时候可以输出对应的结构体，然后中间可以多次转换。
-    //之后再看一下哪里用了set之后的数据，应该是画框那里。所以多路传递就是根据nGrpId
-
-    //首先这个是注册回调函数，调用CDetectResult的Set函数，将数据存起来。然后在其他地方使用get使用。
-    //这里多线程肯定要加锁，里面的数据共享就是类的成员变量。
-    //CDetectResult::GetInstance()实际上就是返回一个实例，也就是里面定义了一个static的类成员变量。
-    //相当于检测类就单独实现，然后通过注册回调函数或者将结果放到一个共享数据类里面，然后加锁实现多线程。
     CDetectResult::GetInstance()->Set(pPrivData->nGrpId, fhvp);
 
     /* release fhvp result */
-    //这个地方由用户释放pstResult
     AX_SKEL_Release((AX_VOID *)pstResult);
 
     /* giveback private data */
-    //同样也释放pstResult的user_data
     pThis->ReleaseSkelPrivateData(pPrivData);
 }
 
@@ -105,23 +90,19 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
     const AX_U32 TOTAL_GRP_COUNT = m_stAttr.nGrpCount;
     CAXFrame axFrame;
     AX_U32 nSkipCount = 0;
-    //将线程封装了一层是很好的，可以控制优先级，线程名字和线程运行和停止之类的
     while (m_DetectThread.IsRunning()) {
         for (nCurrGrp = nNextGrp; nCurrGrp < TOTAL_GRP_COUNT; ++nCurrGrp) {
-            //队列出队，里面进行加锁控制，队列里面的数据来源vdec
             if (m_arrFrameQ[nCurrGrp].Pop(axFrame, 0)) {
-                //出去成功，skip设置为0
                 nSkipCount = 0;
                 break;
             }
-            //如果没有frame出队，先休息一下
+
             if (++nSkipCount == TOTAL_GRP_COUNT) {
                 this_thread::sleep_for(chrono::microseconds(1000));
                 nSkipCount = 0;
             }
         }
 
-        //相当于下次就跑到下一路去计算
         if (nCurrGrp == TOTAL_GRP_COUNT) {
             nNextGrp = 0;
             continue;
@@ -132,25 +113,20 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
             }
         }
 
-        //借了数据，为什么需要实现一个这样子的内存去保存
         SKEL_FRAME_PRIVATE_DATA_T *pPrivData = m_skelData.borrow();
         if (!pPrivData) {
             LOG_M_E(DETECTOR, "%s: borrow skel frame private data fail", __func__);
             axFrame.DecRef();
             continue;
         } else {
-            //axFrame就是从每一路的队列里面取数据，序列号
             pPrivData->nSeqNum = axFrame.stFrame.stVFrame.stVFrame.u64SeqNum;
-            //第几路
             pPrivData->nGrpId = axFrame.nGrp;
-            //chanenl_num不一定等于grp_num，他进行取余，这个地方不理解，后面再看看
             pPrivData->nSkelChn = axFrame.nGrp % m_stAttr.nChannelNum;
         }
 
         AX_SKEL_FRAME_T skelFrame;
         skelFrame.nFrameId = ++nFrameId; /* skel recommends to unique frame id */
         skelFrame.nStreamId = axFrame.nGrp;
-        //直接结构体赋值，肯定是不可以的，里面有数组
         skelFrame.stFrame = axFrame.stFrame.stVFrame.stVFrame;
         skelFrame.pUserData = (AX_VOID *)pPrivData;
         LOG_M_N(DETECTOR, "runskel vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x", axFrame.nGrp, axFrame.nChn,
@@ -168,8 +144,6 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
         usleep(3000);
         m_skelData.giveback(pPrivData);
 #else
-        //发送frame很有意思，使用AX_SKEL_FRAME_T类型的结构体，m_hSkel就是对应handle
-        //并且也是通过这个m_hSkel handle绑定了回调。
         AX_S32 ret = AX_SKEL_SendFrame(m_hSkel[pPrivData->nSkelChn], &skelFrame, -1);
 #endif
 
@@ -178,14 +152,12 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
 #endif
 
         /* release frame after done */
-        //类似使用C++的智能指针，直接将frame进行--，其他地方进行释放。
-        //这个底层实现肯定又比较麻烦。
         axFrame.DecRef();
 
         if (0 != ret) {
             LOG_M_E(DETECTOR, "%s: AX_SKEL_SendFrame(vdGrp %d, seq %lld, frame %lld) fail, ret = 0x%x", __func__, axFrame.nGrp,
                     axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, skelFrame.nFrameId, ret);
-            //这个地方估计会有bug，没有主动释放pPrivData，这个是错误的条件才进到这里面
+
             m_skelData.giveback(pPrivData);
         }
     }
@@ -193,7 +165,6 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
     LOG_M_D(DETECTOR, "%s: ---", __func__);
 }
 
-//也就是上面一层是读取配置文件，转为结构体信息，然后底层再进行配置，一种解耦方式
 AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
 
@@ -210,11 +181,8 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
 
     /* define how many frames can skel to handle in parallel */
     constexpr AX_U32 PARALLEL_FRAME_COUNT = 2;
-    //这个地方先保留并行的数据个数，与depth不相应符合
     m_skelData.reserve(stAttr.nGrpCount * PARALLEL_FRAME_COUNT);
 
-    //根据grp num每一路创建一个队列，每一路是frame队列。先把业务逻辑考虑好，再考虑性能
-    //就是CAXLockQ这个模板类，传递CAXFrame参数进行初始化，就是创建CAXFrame类型的队列
     m_arrFrameQ = new (nothrow) CAXLockQ<CAXFrame>[stAttr.nGrpCount];
     if (!m_arrFrameQ) {
         LOG_M_E(DETECTOR, "%s: alloc queue fail", __func__);
@@ -226,7 +194,6 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
     }
 
     /* [2]: SKEL init */
-    //初始化runtime接口
     AX_SKEL_INIT_PARAM_T stInit;
     memset(&stInit, 0, sizeof(stInit));
     stInit.pStrModelDeploymentPath = m_stAttr.strModelPath.c_str();
@@ -254,7 +221,6 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         }
 
         /* [4]: check whether has FHVP model or not */
-        //检测是否有人车非模式
         const AX_SKEL_CAPABILITY_T *pstCapability = NULL;
         ret = AX_SKEL_GetCapability(&pstCapability);
         if (0 != ret) {
@@ -280,10 +246,8 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
             }
         }
 
-        //这个是遍历每一路
         for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
             /* [5]: create SEKL handle */
-            //那么之前的m_stAttr还是作为中间变量，这个是作为程序设计的时候要注意的
             AX_SKEL_HANDLE_PARAM_T stHandleParam;
             memset(&stHandleParam, 0, sizeof(stHandleParam));
             stHandleParam.ePPL = (AX_SKEL_PPL_E)m_stAttr.tChnAttr[nChn].nPPL;
@@ -322,15 +286,11 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
             stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_COMMON_THRESHOLD_CONFIG_T);
             itemIndex++;
 
-            //相当于可能有多个itemIndex，一个是track_disable，另外一个是push disable
             stConfig.nSize = itemIndex;
             stHandleParam.stConfig = stConfig;
 
-            //最终的目的是构造stHandleParam结构体。
-            //相当于通过ini读取保存成一个结构体，然后中间被地方使用，再创建一个结构体，而不是直接包含旧的结构体。
             LOG_M_C(DETECTOR, "ppl %d, depth %d, cache depth %d, %dx%d", stHandleParam.ePPL, stHandleParam.nFrameDepth,
                     stHandleParam.nFrameCacheDepth, stHandleParam.nWidth, stHandleParam.nHeight);
-            //创建m_hSkel handle，使用数组管理。
             ret = AX_SKEL_Create(&stHandleParam, &m_hSkel[nChn]);
 
             if (0 != ret || NULL == m_hSkel[nChn]) {
@@ -339,7 +299,6 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
             }
 
             /* [6]: register result callback */
-            //注册回调函数，这个就类似于aisdk。其实push和track可以封装起来，每一路都注册回调
             ret = AX_SKEL_RegisterResultCallback(m_hSkel[nChn], SkelResultCallback, this);
             if (0 != ret) {
                 LOG_M_E(DETECTOR, "%s: AX_SKEL_RegisterResultCallback() fail, ret = 0x%x", __func__, ret);
@@ -426,19 +385,17 @@ AX_BOOL CDetector::Clear(AX_VOID) {
 
 AX_BOOL CDetector::Stop(AX_VOID) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
-    //线程停止
+
     m_DetectThread.Stop();
 
-    //先把条件变量唤醒，不用再等待，不然一直在等待资源
     if (m_arrFrameQ) {
         for (AX_U32 i = 0; i < m_stAttr.nGrpCount; ++i) {
             m_arrFrameQ[i].Wakeup();
         }
     }
-    //线程回收
+
     m_DetectThread.Join();
 
-    //清空队列
     if (m_arrFrameQ) {
         for (AX_U32 i = 0; i < m_stAttr.nGrpCount; ++i) {
             ClearQueue(i);
@@ -449,7 +406,6 @@ AX_BOOL CDetector::Stop(AX_VOID) {
     return AX_TRUE;
 }
 
-//这个地方会在vdec之后回调。
 AX_BOOL CDetector::SendFrame(const CAXFrame &axFrame) {
     LOG_M_I(DETECTOR, "recvfrm vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x", axFrame.nGrp, axFrame.nChn,
             axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
@@ -457,7 +413,6 @@ AX_BOOL CDetector::SendFrame(const CAXFrame &axFrame) {
             axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
             axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
 
-    //判断是否需要丢帧，如果丢帧，那么就直接退出。
     if (SkipFrame(axFrame)) {
         LOG_M_I(DETECTOR, "dropfrm vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x", axFrame.nGrp, axFrame.nChn,
                 axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
@@ -467,17 +422,14 @@ AX_BOOL CDetector::SendFrame(const CAXFrame &axFrame) {
         return AX_TRUE;
     }
 
-    //引用加一
     axFrame.IncRef();
 
 #if defined(__RECORD_VB_TIMESTAMP__)
     CTimestampHelper::RecordTimestamp(axFrame.stFrame.stVFrame.stVFrame, axFrame.nGrp, axFrame.nChn, TIMESTAMP_SKEL_PUSH_FIFO);
 #endif
 
-    //这个地方就是把axFrame放在对应的队列里面，好像其他地方也有这个队列，不知道是不是同一个
     if (!m_arrFrameQ[axFrame.nGrp].Push(axFrame)) {
         LOG_M_E(DETECTOR, "%s: push frame %lld to q fail", __func__, axFrame.stFrame.stVFrame.stVFrame.u64SeqNum);
-        //失败了再递减
         axFrame.DecRef();
     }
 

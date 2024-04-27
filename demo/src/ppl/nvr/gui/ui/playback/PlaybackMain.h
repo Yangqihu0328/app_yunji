@@ -61,7 +61,7 @@ private:
     PlaybackLeftToolbar *m_pPlaybackLeftToolbar = nullptr;
 
     ax_nvr_channel_vector m_vecViewChnSelected;
-    PLAYBACK_ACTION_TYPE m_ePlaybackType {PLAYBACK_ACTION_TYPE::INIT};
+    AX_BOOL m_bPlaying {AX_FALSE};
 
     int m_nLeftMargin = 0;
     int m_nTopMargin = 0;

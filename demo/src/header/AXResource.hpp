@@ -48,15 +48,11 @@ public:
     void reserve(std::size_t sz, Args &&...args) {
         std::lock_guard<std::mutex> lck(m_mtx);
         for (std::size_t i = 0; i < sz; ++i) {
-            //这个new出来资源
             T *p = new T(std::forward<Args>(args)...);
             m_map[p] = STATE::AVAILABLE;
         }
     }
 
-    //可接受多个参数
-    //&& 是右值引用的语法，表示引用一个右值，不会进行内存拷贝的临时对象
-    //也就是必须传过来的是右值，不然出现编译报错
     template <typename... Args>
     void insert(Args &&...args) {
         T *p = new T(std::forward<Args>(args)...);
@@ -78,7 +74,6 @@ public:
     T *borrow(Args &&...args) {
         std::lock_guard<std::mutex> lck(m_mtx);
         for (auto &&kv : m_map) {
-            //可用改为借用的，再返回第一个值
             if (kv.second == STATE::AVAILABLE) {
                 kv.second = STATE::BORROWED;
                 return kv.first;
@@ -86,7 +81,6 @@ public:
         }
 
         /* if no available resource, alloc one and marked as BORROWED */
-        //如果找不到可用资源，才进行重新分配
         T *p = new T(std::forward<Args>(args)...);
         m_map[p] = STATE::BORROWED;
         return p;
@@ -96,7 +90,6 @@ public:
     void giveback(T *p) {
         std::lock_guard<std::mutex> lck(m_mtx);
         auto it = m_map.find(p);
-        //找到对应，设置为可用
         if (m_map.end() != it) {
             m_map[p] = STATE::AVAILABLE;
         }
@@ -105,7 +98,6 @@ public:
     void destory(void) {
         std::lock_guard<std::mutex> lck(m_mtx);
         for (auto &&kv : m_map) {
-            //类型指针释放
             if (kv.first) {
                 delete kv.first;
             }

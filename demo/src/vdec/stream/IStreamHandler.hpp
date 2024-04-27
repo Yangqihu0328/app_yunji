@@ -139,7 +139,7 @@ public:
                     return AX_TRUE;
                 }
             }
-            //相当于把观察者加进去列表中
+
             m_lstObs.push_back(pObs);
             return AX_TRUE;
         }

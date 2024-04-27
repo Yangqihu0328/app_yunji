@@ -129,25 +129,39 @@ void CTestPreview::testRandom() {
             CTupleAction action = RandomAction();
             QWidget* pParentWidget = (QWidget*)GetWidget(std::get<0>(action).c_str());
             if (nullptr == pParentWidget) {
+                CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
                 continue;
             }
 
             AX_NVR_TS_CASE_INFO_T tCaseInfo = {std::get<1>(action), TS_DEFAULT_REPEAT_COUNT, TS_DEFAULT_OPERATION_INTERFAL};
             if (!GetCaseInfo(std::get<2>(action), pModuleCfg->vecCaseInfo, tCaseInfo)) {
                 LOG_MM_E(TAG, "Can not find <%s> configurations", std::get<2>(action).c_str());
+                CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
                 continue;
             }
 
             switch (std::get<3>(action)) {
                 case TS_ACTION_TYPE::TS_ACTION_TYPE_BUTTON: {
                     QPushButton* pBtn = pParentWidget->findChild<QPushButton*>(QString(std::get<1>(action).c_str()));
-                    if (pBtn && pBtn->isEnabled()) {
-                        AX_U32 nTimes = std::get<4>(action);
-                        while (nTimes-- > 0 && m_bRunning) {
-                            if (!CheckEntry()) {
-                                break;
+                    if (pBtn) {
+                        if (pBtn->isEnabled()) {
+                            AX_U32 nTimes = std::get<4>(action);
+                            while (nTimes-- > 0 && m_bRunning) {
+                                if (!CheckEntry()) {
+                                    break;
+                                }
+
+                                if (!IsFinished()) {
+                                    LOG_MM_W(TAG, "Last case not finished, operation <%s> ignored", pBtn->objectName().toStdString().c_str());
+                                    CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
+                                    continue;
+                                }
+
+                                ActionBtnClick(pBtn, tCaseInfo.nOprInterval, std::get<1>(action), AX_TRUE);
                             }
-                            ActionBtnClick(pBtn, tCaseInfo.nOprInterval, std::get<1>(action));
+                        } else {
+                            LOG_MM_W(TAG, "Button <%s> is invalid, ignore this operation.", pBtn->objectName().toStdString().c_str());
+                            CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
                         }
                     }
 
@@ -155,13 +169,25 @@ void CTestPreview::testRandom() {
                 }
                 case TS_ACTION_TYPE::TS_ACTION_TYPE_TOGGLE_BUTTON: {
                     QPushButton* pBtn = pParentWidget->findChild<QPushButton*>(QString(std::get<1>(action).c_str()));
-                    if (pBtn && pBtn->isEnabled()) {
-                        AX_U32 nTimes = std::get<4>(action);
-                        while (nTimes-- > 0 && m_bRunning) {
-                            if (!CheckEntry()) {
-                                break;
+                    if (pBtn) {
+                        if (pBtn->isEnabled()) {
+                            AX_U32 nTimes = std::get<4>(action);
+                            while (nTimes-- > 0 && m_bRunning) {
+                                if (!CheckEntry()) {
+                                    break;
+                                }
+
+                                if (!IsFinished()) {
+                                    LOG_MM_W(TAG, "Last case not finished, operation <%s> ignored", pBtn->objectName().toStdString().c_str());
+                                    CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
+                                    continue;
+                                }
+
+                                ActionToggleBtnClick(pBtn, tCaseInfo.nOprInterval, std::get<1>(action), AX_TRUE);
                             }
-                            ActionToggleBtnClick(pBtn, tCaseInfo.nOprInterval, std::get<1>(action));
+                        } else {
+                            LOG_MM_W(TAG, "Toggle Button <%s> is invalid, ignore this operation.", pBtn->objectName().toStdString().c_str());
+                            CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
                         }
                     }
 
@@ -178,9 +204,20 @@ void CTestPreview::testRandom() {
                     }
 
                     if (vecLabels.size() > 0) {
+                        if (!IsFinished()) {
+                            LOG_MM_W(TAG, "Last case not finished, operation <MAX-MIN> ignored");
+                            break;
+                        }
+
                         AX_U32 nIndex = rand() % vecLabels.size();
-                        ActionScaleLabelDbClicked(vecLabels[nIndex], tCaseInfo.nOprInterval, "LabelMax");
-                        ActionScaleLabelDbClicked(vecLabels[nIndex], tCaseInfo.nOprInterval, "LabelMin");
+                        ActionScaleLabelDbClicked(vecLabels[nIndex], tCaseInfo.nOprInterval, "LabelMax", AX_TRUE);
+
+                        if (!IsFinished()) {
+                            LOG_MM_W(TAG, "Case <MAX> not finished, operation <MIN> ignored");
+                            break;
+                        }
+
+                        ActionScaleLabelDbClicked(vecLabels[nIndex], tCaseInfo.nOprInterval, "LabelMin", AX_TRUE);
                     }
                     break;
                 }
@@ -189,6 +226,8 @@ void CTestPreview::testRandom() {
                     break;
                 }
             }
+
+            CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
         }
     }
 }

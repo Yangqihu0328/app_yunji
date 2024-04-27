@@ -47,7 +47,20 @@ INCLUDEPATH += $$FRM_SRC_DIR
 INCLUDEPATH += $$CFG_SRC_DIR
 
 QMAKE_CFLAGS = `pkg-config --cflags -Wl,-rpath-link=$$THIRD_PARTY_PATH/ffmpeg/lib`
+
+equals(ASAN, yes) {
+    QMAKE_CFLAGS += -fsanitize=leak
+    QMAKE_CFLAGS += -fsanitize=address
+    QMAKE_CFLAGS += -fno-omit-frame-pointer
+}
+
 QMAKE_CXXFLAGS = $$QMAKE_CFLAGS
+
+equals(ASAN, yes) {
+    QMAKE_LFLAGS += -fsanitize=leak
+    QMAKE_LFLAGS += -fsanitize=address
+    QMAKE_LFLAGS += -fno-omit-frame-pointer
+}
 
 LIBS += -L$$MSP_OUT_PATH/lib
 LIBS += -lax_sys
@@ -130,6 +143,8 @@ SOURCES  += \
     $$HAL_SRC_DIR/linker.cpp \
     $$HAL_SRC_DIR/vo.cpp \
     $$HAL_SRC_DIR/vdec.cpp \
+    $$HAL_SRC_DIR/venc.cpp \
+    $$HAL_SRC_DIR/VideoEncoderEx.cpp \
     $$HAL_SRC_DIR/ivps.cpp \
     $$HAL_SRC_DIR/istream.cpp \
     $$HAL_SRC_DIR/ffmpegstream.cpp \
@@ -141,7 +156,9 @@ SOURCES  += \
     $$HAL_SRC_DIR/datastream_play.cpp \
     $$HAL_SRC_DIR/datastreamfile.cpp \
     $$HAL_SRC_DIR/datastreamIndFile.cpp \
-    $$HAL_SRC_DIR/framebufferPaint.cpp
+    $$HAL_SRC_DIR/framebufferPaint.cpp \
+    $$HAL_SRC_DIR/streamContainer.cpp \
+    $$HAL_SRC_DIR/streamTransfer.cpp
 
 # CFG
 SOURCES  += \

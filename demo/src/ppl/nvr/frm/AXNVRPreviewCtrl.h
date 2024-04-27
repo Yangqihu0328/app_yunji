@@ -35,6 +35,7 @@ typedef struct _AX_NVR_DEVICE_MGR_ATTR_T {
 typedef struct _AX_NVR_DEVICE_T {
     CAXNVRChannel *pRPatrolChn;
     CAXThread *pThreadRPatrol;
+    CAXThread *pThreadRPatrolUpdate;
     CAXNVRChannel *pPreviewChnMain;
     CAXNVRChannel *pPreviewChnSub1;
     CAXThread *pThreadPreview;
@@ -65,26 +66,22 @@ public:
     std::vector<AX_NVR_DEV_INFO_T> GetDevices();
 
     // preview action
-    // - ax_nvr_channel_vector<devid=label-index>
     AX_BOOL UpdatePreview(const ax_nvr_channel_vector &vecChn);
     AX_BOOL StartPreview(const ax_nvr_channel_vector &vecChn);
     AX_BOOL SwitchPreviewMainSub(const ax_nvr_channel_vector &vecChn);
-    // AX_VOID StopPreview(const ax_nvr_channel_vector &vecChn);
     // - stop all
     AX_VOID StopPreview(AX_VOID);
     // - single dev action
     AX_BOOL ZoomAndMove(AX_NVR_DEV_ID nDeviceID, const AX_NVR_RECT_T &stCropRect, AX_BOOL bCrop);
 
     // round-patrol action
-    // AX_BOOL UpdatePreviewDisp(const vector<AX_NVR_DEV_ID> &vecDevID);
-    AX_BOOL StartRoundPatrol(CAXNVRDisplayCtrl *pSecondary, const vector<AX_NVR_DEV_ID> &vecDevID);
-    // AX_VOID SwitchPreviewMainSub(const ax_nvr_channel_vector &vecChn);
-    AX_VOID StopRoundPatrol(AX_VOID);
+    AX_BOOL StartRoundPatrol(const vector<AX_NVR_DEV_ID> &vecDevID);
+    AX_BOOL StopRoundPatrol(const vector<AX_NVR_DEV_ID> &vecDevID);
+    AX_BOOL UpdateRoundPatrolPreview(const vector<AX_NVR_DEV_ID> &vecDevID);
 
     // pip action
     AX_BOOL StartPip(AX_NVR_DEV_ID nDeviceID, AX_NVR_CHN_IDX_TYPE enIdx);
     AX_BOOL StopPip(AX_VOID);
-
 
     // get attr-resolution
     AX_BOOL GetResolution(AX_NVR_DEV_ID nDeviceID, AX_U32 &nWidth, AX_U32 &nHeight);
@@ -97,18 +94,18 @@ private:
     CAXNVRChannel m_chnPip;
 
     std::map<AX_NVR_DEV_ID, AX_NVR_DEVICE_T> m_mapDevice;
-    std::vector<AX_NVR_DEV_ID> m_vecDevice_PreviewView;
-    std::vector<AX_NVR_DEV_ID> m_vecDevice_RoundPatrolView;
 
 protected:
     CAXNVRChannel *createRPatrolChannel(AX_NVR_DEV_ID nDevID);
     CAXNVRChannel *createPreviewChannel(AX_NVR_DEV_ID nDevID, AX_NVR_CHN_IDX_TYPE enIdx);
-    AX_BOOL startRtsp(CAXNVRChannel *pChannel, const AX_NVR_DEV_CHN_INFO_T &stChannelInfo, AX_BOOL bForce);
+    AX_BOOL startRtsp(CAXNVRChannel *pChannel, const AX_NVR_DEV_CHN_INFO_T &stChannelInfo, AX_BOOL bForce, AX_S32 nCookie);
 
     AX_VOID StopPreviewThread(AX_VOID* pArg);
     AX_VOID StartPreviewThread(AX_VOID* pArg);
 
     AX_VOID StopRPatrolThread(AX_VOID* pArg);
     AX_VOID StartRPatrolThread(AX_VOID* pArg);
+    AX_VOID UpdateRPatrolThread(AX_VOID* pArg);
 
+    AX_S32 GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE enView, AX_NVR_CHN_IDX_TYPE enChn, AX_NVR_DEV_ID nChn, AX_BOOL bPip = AX_FALSE);
 };

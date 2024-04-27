@@ -63,11 +63,11 @@ class CTestSuiteBase
 public:
     virtual AX_BOOL Start() = 0;
     virtual AX_VOID Stop() { m_bRunning = AX_FALSE; };
-    virtual AX_VOID ActionBtnClick(QPushButton* pBtn, AX_S32 nWaitTick = 1000, const string& strActionName = "");
-    virtual AX_VOID ActionToggleBtnClick(QPushButton* pBtn, AX_S32 nWaitTick = 1000, const string& strActionName = "");
-    virtual AX_VOID ActionTabClick(QTabWidget* pTab, AX_U32 nIndex, AX_S32 nWaitTick = 0, const string& strActionName = "");
-    virtual AX_VOID ActionScaleLabelDbClicked(ScaleLabel* pLabel, AX_S32 nWaitTick = 0, const string& strActionName = "");
-    virtual AX_VOID ActionCalendarDateSelected(QCalendarWidget* pCalendar, QDate& date, AX_S32 nWaitTick = 0, const string& strActionName = "");
+    virtual AX_VOID ActionBtnClick(QPushButton* pBtn, AX_S32 nWaitTick = 1000, const string& strActionName = "", AX_BOOL bFeedbackRequired = AX_FALSE);
+    virtual AX_VOID ActionToggleBtnClick(QPushButton* pBtn, AX_S32 nWaitTick = 1000, const string& strActionName = "", AX_BOOL bFeedbackRequired = AX_FALSE);
+    virtual AX_VOID ActionTabClick(QTabWidget* pTab, AX_U32 nIndex, AX_S32 nWaitTick = 0, const string& strActionName = "", AX_BOOL bFeedbackRequired = AX_FALSE);
+    virtual AX_VOID ActionScaleLabelDbClicked(ScaleLabel* pLabel, AX_S32 nWaitTick = 0, const string& strActionName = "", AX_BOOL bFeedbackRequired = AX_FALSE);
+    virtual AX_VOID ActionCalendarDateSelected(QCalendarWidget* pCalendar, QDate& date, AX_S32 nWaitTick = 0, const string& strActionName = "", AX_BOOL bFeedbackRequired = AX_FALSE);
     virtual AX_BOOL EmitUIOprSignal(const TS_OPERATION_INFO_T& tOprInfo) = 0;
 
     AX_VOID RegisterWidget(const AX_CHAR* strName, QWidget* pWidget);
@@ -77,8 +77,11 @@ public:
     virtual AX_VOID SetModuleConfig(const AX_NVR_TS_MODULE_INFO_T& tConfig);
     virtual AX_NVR_TS_MODULE_INFO_PTR GetModuleConfig();
 
-    AX_VOID ResetAction(const string& strActionName) {
-        m_bCaseResult = AX_FALSE;
+    AX_VOID ResetAction(const string& strActionName, AX_BOOL bFeedbackRequired = AX_FALSE) {
+        if (bFeedbackRequired) {
+            m_bCaseResult = AX_FALSE;
+        }
+
         m_strActionName = strActionName;
     }
 

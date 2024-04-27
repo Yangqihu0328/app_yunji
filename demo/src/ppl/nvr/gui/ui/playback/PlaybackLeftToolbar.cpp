@@ -106,18 +106,18 @@ void PlaybackLeftToolbar::onClickedRefresh(void) {
 }
 
 void PlaybackLeftToolbar::onTableCellClicked(int row, int col) {
-    auto __CHECK_FUNC__ = [this](auto table, auto row, auto col, auto *cnt, auto max) {
+    auto __CHECK_FUNC__ = [this](auto table, auto row, auto col, auto *cnt, auto max, auto checked) {
+        /* Toggle check status or determined by <checked> value */
         QTableWidgetItem *item = table->item(row, col);
-        int nData = item->data(Qt::UserRole).toInt();
-        if (nData == 0) {
+        AX_S32 nChecked = (checked == -1 ? (item->data(Qt::UserRole).toInt() ? 0 : 1) : checked);
+        if (nChecked) {
             if (*cnt >= max) {
                 return;
             }
             item->setIcon(this->m_iconChecked);
             item->setData(Qt::UserRole, 1);
             *cnt += 1;
-        }
-        else {
+        } else {
             item->setIcon(this->m_iconUnchecked);
             item->setData(Qt::UserRole, 0);
             *cnt -= 1;
@@ -127,32 +127,32 @@ void PlaybackLeftToolbar::onTableCellClicked(int row, int col) {
     if (col == 1) return;
 
     if (sender() == ui->tableWidget_1x1) {
-        __CHECK_FUNC__(ui->tableWidget_1x1, row, col, &m_nCnt1x1, 1);
+        __CHECK_FUNC__(ui->tableWidget_1x1, row, col, &m_nCnt1x1, 1, -1);
     } else if (sender() == ui->tableWidget_2x2) {
-        __CHECK_FUNC__(ui->tableWidget_2x2, row, col, &m_nCnt2x2, 4);
+        __CHECK_FUNC__(ui->tableWidget_2x2, row, col, &m_nCnt2x2, 4, -1);
     } else if (sender() == ui->tableWidget_1_7) {
-        __CHECK_FUNC__(ui->tableWidget_1_7, row, col, &m_nCnt1_7, 8);
+        __CHECK_FUNC__(ui->tableWidget_1_7, row, col, &m_nCnt1_7, 8, -1);
     } else if (sender() == ui->tableWidget_4x4) {
-        __CHECK_FUNC__(ui->tableWidget_4x4, row, col, &m_nCnt4_4, 16);
+        __CHECK_FUNC__(ui->tableWidget_4x4, row, col, &m_nCnt4_4, 16, -1);
     } else {
         /* triggered from test suite */
         QTabWidget* pTab = this->findChild<QTabWidget*>(QString("tabWidget"));
         int index = pTab->currentIndex();
         switch (index) {
             case 0: {
-                __CHECK_FUNC__(ui->tableWidget_1x1, row, col, &m_nCnt1x1, 1);
+                __CHECK_FUNC__(ui->tableWidget_1x1, row, col, &m_nCnt1x1, 1, 1);
                 break;
             }
             case 1: {
-                __CHECK_FUNC__(ui->tableWidget_2x2, row, col, &m_nCnt2x2, 4);
+                __CHECK_FUNC__(ui->tableWidget_2x2, row, col, &m_nCnt2x2, 4, 1);
                 break;
             }
             case 2: {
-                __CHECK_FUNC__(ui->tableWidget_1_7, row, col, &m_nCnt1_7, 8);
+                __CHECK_FUNC__(ui->tableWidget_1_7, row, col, &m_nCnt1_7, 8, 1);
                 break;
             }
             case 3: {
-                __CHECK_FUNC__(ui->tableWidget_4x4, row, col, &m_nCnt4_4, 16);
+                __CHECK_FUNC__(ui->tableWidget_4x4, row, col, &m_nCnt4_4, 16, 1);
                 break;
             }
             default: break;

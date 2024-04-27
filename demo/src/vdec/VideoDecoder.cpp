@@ -86,7 +86,6 @@ AX_VOID CVideoDecoder::RecvThread(AX_VOID* pArg) {
                 continue;
             }
 
-            //终于有对应的grp和channel配套的组合了，还有对应的帧率
             mapChnInfo[{i, j}] = {m_arrGrpInfo[i].stAttr.nFps, 0, 0};
         }
     }
@@ -98,7 +97,7 @@ AX_VOID CVideoDecoder::RecvThread(AX_VOID* pArg) {
         if (0 == setGrps.size()) {
             break;
         }
-        //遍历grp
+
         ret = AX_VDEC_SelectGrp(&stGrpSet, 1000);
         if (0 != ret) {
             if (AX_ERR_VDEC_FLOW_END == ret) {
@@ -204,7 +203,7 @@ AX_VOID CVideoDecoder::RecvThread(AX_VOID* pArg) {
                     CTimestampHelper::RecordTimestamp(stVFrame.stVFrame, vdGrp, vdChn, TIMESTAMP_VDEC_RECV);
                 }
 #endif
-                //终于看到这个了
+
                 CAXFrame axFrame;
                 axFrame.nGrp = (AX_S32)vdGrp;
                 axFrame.nChn = (AX_S32)vdChn;
@@ -230,7 +229,6 @@ AX_VOID CVideoDecoder::RecvThread(AX_VOID* pArg) {
                                        axFrame.stFrame.stVFrame.stVFrame.u32FrameSize);
                 }
 #endif
-                //把解码的frame发送出去。
                 Notify(axFrame);
 
                 ret = AX_VDEC_ReleaseChnFrame(vdGrp, vdChn, &stVFrame);
@@ -259,7 +257,6 @@ AX_U32 CVideoDecoder::GetBlkSize(AX_U32 nW, AX_U32 nH, AX_U32 nAlign, AX_PAYLOAD
 AX_BOOL CVideoDecoder::Init(const std::vector<VDEC_GRP_ATTR_T>& v) {
     LOG_M_D(VDEC, "%s: +++", __func__);
 
-    //计数，至少要有一个
     if (0 == count_if(v.begin(), v.end(), [](const VDEC_GRP_ATTR_T& m) { return m.bEnable ? true : false; })) {
         LOG_M_E(VDEC, "%s: 0 enable vdec grp", __func__);
         return AX_FALSE;
@@ -274,7 +271,6 @@ AX_BOOL CVideoDecoder::Init(const std::vector<VDEC_GRP_ATTR_T>& v) {
 
     for (AX_VDEC_GRP vdGrp = 0; vdGrp < (AX_VDEC_GRP)VDEC_GRP_NUM; ++vdGrp) {
         VDEC_GRP_INFO_T& stGrpInfo = m_arrGrpInfo[vdGrp];
-        //主要还是配置stGrpInfo的相关信息，link和活跃状态
         stGrpInfo.stAttr = v[vdGrp];
 
         if (!stGrpInfo.stAttr.bEnable) {
@@ -285,12 +281,10 @@ AX_BOOL CVideoDecoder::Init(const std::vector<VDEC_GRP_ATTR_T>& v) {
             DeInit();
             return AX_FALSE;
         } else {
-            //设置为活跃状态
             stGrpInfo.bActive = AX_TRUE;
 
             for (AX_VDEC_CHN i = 0; i < MAX_VDEC_CHN_NUM; ++i) {
                 if (stGrpInfo.stAttr.bChnEnable[i]) {
-                    //现在是非link模式
                     if (0 == stGrpInfo.stAttr.stChnAttr[i].u32OutputFifoDepth) {
                         stGrpInfo.bLinked = AX_TRUE;
                         break;
@@ -299,7 +293,6 @@ AX_BOOL CVideoDecoder::Init(const std::vector<VDEC_GRP_ATTR_T>& v) {
             }
         }
 
-        //现在是fream模式
         if (AX_VDEC_INPUT_MODE_STREAM == stGrpInfo.stAttr.enInputMode) {
             m_arrCacheBuf[vdGrp] = make_unique<CStreamCacheBuf>(stGrpInfo.stAttr.nMaxStreamBufSize);
             if (!m_arrCacheBuf[vdGrp]) {
@@ -331,7 +324,6 @@ AX_BOOL CVideoDecoder::DeInit(AX_VOID) {
         if (m_arrGrpInfo[vdGrp].bActive) {
             // LOG_M_W(VDEC, "AX_VDEC_DestroyGrp(vdGrp %d) +++", vdGrp);
             for (AX_U32 i = 0; i < 3; ++i) {
-                //销毁grp
                 ret = AX_VDEC_DestroyGrp(vdGrp);
                 if (0 == ret) {
                     break;
@@ -409,7 +401,6 @@ AX_BOOL CVideoDecoder::Start(AX_VOID) {
         AX_VDEC_RECV_PIC_PARAM_T stRecvParam;
         memset(&stRecvParam, 0, sizeof(stRecvParam));
         stRecvParam.s32RecvPicNum = -1;
-        //每一路都要开启接收码流，然后线程里面进行解码处理
         ret = AX_VDEC_StartRecvStream(vdGrp, &stRecvParam);
         if (0 != ret) {
             LOG_M_E(VDEC, "AX_VDEC_StartRecvStream(vdGrp %d) fail, ret = 0x%x", vdGrp);
@@ -567,7 +558,6 @@ AX_BOOL CVideoDecoder::UnRegObserver(AX_VDEC_GRP vdGrp, IObserver* pObs) {
 
 AX_BOOL CVideoDecoder::UnRegAllObservers(AX_VOID) {
     std::lock_guard<std::mutex> lck(m_mtxObs);
-    //只是列表清空，因为没做其他的事情。
     m_mapObs.clear();
     return AX_TRUE;
 }
@@ -662,7 +652,6 @@ AX_BOOL CVideoDecoder::CreateDecoder(AX_VDEC_GRP vdGrp, const VDEC_GRP_INFO_T& s
     return AX_TRUE;
 }
 
-//对应的回调
 AX_BOOL CVideoDecoder::OnRecvVideoData(AX_S32 nCookie, const AX_U8* pData, AX_U32 nLen, AX_U64 nPTS) {
     AX_VDEC_GRP vdGrp = nCookie;
 #ifdef __DUMP_VDEC_NALU__
@@ -675,18 +664,14 @@ AX_BOOL CVideoDecoder::OnRecvVideoData(AX_S32 nCookie, const AX_U8* pData, AX_U3
     }
 #endif
 
-    //关键在这个cookie
     if (m_arrCacheBuf[vdGrp]) {
-        //获取cache buf，发送的数据大于容量，就调用发送接口？问题很大
         if (nLen > m_arrCacheBuf[vdGrp]->GetCapacity()) {
             return Send(vdGrp, pData, nLen, nPTS);
         }
 
-        //不然存在数组里面
         if (m_arrCacheBuf[vdGrp]->Insert(pData, nLen)) {
             return AX_TRUE;
         } else {
-            //buf不够，先发pCacheBuf部分过去
             AX_U32 nCacheSize;
             const AX_U8* pCacheBuf = m_arrCacheBuf[vdGrp]->GetCacheBuf(nCacheSize);
             if (!Send(vdGrp, pCacheBuf, nCacheSize, 0)) {
@@ -743,7 +728,6 @@ AX_BOOL CVideoDecoder::Send(AX_VDEC_GRP vdGrp, const AX_U8* pData, AX_U32 nLen, 
      */
 
     // LOG_M_W(VDEC, "AX_VDEC_SendStream(vdGrp %d len %d) +++", vdGrp, stStream.u32StreamPackLen);
-    //调用vdec接口，不需要知道物理地址
     AX_S32 ret = AX_VDEC_SendStream(vdGrp, &stStream, -1);
     // LOG_M_W(VDEC, "AX_VDEC_SendStream(vdGrp %d len %d) ---, ret = 0x%x", vdGrp, stStream.u32StreamPackLen, ret);
     if (0 != ret) {
@@ -787,8 +771,6 @@ AX_BOOL CVideoDecoder::Send(AX_VDEC_GRP vdGrp, const AX_U8* pData, AX_U32 nLen, 
     return AX_TRUE;
 }
 
-//通知接收数据
-//我们知道vdec绑定的是dispatch 和 tpu
 AX_BOOL CVideoDecoder::Notify(const CAXFrame& axFrame) {
     std::lock_guard<std::mutex> lck(m_mtxObs);
     if (m_mapObs.end() != m_mapObs.find(axFrame.nGrp)) {

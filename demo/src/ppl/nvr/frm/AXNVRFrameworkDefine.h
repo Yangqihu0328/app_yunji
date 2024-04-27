@@ -78,10 +78,10 @@ enum class AX_NVR_VO_SPLITE_TYPE {
 
 typedef struct _AX_NVR_RECT_T {
     bool bShow = true;
-    unsigned int x;
-    unsigned int y;
-    unsigned int w;
-    unsigned int h;
+    unsigned int x = {0};
+    unsigned int y = {0};
+    unsigned int w = {0};
+    unsigned int h = {0};
 } AX_NVR_RECT_T;
 
 typedef struct _AX_NVR_VO_SPLITE_WINDOW_T {
@@ -171,6 +171,7 @@ typedef struct {
     AX_NVR_RPATROL_TYPE enType;
     AX_NVR_VO_SPLITE_TYPE enSpliteType;     // only for CHANNELS Type
     AX_U32 uIntelval;                       // [5, 120] second
+    AX_S32 nStrategy;                       // 0: ascending; 1: round; 2: random
 } AX_NVR_RPATROL_CONFIG_T;
 
 enum class AX_NVR_DETECT_SRC_TYPE {
@@ -215,6 +216,7 @@ typedef struct {
     std::string strPath;
     AX_U32 uMaxDevSpace;
     AX_U32 uMaxFilePeriod;
+    AX_BOOL bOnlyIFrameOnReverse; /* 是否仅倒放I帧 */
 } AX_NVR_RECORD_CONFIG_T;
 
 // remote device source

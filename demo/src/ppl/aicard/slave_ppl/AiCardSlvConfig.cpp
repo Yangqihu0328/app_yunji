@@ -16,7 +16,6 @@
 using namespace std;
 using namespace aicard_slv;
 
-//获取当前路径
 string CAiCardSlvConfig::GetExecPath(AX_VOID) {
     string strPath;
     AX_CHAR szPath[260] = {0};
@@ -31,7 +30,6 @@ string CAiCardSlvConfig::GetExecPath(AX_VOID) {
     return strPath;
 }
 
-//先到ini解析类，再到开源ini文件解析
 AX_BOOL CAiCardSlvConfig::Init(AX_VOID) {
     string strIniPath = GetExecPath() + "aicard_slave.conf";
     if (!m_iniParser.Load(strIniPath)) {
@@ -41,7 +39,6 @@ AX_BOOL CAiCardSlvConfig::Init(AX_VOID) {
     return AX_TRUE;
 }
 
-//确定宽高，fps,输入格式，buff大小和数量,decode数量以及编码格式和输入格式。
 VDEC_CONFIG_T CAiCardSlvConfig::GetVdecConfig(AX_VOID) {
     VDEC_CONFIG_T conf;
     const AX_CHAR *SECT = "VDEC";
@@ -63,7 +60,6 @@ VDEC_CONFIG_T CAiCardSlvConfig::GetVdecConfig(AX_VOID) {
         conf.nUserPool = 1;
     }
 
-    //2M
     conf.nMaxStreamBufSize = m_iniParser.GetIntValue(SECT, "max stream buf size", 0x200000);
     AX_U32 nCount = m_iniParser.GetIntValue(SECT, "count", 1);
     if (nCount > 0) {
@@ -83,7 +79,6 @@ VDEC_CONFIG_T CAiCardSlvConfig::GetVdecConfig(AX_VOID) {
     return conf; /* RVO: optimized by compiler */
 }
 
-//宽高，缓存，开启仿真
 DETECT_CONFIG_T CAiCardSlvConfig::GetDetectConfig(AX_VOID) {
     DETECT_CONFIG_T conf;
     const AX_CHAR *SECT = "DETECT";

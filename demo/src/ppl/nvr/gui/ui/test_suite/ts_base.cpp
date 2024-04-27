@@ -48,9 +48,16 @@ AX_BOOL CTestSuiteBase::Enter() {
 }
 
 AX_BOOL CTestSuiteBase::CheckEntry() {
+    AX_BOOL bRet = AX_TRUE;
     QPushButton* pWidget = (QPushButton*)GetWidget("BtnEntry");
     if (pWidget) {
-        return pWidget->isChecked() ? AX_TRUE : AX_FALSE;
+        bRet = pWidget->isChecked() ? AX_TRUE : AX_FALSE;
+        if (!bRet) {
+            LOG_MM_E(m_strModuleName.c_str(), "BtnEntry(%s) is not checked, ignore current case.");
+        }
+        return bRet;
+    } else {
+        LOG_MM_E(m_strModuleName.c_str(), "Can not find BtnEntry(%s), ignore current case.");
     }
 
     return AX_FALSE;
@@ -64,14 +71,14 @@ AX_NVR_TS_MODULE_INFO_PTR CTestSuiteBase::GetModuleConfig() {
     return &m_tModuleConfig;
 }
 
-AX_VOID CTestSuiteBase::ActionToggleBtnClick(QPushButton* pBtn, AX_S32 nWaitTick /*= 1000*/, const string& strActionName /*= ""*/) {
+AX_VOID CTestSuiteBase::ActionToggleBtnClick(QPushButton* pBtn, AX_S32 nWaitTick /*= 1000*/, const string& strActionName /*= ""*/, AX_BOOL bFeedbackRequired /*= AX_FALSE*/) {
     if (nullptr == pBtn) {
         return;
     }
 
-    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggerd", strActionName.empty() ? pBtn->objectName().toStdString().c_str() : strActionName.c_str());
+    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggered", strActionName.empty() ? pBtn->objectName().toStdString().c_str() : strActionName.c_str());
 
-    ResetAction(strActionName.empty() ? pBtn->objectName().toStdString() : strActionName);
+    ResetAction(strActionName.empty() ? pBtn->objectName().toStdString() : strActionName, bFeedbackRequired);
 
     TS_OPERATION_INFO_T tOprInfo;
     tOprInfo.target = pBtn;
@@ -81,14 +88,14 @@ AX_VOID CTestSuiteBase::ActionToggleBtnClick(QPushButton* pBtn, AX_S32 nWaitTick
     CElapsedTimer::GetInstance()->mSleep(nWaitTick);
 }
 
-AX_VOID CTestSuiteBase::ActionBtnClick(QPushButton* pBtn, AX_S32 nWaitTick /*= 1000*/, const string& strActionName /*= ""*/) {
+AX_VOID CTestSuiteBase::ActionBtnClick(QPushButton* pBtn, AX_S32 nWaitTick /*= 1000*/, const string& strActionName /*= ""*/, AX_BOOL bFeedbackRequired /*= AX_FALSE*/) {
     if (nullptr == pBtn) {
         return;
     }
 
-    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggerd", strActionName.empty() ? pBtn->objectName().toStdString().c_str() : strActionName.c_str());
+    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggered", strActionName.empty() ? pBtn->objectName().toStdString().c_str() : strActionName.c_str());
 
-    ResetAction(strActionName.empty() ? pBtn->objectName().toStdString() : strActionName);
+    ResetAction(strActionName.empty() ? pBtn->objectName().toStdString() : strActionName, bFeedbackRequired);
 
     TS_OPERATION_INFO_T tOprInfo;
     tOprInfo.target = pBtn;
@@ -99,7 +106,7 @@ AX_VOID CTestSuiteBase::ActionBtnClick(QPushButton* pBtn, AX_S32 nWaitTick /*= 1
     CElapsedTimer::GetInstance()->mSleep(nWaitTick);
 }
 
-AX_VOID CTestSuiteBase::ActionTabClick(QTabWidget* pTab, AX_U32 nIndex, AX_S32 nWaitTick /*= 0*/, const string& strActionName /*= ""*/) {
+AX_VOID CTestSuiteBase::ActionTabClick(QTabWidget* pTab, AX_U32 nIndex, AX_S32 nWaitTick /*= 0*/, const string& strActionName /*= ""*/, AX_BOOL bFeedbackRequired /*= AX_FALSE*/) {
     if (nullptr == pTab) {
         return;
     }
@@ -110,9 +117,9 @@ AX_VOID CTestSuiteBase::ActionTabClick(QTabWidget* pTab, AX_U32 nIndex, AX_S32 n
         return;
     }
 
-    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggerd", strActionName.empty() ? pTab->tabText(nIndex).toStdString().c_str() : strActionName.c_str());
+    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggered", strActionName.empty() ? pTab->tabText(nIndex).toStdString().c_str() : strActionName.c_str());
 
-    ResetAction(strActionName.empty() ? pTab->tabText(nIndex).toStdString().c_str() : strActionName);
+    ResetAction(strActionName.empty() ? pTab->tabText(nIndex).toStdString().c_str() : strActionName, bFeedbackRequired);
 
     TS_OPERATION_INFO_T tOprInfo;
     tOprInfo.target = pTab;
@@ -123,14 +130,14 @@ AX_VOID CTestSuiteBase::ActionTabClick(QTabWidget* pTab, AX_U32 nIndex, AX_S32 n
     CElapsedTimer::GetInstance()->mSleep(nWaitTick);
 }
 
-AX_VOID CTestSuiteBase::ActionScaleLabelDbClicked(ScaleLabel* pLabel, AX_S32 nWaitTick /*= 0*/, const string& strActionName /*= ""*/) {
+AX_VOID CTestSuiteBase::ActionScaleLabelDbClicked(ScaleLabel* pLabel, AX_S32 nWaitTick /*= 0*/, const string& strActionName /*= ""*/, AX_BOOL bFeedbackRequired /*= AX_FALSE*/) {
     if (nullptr == pLabel) {
         return;
     }
 
-    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggerd", strActionName.empty() ? pLabel->text().toStdString().c_str() : strActionName.c_str());
+    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggered", strActionName.empty() ? pLabel->text().toStdString().c_str() : strActionName.c_str());
 
-    ResetAction(strActionName.empty() ? pLabel->text().toStdString().c_str() : strActionName);
+    ResetAction(strActionName.empty() ? pLabel->text().toStdString().c_str() : strActionName, bFeedbackRequired);
 
     /* pDbClickEvent would be cleaned by QT itself */
     QMouseEvent* pDbClickEvent = new QMouseEvent(QEvent::MouseButtonDblClick, QPoint(0, 0), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
@@ -138,7 +145,7 @@ AX_VOID CTestSuiteBase::ActionScaleLabelDbClicked(ScaleLabel* pLabel, AX_S32 nWa
     CElapsedTimer::GetInstance()->mSleep(nWaitTick);
 }
 
-AX_VOID CTestSuiteBase::ActionCalendarDateSelected(QCalendarWidget* pCalendar, QDate& date, AX_S32 nWaitTick /*= 0*/, const string& strActionName /*= ""*/) {
+AX_VOID CTestSuiteBase::ActionCalendarDateSelected(QCalendarWidget* pCalendar, QDate& date, AX_S32 nWaitTick /*= 0*/, const string& strActionName /*= ""*/, AX_BOOL bFeedbackRequired /*= AX_FALSE*/) {
     if (nullptr == pCalendar) {
         return;
     }
@@ -146,8 +153,8 @@ AX_VOID CTestSuiteBase::ActionCalendarDateSelected(QCalendarWidget* pCalendar, Q
     AX_CHAR szAction[32] = {0};
     sprintf(szAction, "change date(%s)", date.toString().toStdString().c_str());
 
-    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggerd", strActionName.empty() ? szAction : strActionName.c_str());
-    ResetAction(strActionName.empty() ? szAction : strActionName);
+    LOG_M_C(m_strModuleName.c_str(), "Action<%s> triggered", strActionName.empty() ? szAction : strActionName.c_str());
+    ResetAction(strActionName.empty() ? szAction : strActionName, bFeedbackRequired);
 
     TS_OPERATION_INFO_T tOprInfo;
     tOprInfo.target = pCalendar;

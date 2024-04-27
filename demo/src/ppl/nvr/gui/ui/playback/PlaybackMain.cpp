@@ -33,30 +33,30 @@ PlaybackMain::PlaybackMain(QWidget *parent)
             const ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
             m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::STOP, vecViewChn);
 
-            /* Reset speed */
-            m_nCurrentIndex = 0;
-            m_fCurrentSpeed = 1.0f;
-            CAXNVRPlaybakCtrl *pPlaybak = CAXNVRFramework::GetInstance()->PlaybakCtrl();
-            pPlaybak->SetSpeed(vecViewChn, m_fCurrentSpeed);
-
             emit signal_stop_status_changed(0); /* stop finished */
         } else if (res.enPlaybackActionType == PLAYBACK_ACTION_TYPE::FAST_SPEED) {
-            SPLIT_TYPE enSplitType = m_pSplitWidgetMgr->GetCurrentSplitType();
-            ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
+            AX_NVR_ACTION_RES_T res = m_watcherPreview.result();
+            if (AX_NVR_PREVIEW_RES_TYPE::PREVIEW_OK == res.enResult) {
+                SPLIT_TYPE enSplitType = m_pSplitWidgetMgr->GetCurrentSplitType();
+                ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
 
-            if (m_fCurrentSpeed > 1.0) {
-                m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::FAST_SPEED, vecViewChn, QString("(Speed X%1)").arg(m_nSpeedFactor[m_nCurrentIndex]));
-            } else {
-                m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::FAST_SPEED, vecViewChn);
+                if (m_fCurrentSpeed > 1.0) {
+                    m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::FAST_SPEED, vecViewChn, QString("(Speed X%1)").arg(m_nSpeedFactor[m_nCurrentIndex]));
+                } else {
+                    m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::FAST_SPEED, vecViewChn);
+                }
             }
         } else if (res.enPlaybackActionType == PLAYBACK_ACTION_TYPE::SLOW_SPEED) {
-            SPLIT_TYPE enSplitType = m_pSplitWidgetMgr->GetCurrentSplitType();
-            ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
+            AX_NVR_ACTION_RES_T res = m_watcherPreview.result();
+            if (AX_NVR_PREVIEW_RES_TYPE::PREVIEW_OK == res.enResult) {
+                SPLIT_TYPE enSplitType = m_pSplitWidgetMgr->GetCurrentSplitType();
+                ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
 
-            if (m_fCurrentSpeed < 1.0) {
-                m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::SLOW_SPEED, vecViewChn, QString("(Speed 1/%1)").arg(m_nSpeedFactor[m_nCurrentIndex]));
-            } else {
-                m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::SLOW_SPEED, vecViewChn);
+                if (m_fCurrentSpeed < 1.0) {
+                    m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::SLOW_SPEED, vecViewChn, QString("(Speed 1/%1)").arg(m_nSpeedFactor[m_nCurrentIndex]));
+                } else {
+                    m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::SLOW_SPEED, vecViewChn);
+                }
             }
         }
         LOG_M_D(TAG, "[%s][%d] Preview Action Finished, res=0x%x.", __func__, __LINE__, res.enResult);
@@ -105,7 +105,7 @@ void PlaybackMain::showEvent(QShowEvent *event) {
     do {
         m_pScaleLabelSeled = nullptr;
         if (m_watcherPreview.isRunning()) {
-            LOG_M_I(TAG, "[%s][%d] Still Active.", __func__, __LINE__);
+            LOG_MM_W(TAG, "Last operation still active.");
             break;
         }
 
@@ -137,6 +137,7 @@ void PlaybackMain::showEvent(QShowEvent *event) {
         this->update_display(vecViewChn, vecVoRect, enChangeType, enSplitType);
         this->update_playctrl(enSplitType);
 
+        m_pScaleLabelSeled = (ScaleLabel*)m_pSplitWidgetMgr->GetCurrentStartWidget();
     } while(0);
 
     return QWidget::showEvent(event);
@@ -146,7 +147,7 @@ void PlaybackMain::hideEvent(QHideEvent *event) {
     do {
 
         if (m_watcherPreview.isRunning()) {
-            LOG_M_I(TAG, "[%s][%d] Still Active.", __func__, __LINE__);
+            LOG_MM_W(TAG, "Last operation still active.");
             break;
         }
 
@@ -182,6 +183,7 @@ void PlaybackMain::hideEvent(QHideEvent *event) {
 }
 
 bool PlaybackMain::eventFilter(QObject *watched, QEvent *event) {
+    AX_S32 nEventType = 0; /* Not concerned */
     do {
         if (event->type() == QEvent::MouseButtonPress) {
             QMouseEvent *ev = static_cast<QMouseEvent *>(event);
@@ -200,21 +202,23 @@ bool PlaybackMain::eventFilter(QObject *watched, QEvent *event) {
             break;
         }
 
+        nEventType = 1; /* Double click event */
+
         const SPLIT_TYPE enSplitType = m_pSplitWidgetMgr->GetCurrentSplitType();
         if (enSplitType == SPLIT_TYPE::ONE) {
+            LOG_MM_W(TAG, "SPLIT_TYPE::ONE actived, ignore MAX/MIN operation.");
             break;
         }
 
         if (m_watcherPreview.isRunning()) {
-            LOG_M_I(TAG, "[%s][%d] Still Active.", __func__, __LINE__);
+            LOG_MM_W(TAG, "Last operation still active.");
             break;
         }
 
         // get current selected label index
         int nChnSeled = m_pSplitWidgetMgr->GetWidgetIndex((ScaleLabel*)watched);
-        LOG_M_D(TAG, "[%s][%d] channel %d selected.", __func__, __LINE__, nChnSeled);
         if (nChnSeled == -1) {
-            LOG_M_E(TAG, "[%s][%d] no channel selected.", __func__, __LINE__);
+            LOG_MM_E(TAG, "No channel selected.");
             break;
         }
 
@@ -253,8 +257,18 @@ bool PlaybackMain::eventFilter(QObject *watched, QEvent *event) {
 
         this->update_display(vecViewChn, vecVoRect, enChangeType, enSplitType);
         this->update_playctrl(enSplitTypeForPlayCtrl);
+        nEventType = 2; /* Double click actually processed */
 
     } while(0);
+
+    if (1 == nEventType) { /* Double clicked not processed should still give feedback to testsuite */
+        AX_NVR_TEST_SUITE_CONFIG_T tTsCfg = CNVRConfigParser::GetInstance()->GetTestSuiteConfig();
+        if (AX_NVR_TS_RUN_MODE::DISABLE != tTsCfg.eMode) {
+            AX_NVR_ACTION_RES_T res;
+            res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_OK;
+            emit signal_result_feedback(res);
+        }
+    }
 
     return QWidget::eventFilter(watched, event);
 }
@@ -268,7 +282,7 @@ void PlaybackMain::OnChangeSplitVideo(SPLIT_TYPE enSplitType) {
         }
 
         if (m_watcherPreview.isRunning()) {
-            LOG_M_D(TAG, "[%s][%d] Still Active.", __func__, __LINE__);
+            LOG_MM_W(TAG, "Last operation still active.");
             break;
         }
 
@@ -301,7 +315,7 @@ void PlaybackMain::OnChangeSplitVideo(SPLIT_TYPE enSplitType) {
 
         m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::STOP, vecViewChn);
 
-        m_pScaleLabelSeled = nullptr;
+        m_pScaleLabelSeled = (ScaleLabel*)m_pSplitWidgetMgr->GetCurrentStartWidget();
 
     } while(0);
 }
@@ -309,7 +323,7 @@ void PlaybackMain::OnChangeSplitVideo(SPLIT_TYPE enSplitType) {
 void PlaybackMain::OnChangeMainSub1(void) {
     do {
         if (m_watcherPreview.isRunning()) {
-            LOG_M_D(TAG, "[%s][%d] Still Active.", __func__, __LINE__);
+            LOG_MM_W(TAG, "Last operation still active.");
             break;
         }
 
@@ -331,6 +345,9 @@ void PlaybackMain::OnChangeMainSub1(void) {
             break;
         }
 
+        // Quit zoom mode
+        m_pScaleLabelSeled->Reset();
+
         AX_U32 nYYYYMMDD = m_pPlaybackLeftToolbar->GetCurrentIntYMD();
         AX_U32 nHHMMSS = m_pPlayBackTimeLine->GetCurrentHMS();
 
@@ -343,7 +360,8 @@ void PlaybackMain::OnChangeMainSub1(void) {
         m_watcherPreview.setFuture(interface.future());
 
         std::thread thread([this, interface, vecViewChn, enActionType, nYYYYMMDD, nHHMMSS, res]() mutable {
-            LOG_M_D(TAG, "[%s][%d] Thread Action %d +++ ", __func__, __LINE__, enActionType);
+            LOG_MM_W(TAG, "Thread Action %d +++ ", enActionType);
+            pthread_setname_np(pthread_self(), "AppPBChangeMS");
 
             res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_ERR;
             res.enPlaybackActionType = enActionType;
@@ -351,12 +369,12 @@ void PlaybackMain::OnChangeMainSub1(void) {
             do {
                 CAXNVRPlaybakCtrl *pPlaybak = CAXNVRFramework::GetInstance()->PlaybakCtrl();
                 if (!pPlaybak) {
-                    LOG_M_E(TAG, "[%s][%d] invalid point", __func__, __LINE__);
+                    LOG_MM_E(TAG, "invalid point");
                     break;
                 }
 
                 if (!pPlaybak->SwitchMainSub1(vecViewChn, nYYYYMMDD, nHHMMSS)) {
-                    LOG_M_E(TAG, "[%s][%d] Playback Action=%d failed.", __func__, __LINE__, enActionType);
+                    LOG_MM_E(TAG, "Playback Action=%d failed.", enActionType);
                     break;
                 }
 
@@ -371,7 +389,7 @@ void PlaybackMain::OnChangeMainSub1(void) {
                 emit signal_result_feedback(res);
             }
 
-            LOG_M_D(TAG, "[%s][%d] Thread Action %d --- ", __func__, __LINE__, enActionType);
+            LOG_MM_W(TAG, "Thread Action %d --- ", enActionType);
         });
 
         // detach thred, Use Future to ensure exit
@@ -390,155 +408,213 @@ void PlaybackMain::OnDoPlaybackActionUpdate(PLAYBACK_ACTION_TYPE enActionType) {
 }
 
 void PlaybackMain::OnDoPlaybackAction(PLAYBACK_ACTION_TYPE enActionType) {
-    LOG_M_D(TAG, "[%s][%d] ActionType=%d +++", __func__, __LINE__, enActionType);
+    LOG_MM_I(TAG, "ActionType=%d +++", enActionType);
 
-    if (m_watcherPreview.isRunning()) {
-        LOG_M_D(TAG, "[%s][%d] Still Active.", __func__, __LINE__);
-        return;
-    }
+    AX_BOOL bCurrOprStarted = AX_FALSE;
+    AX_NVR_ACTION_RES_T res;
+    res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_ERR;
+    res.enPlaybackActionType = enActionType;
+    QFutureInterface<AX_NVR_ACTION_RES_T> interface;
 
-    // set label dev-id after started
-    if (PLAYBACK_ACTION_TYPE::PLAY == enActionType || PLAYBACK_ACTION_TYPE::REVERSE == enActionType) {
-        SPLIT_TYPE enSplitType = m_pSplitWidgetMgr->GetCurrentSplitType();
-        ax_nvr_channel_vector vecViewChnPlayed = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
-        ax_nvr_channel_vector vecViewChnSelected = m_pPlaybackLeftToolbar->GetChannelsSelected();
-        if (m_vecViewChnSelected.size() > 0 && (vecViewChnSelected != m_vecViewChnSelected || m_ePlaybackType == enActionType)) {
-            for (auto &m : vecViewChnPlayed) {
-                if (std::get<1>(m) != -1) {
-                    LOG_MM_W(TAG, "Playback is running, please STOP first.");
-                    return;
-                }
-            }
+    do {
+        if (m_watcherPreview.isRunning()) {
+            LOG_MM_W(TAG, "Last operation still active.");
+            break;
         }
 
-        ax_nvr_channel_vector vecViewChn = m_pPlaybackLeftToolbar->GetChannelsSelected();
-        m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::PLAY, vecViewChn);
+        interface.reportStarted();
+        m_watcherPreview.setFuture(interface.future());
+        bCurrOprStarted = AX_TRUE;
 
-        m_vecViewChnSelected = vecViewChn;
-    }
-    else if (PLAYBACK_ACTION_TYPE::STOP == enActionType) {
-        m_pSplitWidgetMgr->Reset();
-    }
-    else if (enActionType == PLAYBACK_ACTION_TYPE::NEXT) {
-        m_pPlaybackLeftToolbar->SetCurrentYMD(true);
-    } else if (enActionType == PLAYBACK_ACTION_TYPE::PREV) {
-        m_pPlaybackLeftToolbar->SetCurrentYMD(false);
-    }
+        // set label dev-id after started
+        if (PLAYBACK_ACTION_TYPE::PLAY == enActionType || PLAYBACK_ACTION_TYPE::REVERSE == enActionType) {
+            SPLIT_TYPE enSplitType = m_pSplitWidgetMgr->GetCurrentSplitType();
+            ax_nvr_channel_vector vecViewChnPlayed = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
+            ax_nvr_channel_vector vecViewChnSelected = m_pPlaybackLeftToolbar->GetChannelsSelected();
+            if (m_vecViewChnSelected.size() > 0 && (vecViewChnSelected != m_vecViewChnSelected || m_bPlaying)) {
+                AX_BOOL bIgnoreOpr = AX_FALSE;
+                for (auto &m : vecViewChnPlayed) {
+                    if (std::get<1>(m) != -1) {
+                        LOG_MM_W(TAG, "Playback is running, please STOP first.");
+                        res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_OK;
+                        bIgnoreOpr = AX_TRUE;
+                        break;
+                    }
+                }
 
-    const SPLIT_TYPE enSplitType = m_pSplitWidgetMgr->GetCurrentSplitType();
-    // get current labels index list
-    const ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
-    if (vecViewChn.size() == 0) {
-        LOG_M_D(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
-        return;
-    }
+                if (bIgnoreOpr) {
+                    break;
+                }
+            }
 
-    AX_U32 nYYYYMMDD = m_pPlaybackLeftToolbar->GetCurrentIntYMD();
-    AX_U32 nHHMMSS = m_pPlayBackTimeLine->GetCurrentHMS();
+            ax_nvr_channel_vector vecSelectedChn = m_pPlaybackLeftToolbar->GetChannelsSelected();
+            m_pSplitWidgetMgr->SetChannelsText(PLAYBACK_ACTION_TYPE::PLAY, vecSelectedChn);
+            m_vecViewChnSelected = vecSelectedChn;
 
-    AX_NVR_ACTION_RES_T res;
-    res.enSplitType = enSplitType;
-    QFutureInterface<AX_NVR_ACTION_RES_T> interface;
-    interface.reportStarted();
-    m_watcherPreview.setFuture(interface.future());
-    std::thread thread([this, interface, vecViewChn, enActionType, nYYYYMMDD, nHHMMSS, res]() mutable {
-        LOG_M_D(TAG, "[%s][%d] Thread Action %d +++ ", __func__, __LINE__, enActionType);
-
-        res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_ERR;
-        res.enPlaybackActionType = enActionType;
-
-        do {
+            /* Reset speed */
+            const ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
+            m_nCurrentIndex = 0;
+            m_fCurrentSpeed = 1.0f;
             CAXNVRPlaybakCtrl *pPlaybak = CAXNVRFramework::GetInstance()->PlaybakCtrl();
-            if (!pPlaybak) {
-                LOG_M_E(TAG, "[%s][%d] invalid point", __func__, __LINE__);
-                break;
+            pPlaybak->SetSpeed(vecViewChn, m_fCurrentSpeed);
+        }
+        else if (PLAYBACK_ACTION_TYPE::STOP == enActionType) {
+            m_pSplitWidgetMgr->Reset();
+        }
+        else if (enActionType == PLAYBACK_ACTION_TYPE::NEXT) {
+            m_pPlaybackLeftToolbar->SetCurrentYMD(true);
+        } else if (enActionType == PLAYBACK_ACTION_TYPE::PREV) {
+            m_pPlaybackLeftToolbar->SetCurrentYMD(false);
+        }
+
+        const SPLIT_TYPE enSplitType = m_pSplitWidgetMgr->GetCurrentSplitType();
+        // get current labels index list
+        const ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
+        if (vecViewChn.size() == 0) {
+            LOG_M_C(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
+            break;
+        }
+
+        AX_U32 nYYYYMMDD = m_pPlaybackLeftToolbar->GetCurrentIntYMD();
+        AX_U32 nHHMMSS = m_pPlayBackTimeLine->GetCurrentHMS();
+        std::thread thread([this, interface, vecViewChn, enActionType, nYYYYMMDD, nHHMMSS, res]() mutable {
+            pthread_setname_np(pthread_self(), "AppPBAction");
+            LOG_MM_W(TAG, "Thread Action %d +++ ", enActionType);
+
+            do {
+                CAXNVRPlaybakCtrl *pPlaybak = CAXNVRFramework::GetInstance()->PlaybakCtrl();
+                if (!pPlaybak) {
+                    LOG_M_E(TAG, "invalid point");
+                    break;
+                }
+
+                AX_BOOL bRet = AX_FALSE;
+                switch (enActionType) {
+                    case PLAYBACK_ACTION_TYPE::PLAY:
+                        bRet = pPlaybak->Start(vecViewChn, nYYYYMMDD, nHHMMSS, AX_FALSE);
+                        m_bPlaying = AX_TRUE;
+                        break;
+                    case PLAYBACK_ACTION_TYPE::REVERSE:
+                        bRet = pPlaybak->Start(vecViewChn, nYYYYMMDD, nHHMMSS, AX_TRUE);
+                        m_bPlaying = AX_TRUE;
+                        break;
+                    case PLAYBACK_ACTION_TYPE::STOP:
+                        bRet = pPlaybak->Stop(vecViewChn);
+                        m_bPlaying = AX_FALSE;
+                        break;
+                    case PLAYBACK_ACTION_TYPE::PAUSE:
+                        bRet = pPlaybak->PauseResume(vecViewChn);
+                        break;
+                    case PLAYBACK_ACTION_TYPE::SLOW_SPEED: {
+                        int nDevidSeled = m_pSplitWidgetMgr->GetWidgetDevid(m_pScaleLabelSeled);
+                        if (nDevidSeled == -1) {
+                            LOG_MM_W(TAG, "Playback not started, please start first.");
+                            bRet = AX_TRUE;
+                            break;
+                        }
+
+                        if (m_fCurrentSpeed > 1.0) {
+                            m_nCurrentIndex = 0;
+                        } else {
+                            m_nCurrentIndex ++;
+                            if (m_nCurrentIndex > m_nMaxIndex) {
+                                m_nCurrentIndex = 0;
+                            }
+                        }
+                        m_fCurrentSpeed = 1.0 / m_nSpeedFactor[m_nCurrentIndex];
+                        bRet = pPlaybak->SetSpeed(vecViewChn, m_fCurrentSpeed);
+                        break;
+                    }
+                    case PLAYBACK_ACTION_TYPE::FAST_SPEED: {
+                        int nDevidSeled = m_pSplitWidgetMgr->GetWidgetDevid(m_pScaleLabelSeled);
+                        if (nDevidSeled == -1) {
+                            LOG_MM_W(TAG, "Playback not started, please start first.");
+                            bRet = AX_TRUE;
+                            break;
+                        }
+
+                        if (m_fCurrentSpeed < 1.0) {
+                            m_nCurrentIndex = 0;
+                        } else {
+                            m_nCurrentIndex ++;
+                            if (m_nCurrentIndex > m_nMaxIndex) {
+                                m_nCurrentIndex = 0;
+                            }
+                        }
+                        m_fCurrentSpeed = m_nSpeedFactor[m_nCurrentIndex] * 1.0;
+                        bRet = pPlaybak->SetSpeed(vecViewChn, m_fCurrentSpeed);
+                        break;
+                    }
+                    case PLAYBACK_ACTION_TYPE::PREV_FRAME:
+                        bRet = pPlaybak->Step(vecViewChn, AX_TRUE);
+                        break;
+                    case PLAYBACK_ACTION_TYPE::NEXT_FRAME:
+                        bRet = pPlaybak->Step(vecViewChn, AX_FALSE);
+                        break;
+                    case PLAYBACK_ACTION_TYPE::MAINSUB1:
+                        bRet = pPlaybak->SwitchMainSub1(vecViewChn);
+                        break;
+                    default:
+                        bRet = AX_TRUE;
+                        break;
+                }
+                if (!bRet) {
+                    LOG_MM_E(TAG, "Thread Action=%d failed.", enActionType);
+                    break;
+                }
+                res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_OK;
+            } while (0);
+
+            interface.reportResult(res, 0);
+            interface.reportFinished();
+
+            AX_NVR_TEST_SUITE_CONFIG_T tTsCfg = CNVRConfigParser::GetInstance()->GetTestSuiteConfig();
+            if (AX_NVR_TS_RUN_MODE::DISABLE != tTsCfg.eMode) {
+                if (PLAYBACK_ACTION_TYPE::PLAY == enActionType
+                    || PLAYBACK_ACTION_TYPE::REVERSE == enActionType
+                    || PLAYBACK_ACTION_TYPE::STOP == enActionType
+                    || PLAYBACK_ACTION_TYPE::PAUSE == enActionType
+                    || PLAYBACK_ACTION_TYPE::SLOW_SPEED == enActionType
+                    || PLAYBACK_ACTION_TYPE::FAST_SPEED == enActionType
+                    || PLAYBACK_ACTION_TYPE::PREV_FRAME == enActionType
+                    || PLAYBACK_ACTION_TYPE::NEXT_FRAME == enActionType
+                    || PLAYBACK_ACTION_TYPE::MAINSUB1 == enActionType) {
+
+                    emit signal_result_feedback(res);
+                }
             }
 
-            AX_BOOL bRet = AX_FALSE;
-            switch (enActionType)
-            {
-            case PLAYBACK_ACTION_TYPE::PLAY:
-                bRet = pPlaybak->Start(vecViewChn, nYYYYMMDD, nHHMMSS, AX_FALSE);
-                m_ePlaybackType = PLAYBACK_ACTION_TYPE::PLAY;
-                break;
-            case PLAYBACK_ACTION_TYPE::REVERSE:
-                bRet = pPlaybak->Start(vecViewChn, nYYYYMMDD, nHHMMSS, AX_TRUE);
-                m_ePlaybackType = PLAYBACK_ACTION_TYPE::REVERSE;
-                break;
-            case PLAYBACK_ACTION_TYPE::STOP:
-                bRet = pPlaybak->Stop(vecViewChn);
-                break;
-            case PLAYBACK_ACTION_TYPE::PAUSE:
-                bRet = pPlaybak->PauseResume(vecViewChn);
-                break;
-            case PLAYBACK_ACTION_TYPE::SLOW_SPEED:
-                if (m_fCurrentSpeed > 1.0) {
-                    m_nCurrentIndex = 0;
-                } else {
-                    m_nCurrentIndex ++;
-                    if (m_nCurrentIndex > m_nMaxIndex) {
-                        m_nCurrentIndex = 0;
-                    }
-                }
-                m_fCurrentSpeed = 1.0/m_nSpeedFactor[m_nCurrentIndex];
-                bRet = pPlaybak->SetSpeed(vecViewChn, m_fCurrentSpeed);
-                break;
-            case PLAYBACK_ACTION_TYPE::FAST_SPEED:
-                if (m_fCurrentSpeed < 1.0) {
-                    m_nCurrentIndex = 0;
-                } else {
-                    m_nCurrentIndex ++;
-                    if (m_nCurrentIndex > m_nMaxIndex) {
-                        m_nCurrentIndex = 0;
-                    }
-                }
-                m_fCurrentSpeed = m_nSpeedFactor[m_nCurrentIndex]*1.0;
-                bRet = pPlaybak->SetSpeed(vecViewChn, m_fCurrentSpeed);
-                break;
-            case PLAYBACK_ACTION_TYPE::PREV_FRAME:
-                bRet = pPlaybak->Step(vecViewChn, AX_TRUE);
-                break;
-            case PLAYBACK_ACTION_TYPE::NEXT_FRAME:
-                bRet = pPlaybak->Step(vecViewChn, AX_FALSE);
-                break;
-            case PLAYBACK_ACTION_TYPE::MAINSUB1:
-                bRet = pPlaybak->SwitchMainSub1(vecViewChn);
-                break;
-            default:
-                bRet = AX_TRUE;
-                break;
-            }
-            if (!bRet) {
-                LOG_M_E(TAG, "[%s][%d] Playback Action=%d failed.", __func__, __LINE__, enActionType);
-                break;
-            }
-            res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_OK;
-        } while (0);
+            LOG_MM_W(TAG, "Thread Action %d ---", enActionType);
+        });
 
+        // detach thred, Use Future to ensure exit
+        thread.detach();
+
+        LOG_MM_I(TAG, "ActionType=%d ---", enActionType);
+        return;
+    } while (0);
+
+    if (bCurrOprStarted) {
         interface.reportResult(res, 0);
         interface.reportFinished();
-        LOG_M_D(TAG, "[%s][%d] Thread Action %d --- ", __func__, __LINE__, enActionType);
+    }
 
-        AX_NVR_TEST_SUITE_CONFIG_T tTsCfg = CNVRConfigParser::GetInstance()->GetTestSuiteConfig();
-        if (AX_NVR_TS_RUN_MODE::DISABLE != tTsCfg.eMode) {
-            if (PLAYBACK_ACTION_TYPE::PLAY == enActionType
-                || PLAYBACK_ACTION_TYPE::REVERSE == enActionType
-                || PLAYBACK_ACTION_TYPE::STOP == enActionType
-                || PLAYBACK_ACTION_TYPE::PAUSE == enActionType
-                || PLAYBACK_ACTION_TYPE::SLOW_SPEED == enActionType
-                || PLAYBACK_ACTION_TYPE::FAST_SPEED == enActionType
-                || PLAYBACK_ACTION_TYPE::PREV_FRAME == enActionType
-                || PLAYBACK_ACTION_TYPE::NEXT_FRAME == enActionType
-                || PLAYBACK_ACTION_TYPE::MAINSUB1 == enActionType) {
-
-                emit signal_result_feedback(res);
-            }
+    AX_NVR_TEST_SUITE_CONFIG_T tTsCfg = CNVRConfigParser::GetInstance()->GetTestSuiteConfig();
+    if (AX_NVR_TS_RUN_MODE::DISABLE != tTsCfg.eMode) {
+        if (PLAYBACK_ACTION_TYPE::PLAY == enActionType
+            || PLAYBACK_ACTION_TYPE::REVERSE == enActionType
+            || PLAYBACK_ACTION_TYPE::STOP == enActionType
+            || PLAYBACK_ACTION_TYPE::PAUSE == enActionType
+            || PLAYBACK_ACTION_TYPE::SLOW_SPEED == enActionType
+            || PLAYBACK_ACTION_TYPE::FAST_SPEED == enActionType
+            || PLAYBACK_ACTION_TYPE::PREV_FRAME == enActionType
+            || PLAYBACK_ACTION_TYPE::NEXT_FRAME == enActionType
+            || PLAYBACK_ACTION_TYPE::MAINSUB1 == enActionType) {
+            emit signal_result_feedback(res);
         }
-    });
+    }
 
-    // detach thred, Use Future to ensure exit
-    thread.detach();
-    LOG_M_D(TAG, "[%s][%d] ActionType=%d ---", __func__, __LINE__, enActionType);
+    LOG_MM_I(TAG, "ActionType=%d ---", enActionType);
 }
 
 void PlaybackMain::OnLocateTime(int nHHMM) {
@@ -560,13 +636,15 @@ void PlaybackMain::update_display(const ax_nvr_channel_vector &vecViewChn,
     m_watcherPreview.setFuture(interface.future());
 
     std::thread thread([this, interface, vecViewChn, vecVoRect, enChangeType, res]() mutable {
+        pthread_setname_np(pthread_self(), "AppPBUpdDisp");
+        LOG_MM_W(TAG, "Thread Action %d +++ ", enChangeType);
         res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_ERR;
         do {
             AX_BOOL bRet = AX_FALSE;
             CAXNVRDisplayCtrl *pPrimaryDispCtrl = CAXNVRFramework::GetInstance()->PrimaryDispCtrl();
             CAXNVRPlaybakCtrl *pPlaybak = CAXNVRFramework::GetInstance()->PlaybakCtrl();
             if (pPrimaryDispCtrl == nullptr || pPlaybak == nullptr) {
-                LOG_M_E(TAG, "[%s][%d] invalid point", __func__, __LINE__);
+                LOG_MM_E(TAG, "invalid point");
                 break;
             }
 
@@ -587,7 +665,7 @@ void PlaybackMain::update_display(const ax_nvr_channel_vector &vecViewChn,
 
             // Update VO attr
             if (!pPrimaryDispCtrl->UpdateView(vecViewChn, vecVoRect, AX_NVR_VIEW_TYPE::PLAYBACK, enChangeType)) {
-                LOG_M_E(TAG, "[%s][%d] UpdateView changetype=%d", __func__, __LINE__, enChangeType);
+                LOG_MM_E(TAG, "UpdateView changetype=%d", enChangeType);
                 break;
             }
 
@@ -611,7 +689,7 @@ void PlaybackMain::update_display(const ax_nvr_channel_vector &vecViewChn,
                 bRet = pPlaybak->Update(vecViewChn);
                 break;
             case AX_NVR_VIEW_CHANGE_TYPE::HIDE:
-                /* Mark as STOP to enter SetChannelsText() when signal finished triggerd */
+                /* Mark as STOP to enter SetChannelsText() when signal finished triggered */
                 res.enPlaybackActionType = PLAYBACK_ACTION_TYPE::STOP;
                 bRet = AX_TRUE;
                 break;
@@ -623,7 +701,7 @@ void PlaybackMain::update_display(const ax_nvr_channel_vector &vecViewChn,
             }
 
             if (!bRet) {
-                LOG_MM_E(TAG, "[%s][%d] Update Action=%d failed.", __func__, __LINE__, enChangeType);
+                LOG_MM_E(TAG, "Thread Action=%d failed.", enChangeType);
                 break;
             }
 
@@ -637,6 +715,8 @@ void PlaybackMain::update_display(const ax_nvr_channel_vector &vecViewChn,
         if (AX_NVR_TS_RUN_MODE::DISABLE != tTsCfg.eMode) {
             emit signal_result_feedback(res);
         }
+
+        LOG_MM_W(TAG, "Thread Action %d ---", enChangeType);
     });
 
     // detach thread, Use Future to ensure exit

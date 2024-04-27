@@ -38,14 +38,12 @@ static void ignore_sig_pipe(void) {
     struct sigaction sa;
     sa.sa_handler = SIG_IGN;
     sa.sa_flags = 0;
-    //将sa应用到sigaction上
     if (sigemptyset(&sa.sa_mask) == -1 || sigaction(SIGPIPE, &sa, 0) == -1) {
         perror("failed to ignore SIGPIPE, sigaction");
         exit(EXIT_FAILURE);
     }
 }
 
-//卡端就是解码视频，进行ai分析，然后把结果通过pcie接口输出
 int main(int argc, char const *argv[]) {
     signal(SIGINT, exit_handler);
     signal(SIGQUIT, exit_handler);

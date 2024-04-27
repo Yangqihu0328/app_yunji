@@ -43,7 +43,6 @@ AX_BOOL CBoxSataFile::Close(AX_VOID) {
         m_fd = -1;
 #else
     if (m_fp) {
-        //刷新一下
         fflush(m_fp);
         //  fsync(fileno(m_fp));
         fclose(m_fp);
@@ -89,7 +88,6 @@ AX_U32 CBoxSataFile::Write(const AX_VOID* pData, AX_U32 nBytesToWrite) {
             return 0;
         }
 
-        //记录时间
         nTick2 = CIOPerf::GetTickCount();
         m_IoPerf.Update(nBytes, nTick2 - nTick1);
 
@@ -156,7 +154,6 @@ AX_BOOL CBoxSataFile::AllocFile(AX_VOID) {
 #ifdef __LINUX_IO_API__
     if (fallocate(m_fd, FALLOC_FL_KEEP_SIZE, 0, m_stAttr.nFileSize) < 0) {
 #else
-    //预分配需要的文件系统的大小
     if (fallocate(fileno(m_fp), FALLOC_FL_KEEP_SIZE, 0, m_stAttr.nFileSize) < 0) {
 #endif
         LOG_M_E(TAG, "fallocate < %s > fail, %s", strPath.c_str(), strerror(errno));
@@ -169,7 +166,6 @@ AX_BOOL CBoxSataFile::AllocFile(AX_VOID) {
     fseek(m_fp, 0, SEEK_SET);
 #endif
 
-    //维护队列数据结构
     m_diskFiles.emplace_back(strPath.c_str(), m_stAttr.nFileSize, 0);
     m_nCurFileSize = 0;
 
@@ -196,7 +192,6 @@ AX_BOOL CBoxSataFile::CheckSpaceAndRemoveOldFiles(AX_VOID) {
         nUsedSpace += m.size;
     }
 
-    //有剩余的就还好
     AX_S64 nLeftSpace = (AX_S64)(m_stAttr.nMaxSpace - nUsedSpace);
     if (nLeftSpace >= (AX_S64)m_stAttr.nFileSize) {
         return AX_TRUE;
@@ -205,7 +200,6 @@ AX_BOOL CBoxSataFile::CheckSpaceAndRemoveOldFiles(AX_VOID) {
     AX_BOOL bRefresh = {AX_FALSE};
     AX_U32 nFileCount = m_diskFiles.size();
     for (AX_U32 i = 0; i < nFileCount; ++i) {
-        //移除最前面的文件，实现循环写入
         DISK_FILE_INFO_T& m = m_diskFiles.front();
 
         if (CDiskHelper::RemoveFile(m.path.c_str())) {
@@ -216,9 +210,9 @@ AX_BOOL CBoxSataFile::CheckSpaceAndRemoveOldFiles(AX_VOID) {
             bRefresh = AX_TRUE;
             LOG_M_W(TAG, "fail to delete < %s >, %s", m.path.c_str(), strerror(errno));
         }
-        //移掉队列头
+
         m_diskFiles.pop_front();
-        //还是不满足循环删除
+
         if (nLeftSpace >= (AX_S64)m_stAttr.nFileSize) {
             break;
         }

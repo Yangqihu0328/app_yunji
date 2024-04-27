@@ -105,7 +105,6 @@ AX_BOOL CFramebufferPaint::Init(const AX_NVR_FB_INIT_PARAM_T& stInitParam) {
 
     m_bInit = AX_TRUE;
     m_stInitParam = stInitParam;
-    //dev/fb1
     m_strFBPath = stInitParam.pFBPath;
     m_nThreadGroup = (stInitParam.nGroup > 0) ? stInitParam.nGroup : m_nThreadGroup;
     m_stInitParam.nTimeIntervalPanMS = m_stInitParam.nTimeIntervalPanMS ? m_stInitParam.nTimeIntervalPanMS : 10;
@@ -255,16 +254,13 @@ AX_VOID CFramebufferPaint::Start(AX_VOID) {
         m_bLaunched = AX_TRUE;
         m_spNVRFBContentImpl->bOffsetScreen = AX_FALSE;
 
-        //先创建一个线程
         m_mainThread.Start([this](AX_VOID* pArg) { MainThreadEntry(); }, nullptr, "FBPMain");
         LOG_M_I(TAG, "[%s][%d] Launch FB Paint work threads.", __func__, __LINE__);
-        //多少路创建多少个work
         for (AX_U8 i = 0; i < m_nThreadGroup; ++i) {
             m_vecPaintThread.emplace_back(new CAXThread);
             constexpr AX_U8 nBufferSize = 16;
             AX_CHAR szName[nBufferSize] = {0};
             snprintf(szName, nBufferSize, "FBPWorker-%d", i);
-            //再开启N个线程
             m_vecPaintThread[i]->Start([this, i](AX_VOID* pArg) { PaintEntry(i); }, nullptr, szName);
         }
     }

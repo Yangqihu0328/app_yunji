@@ -25,6 +25,7 @@ AX_VOID CAXNVRPlaybakCtrl::Init(const AX_NVR_FILE_MGR_ATTR_T &stAttr) {
     for (AX_U32 nDevID = 0; nDevID < m_stAttr.nMaxCount; ++nDevID) {
         AX_NVR_FILE_T stDevice;
         stDevice.pPlaybackChn = this->createPlaybackChannel(nDevID);
+        stDevice.nChannelId = nDevID;
         m_mapDevice.emplace(nDevID, stDevice);
     }
 
@@ -282,8 +283,7 @@ AX_BOOL CAXNVRPlaybakCtrl::PauseResume(const ax_nvr_channel_vector &vecChn, AX_B
             AX_NVR_DEV_ID nDeviceID = get<1>(chn);
             auto it = m_mapDevice.find(nDeviceID);
             if (it == m_mapDevice.end()) {
-                LOG_MM_W(TAG, "Device %d not found, pause/resume ignored.", nDeviceID);
-                bRet = AX_TRUE;
+                bRet = AX_TRUE; /* Not playbacked channel would be treated normal as well */
                 break;
             }
 
@@ -311,24 +311,19 @@ AX_BOOL CAXNVRPlaybakCtrl::SetSpeed(const ax_nvr_channel_vector &vecChn, AX_F32 
     AX_BOOL bRet = AX_FALSE;
 
     do {
-        // if (vecChn.size() > 1 ) {
-        //     bRet = AX_TRUE;
-        //     break;
-        // }
-
         AX_BOOL bbRet = AX_TRUE;
         for (auto &chn: vecChn) {
             AX_NVR_DEV_ID nDeviceID = get<1>(chn);
             auto it = m_mapDevice.find(nDeviceID);
-            if (it == m_mapDevice.end()) break;
+            if (it == m_mapDevice.end()) {
+                bbRet = AX_TRUE; /* Not playbacked channel would be treated normal as well */
+                break;
+            }
 
             const auto& nDevID = it->first;
             const auto& stDevice = it->second;
 
-            // if (stDevice.nChannelId == -1) continue;
-            // if (stDevice.nChannelId != nDevID) continue;
             if (stDevice.pPlaybackChn == nullptr) continue;
-
             if (!stDevice.pPlaybackChn->UpdateFps(nSpeedfactor)) {
                 bbRet = AX_FALSE;
                 break;
@@ -347,11 +342,6 @@ AX_BOOL CAXNVRPlaybakCtrl::Step(const ax_nvr_channel_vector &vecChn, AX_BOOL bRe
     std::lock_guard<std::mutex> lock(mutex_);
 
     do {
-        // if (vecChn.size() > 1 ) {
-        //     bRet = AX_TRUE;
-        //     break;
-        // }
-
         AX_BOOL bbRet = AX_TRUE;
         for (auto &chn: vecChn) {
             AX_NVR_DEV_ID nDeviceID = get<1>(chn);
@@ -361,8 +351,6 @@ AX_BOOL CAXNVRPlaybakCtrl::Step(const ax_nvr_channel_vector &vecChn, AX_BOOL bRe
             const auto& nDevID = it->first;
             const auto& stDevice = it->second;
 
-            // if (stDevice.nChannelId == -1) continue;
-            // if (stDevice.nChannelId != nDevID) continue;
             if (stDevice.pPlaybackChn == nullptr) continue;
 
             if (!stDevice.pPlaybackChn->Step(bReverse)) {
@@ -394,7 +382,7 @@ AX_BOOL CAXNVRPlaybakCtrl::SwitchMainSub1(const ax_nvr_channel_vector &vecChn, A
             break;
         }
 
-        const CVO *pVo = m_stAttr.pPrimary->GetVo();
+        CVO *pVo = const_cast<CVO *>(m_stAttr.pPrimary->GetVo());
         if (pVo == nullptr) {
             LOG_M_E(TAG, "[%s][%d]pVo null pointer", __func__, __LINE__);
             break;
@@ -405,7 +393,7 @@ AX_BOOL CAXNVRPlaybakCtrl::SwitchMainSub1(const ax_nvr_channel_vector &vecChn, A
             AX_NVR_DEV_ID nDevID = get<1>(chn);
             if (nDevID == -1) continue;
 
-            VO_CHN nVoChn = get<0>(chn)%attr.stChnInfo.nCount;
+            VO_CHN nVoChn = get<0>(chn) % attr.stChnInfo.nCount;
             auto it = m_mapDevice.find(nDevID);
             if (it == m_mapDevice.end()) {
                 LOG_M_E(TAG, "[%s][%d]Playback Channel not found", __func__, __LINE__);

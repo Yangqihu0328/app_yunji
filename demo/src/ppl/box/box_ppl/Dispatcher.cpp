@@ -29,15 +29,13 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
     const boxconf::COMPRESS_CONFIG_T fbc = boxconf::CBoxConfig::GetInstance()->GetCompressConfig();
     while (m_DispatchThread.IsRunning()) {
         if (m_qFrame.Pop(axFrame, -1)) {
-            //压缩之后就不支持
             if (0 == fbc.nMode) { /* if no compress, draw box because AX_IVPS_DrawRect not support FBC */
-                //与之前对应，这里获取检测的结果，根据nGrp id,也就是每个frame是绑定这grp id的
                 if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
                     /* CPU draw rectange, needs virtual address */
                     if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
                         axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
                     }
-                    //进行画框
+
                     DrawBox(axFrame, fhvp);
                 }
             }
@@ -45,7 +43,6 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
                 std::lock_guard<std::mutex> lck(m_mtxObs);
                 std::list<IObserver*>::iterator it = m_lstObs.begin();
                 int i = 0;
-                //这个就是观察者绑定的，那么就从哪里拿数据过来
                 for (; it != m_lstObs.end(); ++it, ++i) {
                     if (axFrame.nGrp%2 == 0 && i == 0) {
                         (*it)->OnRecvData(E_OBS_TARGET_TYPE_VDEC, floor(axFrame.nGrp/2), axFrame.nChn, (AX_VOID*)&axFrame);
@@ -56,14 +53,12 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
                 }
             }
             else {
-                //这个线程按照逻辑来说，应该是画完框之后，把框发送出去，那么发送的位置只有vo或者record
                 std::lock_guard<std::mutex> lck(m_mtxObs);
                 for (auto& m : m_lstObs) {
-                    //这个axFrame.nChn不一定为1，可能会接收失败
                     m->OnRecvData(E_OBS_TARGET_TYPE_VDEC, axFrame.nGrp, axFrame.nChn, (AX_VOID*)&axFrame);
                 }
             }
-            //处理完之后自减，之前耶看到发送，那个就是自增
+
             axFrame.DecRef();
         }
     }
@@ -85,7 +80,6 @@ AX_BOOL CDispatcher::Init(const DISPATCH_ATTR_T& stAttr) {
 #endif
 
     m_vdGrp = stAttr.vdGrp;
-    //这里也配置一条队列
     m_qFrame.SetCapacity(stAttr.nDepth);
     LOG_M_I(DISPATCHER, "depth: %d", stAttr.nDepth);
 
@@ -180,14 +174,9 @@ AX_BOOL CDispatcher::UnRegObserver(IObserver* pObs) {
     return AX_FALSE;
 }
 
-
-//m_qFrame数据从这里来的，那么SendFrame在哪里被调用的呢？
-//数据来源于vdec，然后数据什么时候不管，因为存在引用的概念，只要被引用完之后递减即可。
 AX_BOOL CDispatcher::SendFrame(const CAXFrame& axFrame) {
-    //自增的意思是数据存放到队列里面了，被使用了，进行自增
     axFrame.IncRef();
     if (!m_qFrame.Push(axFrame)) {
-        //获取axframe之后，发送失败再自减，相当于没有数据可获取，取消自增
         LOG_M_E(DISPATCHER, "%s: push frame %lld, pts %lld, phy 0x%llx to queue fail", __func__, axFrame.stFrame.stVFrame.stVFrame.u64SeqNum,
                 axFrame.stFrame.stVFrame.stVFrame.u64PTS, axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0]);
         axFrame.DecRef();
@@ -212,7 +201,6 @@ AX_VOID CDispatcher::ClearQueue(AX_VOID) {
 }
 
 AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhvp) {
-    //本质也是用硬件rgn进行画框，最终叠加在ivpss上
     AX_IVPS_RGN_CANVAS_INFO_T canvas;
     memset(&canvas, 0, sizeof(canvas));
     canvas.nPhyAddr = axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0];

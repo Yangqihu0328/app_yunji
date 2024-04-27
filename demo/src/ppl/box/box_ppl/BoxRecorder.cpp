@@ -39,12 +39,10 @@ AX_BOOL CBoxRecorder::Init(const BOX_RECORDER_ATTR_T &stAttr) {
         }
     }
 
-    //创建硬件编码
     if (!CreateEncoderInstance()) {
         return AX_FALSE;
     }
 
-    //创建封装器
     if (m_stAttr.bMuxer) {
         if (!CreateMuxerInstance()) {
             return AX_FALSE;
@@ -85,11 +83,7 @@ AX_BOOL CBoxRecorder::Start(AX_VOID) {
 
     STAGE_START_PARAM_T arg;
     /* as we use link, here disable dispatch thread of stage */
-    //也就是关闭dispatch，如果link vo到venc
     arg.bStartProcessingThread = m_stAttr.bLinkMode ? AX_FALSE : AX_TRUE;
-
-    //开启数据编码线程
-    //只有一个channel数据过来
     if (!m_pEncoder->Start(&arg)) {
         if (!m_stAttr.bMuxer) {
             m_ofs.close();
@@ -129,7 +123,6 @@ AX_BOOL CBoxRecorder::Stop(AX_VOID) {
     return AX_TRUE;
 }
 
-//也也就是这里接收数据处理，相当于自己绑定自己
 AX_BOOL CBoxRecorder::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nChn, AX_VOID *pData) {
     if (E_OBS_TARGET_TYPE_VENC != eTarget || nChn != (AX_U32)m_stAttr.veChn) {
         return AX_TRUE;
@@ -142,7 +135,6 @@ AX_BOOL CBoxRecorder::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 
     }
 
     if (!m_stAttr.bMuxer) {
-        //如果没有封装，直接写在文件里面
         if (m_ofs.is_open()) {
             m_ofs.write((const char *)(pStream->stPack.pu8Addr), pStream->stPack.u32Len);
             m_nFileSize += pStream->stPack.u32Len;
@@ -152,7 +144,6 @@ AX_BOOL CBoxRecorder::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 
         }
     } else {
         AX_BOOL bIFrame = (AX_VENC_INTRA_FRAME == pStream->stPack.enCodingType) ? AX_TRUE : AX_FALSE;
-        //发给mp4，怎么确定是写完呢？
         m_pMuxer->SendRawFrame(m_stAttr.veChn, pStream->stPack.pu8Addr, pStream->stPack.u32Len, pStream->stPack.u64PTS, bIFrame);
     }
 
@@ -196,7 +187,6 @@ AX_BOOL CBoxRecorder::CreateRawFile(AX_VOID) {
 
 AX_BOOL CBoxRecorder::CreateEncoderInstance(AX_VOID) {
     VIDEO_CONFIG_T conf;
-    //0
     conf.nChannel = m_stAttr.veChn;
     conf.ePayloadType = m_stAttr.ePayloadType;
     conf.nGOP = ((0 == m_stAttr.nGop) ? m_stAttr.nFps : m_stAttr.nGop);
@@ -226,7 +216,6 @@ AX_BOOL CBoxRecorder::CreateEncoderInstance(AX_VOID) {
             break;
         }
 
-        //注册观察服务，也就是在这里绑定
         m_pEncoder->RegObserver(this);
 
         if (!m_pEncoder->Init()) {

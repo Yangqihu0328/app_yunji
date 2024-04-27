@@ -127,6 +127,12 @@ void CTestPlayback::testRandom() {
                 break;
             }
 
+            if (!IsFinished()) {
+                LOG_MM_W(TAG, "Last case not finished, tab switch ignored");
+                CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
+                continue;
+            }
+
             AX_BOOL bSelectAll = nTabIndex == 0 ? AX_FALSE : AX_TRUE;
             TabChangeAndSelect(nTabIndex, bSelectAll, tCaseInfo.nOprInterval);
             ActionBtnClick(pStartBtn, tCaseInfo.nOprInterval, "pushButtonPlay");
@@ -198,6 +204,12 @@ void CTestPlayback::RandomControl(AX_U32 nTabIndex, AX_U32 nRoundCount) {
                         continue;
                     }
 
+                    if (!IsFinished()) {
+                        LOG_MM_W(TAG, "Last case not finished, operation <%s> ignored", std::get<1>(action).c_str());
+                        CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
+                        continue;
+                    }
+
                     QTabWidget* pTab = pParentWidget->findChild<QTabWidget*>(QString(std::get<1>(action).c_str()));
                     if (pTab) {
                         AX_U32 nRandomIndex = rand() % pTab->count();
@@ -211,11 +223,17 @@ void CTestPlayback::RandomControl(AX_U32 nTabIndex, AX_U32 nRoundCount) {
                         continue;
                     }
 
+                    if (!IsFinished()) {
+                        LOG_MM_W(TAG, "Last case not finished, operation <%s> ignored", std::get<1>(action).c_str());
+                        CElapsedTimer::GetInstance()->mSleep(pModuleCfg->nCaseInterval);
+                        continue;
+                    }
+
                     QPushButton* pBtn = pParentWidget->findChild<QPushButton*>(QString(std::get<1>(action).c_str()));
                     if (pBtn) {
                         AX_U32 nTimes = std::get<4>(action);
                         while (nTimes-- > 0 && m_bRunning) {
-                            ActionBtnClick(pBtn, tCaseInfo.nOprInterval, std::get<1>(action));
+                            ActionBtnClick(pBtn, tCaseInfo.nOprInterval, std::get<1>(action), AX_TRUE);
                         }
                     }
 
@@ -408,16 +426,10 @@ void CTestPlayback::TabChangeAndSelect(AX_U32 nTabIndex, AX_BOOL bSelectAll, AX_
         if (bSelectAll) {
             int nChannelCnt = pTable->rowCount();
             for (int i = 0; i < nChannelCnt; i++) {
-                AX_BOOL bChecked = pTable->itemAt(i, 0)->data(Qt::UserRole).toInt() == 0 ? AX_FALSE : AX_TRUE;
-                if (!bChecked) {
-                    emit tableCellClicked(i, 0);
-                }
+                emit tableCellClicked(i, 0);
             }
         } else {
-            AX_BOOL bChecked = pTable->itemAt(0, 0)->data(Qt::UserRole).toInt() == 0 ? AX_FALSE : AX_TRUE;
-            if (!bChecked) {
-                emit tableCellClicked(0, 0);
-            }
+            emit tableCellClicked(0, 0);
         }
 
         CElapsedTimer::GetInstance()->mSleep(nWaitTick);

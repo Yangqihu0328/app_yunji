@@ -27,6 +27,7 @@ AX_VOID CAXNVRPreviewCtrl::Init(const AX_NVR_DEVICE_MGR_ATTR_T &stAttr) {
         AX_NVR_DEVICE_T stDevice;
         stDevice.pRPatrolChn = this->createRPatrolChannel(nDevID);
         stDevice.pThreadRPatrol = new (std::nothrow) CAXThread;
+        stDevice.pThreadRPatrolUpdate = new (std::nothrow) CAXThread;
         stDevice.pPreviewChnMain = this->createPreviewChannel(nDevID, AX_NVR_CHN_IDX_TYPE::MAIN);
         stDevice.pPreviewChnSub1 = this->createPreviewChannel(nDevID, AX_NVR_CHN_IDX_TYPE::SUB1);
         stDevice.pThreadPreview = new (std::nothrow) CAXThread;
@@ -79,6 +80,11 @@ AX_VOID CAXNVRPreviewCtrl::DeInit() {
             stDevice.pThreadRPatrol = nullptr;
         }
 
+        if (stDevice.pThreadRPatrolUpdate) {
+            delete stDevice.pThreadRPatrolUpdate;
+            stDevice.pThreadRPatrolUpdate = nullptr;
+        }
+
         if (stDevice.pThreadPreview) {
             delete stDevice.pThreadPreview;
             stDevice.pThreadPreview = nullptr;
@@ -102,10 +108,10 @@ AX_BOOL CAXNVRPreviewCtrl::InsertDevice(const AX_NVR_DEV_INFO_T &stDeviceInfo) {
         stDevice.stDevInfo = stDeviceInfo;
 
         // start preview channel rtsp and record
-        if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_FALSE)) {
+        if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::MAIN, stDevice.stDevInfo.nChannelId))) {
             break;
         }
-        if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_FALSE)) {
+        if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::SUB1, stDevice.stDevInfo.nChannelId))) {
             break;
         }
 
@@ -142,12 +148,12 @@ AX_BOOL CAXNVRPreviewCtrl::UpdateDevice(const AX_NVR_DEV_INFO_T &stDeviceInfo) {
 
         // stop and start preview channel rtsp and record
         stDevice.pPreviewChnMain->StopRtsp();
-        if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_FALSE)) {
+        if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::MAIN, stDevice.stDevInfo.nChannelId))) {
             break;
         }
 
         stDevice.pPreviewChnSub1->StopRtsp();
-        if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_FALSE)) {
+        if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::SUB1, stDevice.stDevInfo.nChannelId))) {
             break;
         }
 
@@ -155,11 +161,11 @@ AX_BOOL CAXNVRPreviewCtrl::UpdateDevice(const AX_NVR_DEV_INFO_T &stDeviceInfo) {
         // stop and start round patrol channel rtsp and display
         stDevice.pRPatrolChn->StopRtsp();
         if (AX_NVR_CHN_IDX_TYPE::MAIN == stDevice.stDevInfo.enPatrolIndex) {
-            if (!this->startRtsp(stDevice.pRPatrolChn, stDevice.stDevInfo.stChnMain, AX_TRUE)) {
+            if (!this->startRtsp(stDevice.pRPatrolChn, stDevice.stDevInfo.stChnMain, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PATROL, stDevice.stDevInfo.enPatrolIndex, stDevice.stDevInfo.nChannelId))) {
                 break;
             }
         } else if (AX_NVR_CHN_IDX_TYPE::SUB1 == stDevice.stDevInfo.enPatrolIndex) {
-            if (!this->startRtsp(stDevice.pRPatrolChn, stDevice.stDevInfo.stChnSub1, AX_TRUE)) {
+            if (!this->startRtsp(stDevice.pRPatrolChn, stDevice.stDevInfo.stChnSub1, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PATROL, stDevice.stDevInfo.enPatrolIndex, stDevice.stDevInfo.nChannelId))) {
                 break;
             }
         }
@@ -335,12 +341,12 @@ AX_BOOL CAXNVRPreviewCtrl::StartPip(AX_NVR_DEV_ID nDeviceID, AX_NVR_CHN_IDX_TYPE
 
         if (AX_NVR_CHN_IDX_TYPE::MAIN == enIdx) {
             stDevice.stDevInfo.stChnMain.bRecord = AX_FALSE;
-            if (!this->startRtsp(&m_chnPip, stDevice.stDevInfo.stChnMain, AX_TRUE)) {
+            if (!this->startRtsp(&m_chnPip, stDevice.stDevInfo.stChnMain, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, enIdx, stDevice.stDevInfo.nChannelId, AX_TRUE))) {
                 break;
             }
         } else if (AX_NVR_CHN_IDX_TYPE::SUB1 == enIdx) {
             stDevice.stDevInfo.stChnSub1.bRecord = AX_FALSE;
-            if (!this->startRtsp(&m_chnPip, stDevice.stDevInfo.stChnSub1, AX_TRUE)) {
+            if (!this->startRtsp(&m_chnPip, stDevice.stDevInfo.stChnSub1, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, enIdx, stDevice.stDevInfo.nChannelId, AX_TRUE))) {
                 break;
             }
         }
@@ -397,15 +403,15 @@ AX_VOID CAXNVRPreviewCtrl::StartRPatrolThread(AX_VOID* pArg) {
         int nCount = attr.stChnInfo.nCount;
         int nVoLayer = attr.voLayer;
 
-        int nVoChn = pDevice->stDevInfo.nChannelId%nCount;
+        int nVoChn = pDevice->stDevInfo.nChannelId % nCount;
 
         if (AX_NVR_CHN_IDX_TYPE::MAIN == pDevice->stDevInfo.enPatrolIndex) {
-            if (!this->startRtsp(pDevice->pRPatrolChn, pDevice->stDevInfo.stChnMain, AX_FALSE)) {
+            if (!this->startRtsp(pDevice->pRPatrolChn, pDevice->stDevInfo.stChnMain, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PATROL, AX_NVR_CHN_IDX_TYPE::MAIN, pDevice->stDevInfo.nChannelId))) {
                 pDevice->bRes = AX_FALSE;
                 break;
             }
         } else if (AX_NVR_CHN_IDX_TYPE::SUB1 == pDevice->stDevInfo.enPatrolIndex) {
-            if (!this->startRtsp(pDevice->pRPatrolChn, pDevice->stDevInfo.stChnSub1, AX_FALSE)) {
+            if (!this->startRtsp(pDevice->pRPatrolChn, pDevice->stDevInfo.stChnSub1, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PATROL, AX_NVR_CHN_IDX_TYPE::SUB1, pDevice->stDevInfo.nChannelId))) {
                 pDevice->bRes = AX_FALSE;
                 break;
             }
@@ -421,29 +427,14 @@ AX_VOID CAXNVRPreviewCtrl::StartRPatrolThread(AX_VOID* pArg) {
     LOG_M_I(TAG, "[%s][%d] dev=%d --- ", __func__, __LINE__, pDevice->stDevInfo.nChannelId);
 }
 
-AX_BOOL CAXNVRPreviewCtrl::StartRoundPatrol(CAXNVRDisplayCtrl *pSecondary, const vector<AX_NVR_DEV_ID> &vecDevID) {
-    const AX_U32 MAX_RPATROL_CNT = MAX_DEVICE_ROUNDPATROL_COUNT;
+AX_BOOL CAXNVRPreviewCtrl::StartRoundPatrol(const vector<AX_NVR_DEV_ID> &vecDevID) {
+    LOG_MM_I(TAG, "+++");
 
+    const AX_U32 MAX_RPATROL_CNT = MAX_DEVICE_ROUNDPATROL_COUNT;
     AX_BOOL bRet = AX_FALSE;
-    LOG_M_D(TAG, "[%s][%d] +++ ", __func__, __LINE__);
     std::lock_guard<std::mutex> lock(mutex_);
 
-
-#if 1
 do {
-        if (pSecondary == nullptr) {
-            break;
-        }
-
-        const CVO *pVo = pSecondary->GetVo();
-        if (pVo == nullptr) {
-            break;
-        }
-
-        VO_ATTR_T attr = pVo->GetAttr();
-        int nCount = attr.stChnInfo.nCount;
-        int nVoLayer = attr.voLayer;
-
         AX_BOOL bbRet = AX_TRUE;
         AX_U32 nIndex = 0;
         for (auto nDeviceID : vecDevID) {
@@ -452,6 +443,7 @@ do {
                 bbRet = AX_FALSE;
                 break;
             }
+
             auto& stDevice = it->second;
             if (stDevice.stDevInfo.nChannelId == -1) continue;
             if (stDevice.stDevInfo.nChannelId != nDeviceID) continue;
@@ -494,67 +486,8 @@ do {
 
         bRet = bbRet;
     } while(0);
-#else
-    do {
-        if (pSecondary == nullptr) {
-            break;
-        }
 
-        const CVO *pVo = pSecondary->GetVo();
-        if (pVo == nullptr) {
-            break;
-        }
-
-        VO_ATTR_T attr = pVo->GetAttr();
-        int nCount = attr.stChnInfo.nCount;
-        int nVoLayer = attr.voLayer;
-
-        AX_BOOL bbRet = AX_TRUE;
-        AX_U32 nIndex = 0;
-        for (auto nDeviceID : vecDevID) {
-            auto it = m_mapDevice.find(nDeviceID);
-            if (it == m_mapDevice.end()) {
-                bbRet = AX_FALSE;
-                break;
-            }
-
-            // const auto& nDevID = it.first;
-            const auto& stDevice = it->second;
-
-            if (stDevice.stDevInfo.nChannelId == -1) continue;
-            if (stDevice.stDevInfo.nChannelId != nDeviceID) continue;
-            if (stDevice.pRPatrolChn == nullptr) continue;
-
-            int nVoChn = stDevice.stDevInfo.nChannelId%nCount;
-
-            if (AX_NVR_CHN_IDX_TYPE::MAIN == stDevice.stDevInfo.enPatrolIndex) {
-                if (!this->startRtsp(stDevice.pRPatrolChn, stDevice.stDevInfo.stChnMain, AX_FALSE)) {
-                    bbRet = AX_FALSE;
-                    break;
-                }
-            } else if (AX_NVR_CHN_IDX_TYPE::SUB1 == stDevice.stDevInfo.enPatrolIndex) {
-                if (!this->startRtsp(stDevice.pRPatrolChn, stDevice.stDevInfo.stChnSub1, AX_FALSE)) {
-                    bbRet = AX_FALSE;
-                    break;
-                }
-            }
-
-            if (!stDevice.pRPatrolChn->StartDisp(nVoLayer, nVoChn, attr.stChnInfo.arrChns[nVoChn].stRect)) {
-                bbRet = AX_FALSE;
-                break;
-            }
-
-            nIndex ++;
-
-            if (nIndex >= MAX_RPATROL_CNT) {
-                break;
-            }
-        }
-        bRet = bbRet;
-    } while(0);
-#endif
-
-    LOG_M_D(TAG, "[%s][%d] --- ", __func__, __LINE__);
+    LOG_MM_I(TAG, "---");
     return bRet;
 }
 
@@ -568,44 +501,142 @@ AX_VOID CAXNVRPreviewCtrl::StopRPatrolThread(AX_VOID* pArg) {
     LOG_M_I(TAG, "[%s][%d] dev=%d --- ", __func__, __LINE__, pDevice->stDevInfo.nChannelId);
 }
 
-AX_VOID CAXNVRPreviewCtrl::StopRoundPatrol(AX_VOID) {
-    LOG_M_D(TAG, "[%s][%d] +++ ", __func__, __LINE__);
+AX_BOOL CAXNVRPreviewCtrl::StopRoundPatrol(const vector<AX_NVR_DEV_ID> &vecDevID) {
+    LOG_MM_I(TAG, "+++");
+
     std::lock_guard<std::mutex> lock(mutex_);
-#if 1
-    for (auto& it : m_mapDevice) {
-        // const auto& nDevID = it.first;
-        auto& stDevice = it.second;
-        if (stDevice.stDevInfo.nChannelId == -1) continue;
-        if (stDevice.pRPatrolChn == nullptr) continue;
 
-        if (!stDevice.pThreadRPatrol->Start([this](AX_VOID* pArg) -> AX_VOID { StopRPatrolThread(pArg); }, &stDevice, "patrol")) {
-            LOG_M_E(TAG, "[%s][%d] Start stop channel %d thread failed.", __func__, __LINE__, stDevice.stDevInfo.nChannelId);
+    AX_BOOL bRet = AX_FALSE;
+
+    do {
+        AX_BOOL bbRet = AX_TRUE;
+        for (auto nDeviceID : vecDevID) {
+            auto it = m_mapDevice.find(nDeviceID);
+            if (it == m_mapDevice.end()) {
+                bbRet = AX_FALSE;
+                break;
+            }
+
+            auto& stDevice = it->second;
+            if (stDevice.stDevInfo.nChannelId == -1) continue;
+            if (stDevice.pRPatrolChn == nullptr) continue;
+
+            if (!stDevice.pThreadRPatrol->Start([this](AX_VOID* pArg) -> AX_VOID { StopRPatrolThread(pArg); }, &stDevice, "patrol")) {
+                LOG_M_E(TAG, "[%s][%d] Start stop channel %d thread failed.", __func__, __LINE__, stDevice.stDevInfo.nChannelId);
+                continue;
+            }
         }
-    }
 
-    for (const auto& it : m_mapDevice) {
-        // const auto& nDevID = it.first;
-        const auto& stDevice = it.second;
-        if (stDevice.stDevInfo.nChannelId == -1) continue;
-        if (stDevice.pRPatrolChn == nullptr) continue;
+        for (auto nDeviceID : vecDevID) {
+            auto it = m_mapDevice.find(nDeviceID);
+            if (it == m_mapDevice.end()) {
+                bbRet = AX_FALSE;
+                break;
+            }
 
-        stDevice.pThreadRPatrol->Stop();
-        stDevice.pThreadRPatrol->Join();
-    }
+            const auto& stDevice = it->second;
+            if (stDevice.stDevInfo.nChannelId == -1) continue;
+            if (stDevice.pRPatrolChn == nullptr) continue;
 
-#else
-    for (const auto& it : m_mapDevice) {
-        // const auto& nDevID = it.first;
-        const auto& stDevice = it.second;
-        if (stDevice.stDevInfo.nChannelId == -1) continue;
-        if (stDevice.pRPatrolChn == nullptr) continue;
+            stDevice.pThreadRPatrol->Stop();
+            stDevice.pThreadRPatrol->Join();
+        }
 
-        stDevice.pRPatrolChn->StopDisp();
-        stDevice.pRPatrolChn->StopRtsp(AX_TRUE);
-    }
-#endif
+        bRet = bbRet;
+    } while (0);
 
-    LOG_M_D(TAG, "[%s][%d] --- ", __func__, __LINE__);
+    LOG_MM_I(TAG, "---");
+
+    return bRet;
+}
+
+AX_VOID CAXNVRPreviewCtrl::UpdateRPatrolThread(AX_VOID* pArg) {
+    AX_NVR_DEVICE_T* pDevice = (AX_NVR_DEVICE_T*)pArg;
+    LOG_M_I(TAG, "[%s][%d] dev=%d +++ ", __func__, __LINE__, pDevice->stDevInfo.nChannelId);
+
+    do {
+
+        if (m_stAttr.pSecond == nullptr) break;
+        const CVO *pVo = m_stAttr.pSecond->GetVo();
+        if (pVo == nullptr) break;
+        VO_ATTR_T attr = pVo->GetAttr();
+        int nCount = attr.stChnInfo.nCount;
+        int nVoLayer = attr.voLayer;
+
+        int nVoChn = pDevice->stDevInfo.nChannelId % nCount;
+        if (pDevice->stDevInfo.bPatrolDisplay) {
+            if (!pDevice->pRPatrolChn->UpdateRPatrolRect(attr.stChnInfo.arrChns[nVoChn].stRect)) {
+                pDevice->bRes = AX_FALSE;
+                break;
+            }
+        }
+    } while(0);
+
+    LOG_M_I(TAG, "[%s][%d] dev=%d --- ", __func__, __LINE__, pDevice->stDevInfo.nChannelId);
+}
+
+AX_BOOL CAXNVRPreviewCtrl::UpdateRoundPatrolPreview(const vector<AX_NVR_DEV_ID> &vecDevID) {
+    LOG_MM_I(TAG, "+++");
+
+    const AX_U32 MAX_RPATROL_CNT = MAX_DEVICE_ROUNDPATROL_COUNT;
+    AX_BOOL bRet = AX_FALSE;
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    do {
+        AX_BOOL bbRet = AX_TRUE;
+        AX_U32 nIndex = 0;
+        for (auto nDeviceID : vecDevID) {
+            auto it = m_mapDevice.find(nDeviceID);
+            if (it == m_mapDevice.end()) {
+                bbRet = AX_FALSE;
+                break;
+            }
+            auto& stDevice = it->second;
+            if (stDevice.stDevInfo.nChannelId == -1) continue;
+            if (stDevice.stDevInfo.nChannelId != nDeviceID) continue;
+            if (stDevice.pRPatrolChn == nullptr) continue;
+
+            if (!stDevice.pThreadRPatrolUpdate->Start([this](AX_VOID* pArg) -> AX_VOID { UpdateRPatrolThread(pArg); }, &stDevice, "patrol")) {
+                LOG_M_E(TAG, "[%s][%d] Start update channel %d thread failed.", __func__, __LINE__, stDevice.stDevInfo.nChannelId);
+            }
+
+            nIndex ++;
+            if (nIndex >= MAX_RPATROL_CNT) {
+                break;
+            }
+        }
+
+        nIndex = 0;
+        for (auto nDeviceID : vecDevID) {
+            auto it = m_mapDevice.find(nDeviceID);
+            if (it == m_mapDevice.end()) {
+                bbRet = AX_FALSE;
+                break;
+            }
+            auto& stDevice = it->second;
+            if (stDevice.stDevInfo.nChannelId == -1) continue;
+            if (stDevice.stDevInfo.nChannelId != nDeviceID) continue;
+            if (stDevice.pRPatrolChn == nullptr) continue;
+
+            stDevice.pThreadRPatrolUpdate->Stop();
+            stDevice.pThreadRPatrolUpdate->Join();
+
+            if (!stDevice.bRes) {
+                bbRet = AX_FALSE;
+            }
+
+            nIndex ++;
+            if (nIndex >= MAX_RPATROL_CNT) {
+                break;
+            }
+        }
+
+        bRet = bbRet;
+    } while(0);
+
+    LOG_MM_I(TAG, "---");
+
+    return bRet;
 }
 
 AX_VOID CAXNVRPreviewCtrl::StartPreviewThread(AX_VOID* pArg) {
@@ -623,12 +654,12 @@ AX_VOID CAXNVRPreviewCtrl::StartPreviewThread(AX_VOID* pArg) {
         pDevice->bRes = AX_TRUE;
         if (AX_NVR_CHN_IDX_TYPE::MAIN == pDevice->stDevInfo.enPreviewIndex) {
             // init main rtsp and start within StartDisp
-            if (!this->startRtsp(pDevice->pPreviewChnMain, pDevice->stDevInfo.stChnMain, AX_TRUE)) {
+            if (!this->startRtsp(pDevice->pPreviewChnMain, pDevice->stDevInfo.stChnMain, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::MAIN, pDevice->stDevInfo.nChannelId))) {
                 pDevice->bRes = AX_FALSE;
                 break;
             }
             // init sub1 rtsp while record
-            if (!this->startRtsp(pDevice->pPreviewChnSub1, pDevice->stDevInfo.stChnSub1, AX_FALSE)) {
+            if (!this->startRtsp(pDevice->pPreviewChnSub1, pDevice->stDevInfo.stChnSub1, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::SUB1, pDevice->stDevInfo.nChannelId))) {
                 pDevice->bRes = AX_FALSE;
                 break;
             }
@@ -641,12 +672,12 @@ AX_VOID CAXNVRPreviewCtrl::StartPreviewThread(AX_VOID* pArg) {
             }
         } else if (AX_NVR_CHN_IDX_TYPE::SUB1 == pDevice->stDevInfo.enPreviewIndex) {
             // init main rtsp while record
-            if (!this->startRtsp(pDevice->pPreviewChnMain, pDevice->stDevInfo.stChnMain, AX_FALSE)) {
+            if (!this->startRtsp(pDevice->pPreviewChnMain, pDevice->stDevInfo.stChnMain, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::MAIN, pDevice->stDevInfo.nChannelId))) {
                 pDevice->bRes = AX_FALSE;
                 break;
             }
             // init sub1 rtsp and start within StartDisp
-            if (!this->startRtsp(pDevice->pPreviewChnSub1, pDevice->stDevInfo.stChnSub1, AX_TRUE)) {
+            if (!this->startRtsp(pDevice->pPreviewChnSub1, pDevice->stDevInfo.stChnSub1, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::SUB1, pDevice->stDevInfo.nChannelId))) {
                 pDevice->bRes = AX_FALSE;
                 break;
             }
@@ -749,11 +780,11 @@ AX_BOOL CAXNVRPreviewCtrl::StartPreview(const ax_nvr_channel_vector &vecChn) {
 
             if (AX_NVR_CHN_IDX_TYPE::MAIN == stDevice.stDevInfo.enPreviewIndex) {
                 // start main rtsp
-                if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_TRUE)) {
+                if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::MAIN, stDevice.stDevInfo.nChannelId))) {
                     break;
                 }
                 // start sub1 rtsp while record
-                if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_FALSE)) {
+                if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::SUB1, stDevice.stDevInfo.nChannelId))) {
                     break;
                 }
                 // display
@@ -763,11 +794,11 @@ AX_BOOL CAXNVRPreviewCtrl::StartPreview(const ax_nvr_channel_vector &vecChn) {
                 }
             } else if (AX_NVR_CHN_IDX_TYPE::SUB1 == stDevice.stDevInfo.enPreviewIndex) {
                 // start main rtsp  while record
-                if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_FALSE)) {
+                if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_FALSE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::MAIN, stDevice.stDevInfo.nChannelId))) {
                     break;
                 }
                 // start sub1 rtsp
-                if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_TRUE)) {
+                if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::SUB1, stDevice.stDevInfo.nChannelId))) {
                     break;
                 }
                 // display
@@ -805,7 +836,7 @@ AX_BOOL CAXNVRPreviewCtrl::UpdatePreview(const ax_nvr_channel_vector &vecChn) {
             auto it = m_mapDevice.find(nDeviceID);
             if (it == m_mapDevice.end()) {
                 bbRet = AX_FALSE;
-                break;
+                continue;
             }
             auto& stDevice = it->second;
             if (stDevice.stDevInfo.nChannelId == -1) continue;
@@ -817,15 +848,17 @@ AX_BOOL CAXNVRPreviewCtrl::UpdatePreview(const ax_nvr_channel_vector &vecChn) {
             // main display update
             if (AX_NVR_CHN_IDX_TYPE::MAIN == stDevice.stDevInfo.enPreviewIndex) {
                 if (!it->second.pPreviewChnMain->UpdateRect(attr.stChnInfo.arrChns[nVoChn].stRect)) {
+                    LOG_MM_W(TAG, "[%d] Update rect(%d, %d) failed.", nVoChn, attr.stChnInfo.arrChns[nVoChn].stRect.u32Width, attr.stChnInfo.arrChns[nVoChn].stRect.u32Height);
                     bbRet = AX_FALSE;
-                    break;
+                    continue;
                 }
             }
             // sub1 display update
             else if (AX_NVR_CHN_IDX_TYPE::SUB1 == stDevice.stDevInfo.enPreviewIndex) {
                 if (!it->second.pPreviewChnSub1->UpdateRect(attr.stChnInfo.arrChns[nVoChn].stRect)) {
+                    LOG_MM_W(TAG, "[%d] Update rect(%d, %d) failed.", nVoChn, attr.stChnInfo.arrChns[nVoChn].stRect.u32Width, attr.stChnInfo.arrChns[nVoChn].stRect.u32Height);
                     bbRet = AX_FALSE;
-                    break;
+                    continue;
                 }
             }
         }
@@ -843,7 +876,7 @@ AX_BOOL CAXNVRPreviewCtrl::SwitchPreviewMainSub(const ax_nvr_channel_vector &vec
 
     do {
         if (m_stAttr.pPrimary == nullptr) break;
-        const CVO *pVo = m_stAttr.pPrimary->GetVo();
+        CVO *pVo = const_cast<CVO *>(m_stAttr.pPrimary->GetVo());
         if (pVo == nullptr) break;
         VO_ATTR_T attr = pVo->GetAttr();
         int nCount = attr.stChnInfo.nCount;
@@ -863,7 +896,10 @@ AX_BOOL CAXNVRPreviewCtrl::SwitchPreviewMainSub(const ax_nvr_channel_vector &vec
             if (stDevice.pPreviewChnMain == nullptr) continue;
             if (stDevice.pPreviewChnSub1 == nullptr) continue;
 
-            int nVoChn = stDevice.stDevInfo.nChannelId%nCount;
+            int nVoChn = stDevice.stDevInfo.nChannelId % nCount;
+
+            pVo->UpdateChnCropRect(nVoChn, {0, 0, 0, 0});
+
             // main to sub1
             if (AX_NVR_CHN_IDX_TYPE::MAIN == stDevice.stDevInfo.enPreviewIndex) {
                 // stop main
@@ -872,7 +908,7 @@ AX_BOOL CAXNVRPreviewCtrl::SwitchPreviewMainSub(const ax_nvr_channel_vector &vec
                 // change channel stream type to sub1
                 stDevice.stDevInfo.enPreviewIndex = AX_NVR_CHN_IDX_TYPE::SUB1;
                 // start sub1 rtsp
-                if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_TRUE)) {
+                if (!this->startRtsp(stDevice.pPreviewChnSub1, stDevice.stDevInfo.stChnSub1, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::SUB1, stDevice.stDevInfo.nChannelId))) {
                     break;
                 }
                 if (!stDevice.pPreviewChnSub1->StartDisp(nVoLayer, nVoChn, attr.stChnInfo.arrChns[nVoChn].stRect)) {
@@ -888,7 +924,7 @@ AX_BOOL CAXNVRPreviewCtrl::SwitchPreviewMainSub(const ax_nvr_channel_vector &vec
                 // change channel stream type to main
                 stDevice.stDevInfo.enPreviewIndex = AX_NVR_CHN_IDX_TYPE::MAIN;
                 // start main
-                if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_TRUE)) {
+                if (!this->startRtsp(stDevice.pPreviewChnMain, stDevice.stDevInfo.stChnMain, AX_TRUE, GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE::PREVIEW, AX_NVR_CHN_IDX_TYPE::MAIN, stDevice.stDevInfo.nChannelId))) {
                     break;
                 }
                 if (!stDevice.pPreviewChnMain->StartDisp(nVoLayer, nVoChn, attr.stChnInfo.arrChns[nVoChn].stRect)) {
@@ -1069,9 +1105,37 @@ CAXNVRChannel *CAXNVRPreviewCtrl::createPreviewChannel(AX_NVR_DEV_ID nDevID, AX_
     return CAXNVRChannel::CreateInstance(stAttr);
 }
 
-AX_BOOL CAXNVRPreviewCtrl::startRtsp(CAXNVRChannel *pChannel, const AX_NVR_DEV_CHN_INFO_T &stChannelInfo, AX_BOOL bForce) {
-    if (!pChannel->StartRtsp(string(((const char*)stChannelInfo.szRtspUrl)), stChannelInfo.bRecord, bForce)) {
+AX_BOOL CAXNVRPreviewCtrl::startRtsp(CAXNVRChannel *pChannel, const AX_NVR_DEV_CHN_INFO_T &stChannelInfo, AX_BOOL bForce, AX_S32 nCookie) {
+    if (!pChannel->StartRtsp(string(((const char*)stChannelInfo.szRtspUrl)), stChannelInfo.bRecord, bForce, nCookie)) {
         return AX_FALSE;
     }
     return AX_TRUE;
+}
+
+AX_S32 CAXNVRPreviewCtrl::GetRTSPCookie(AX_NVR_CHN_VIEW_TYPE enView, AX_NVR_CHN_IDX_TYPE enChn, AX_NVR_DEV_ID devId, AX_BOOL bPip) {
+    /*
+        PREVIEW:
+            pip : 128
+            main: 0, 2, 4, 6, ... 126
+            sub1: 1, 3, 5, 7, ... 127
+        PATROL:
+            129, 130, ... 161
+    */
+    if (AX_NVR_CHN_VIEW_TYPE::PREVIEW == enView) {
+        if (bPip) {
+            return MAX_DEVICE_COUNT * 2;
+        } else {
+            if (AX_NVR_CHN_IDX_TYPE::MAIN == enChn) {
+                return devId * 2;
+            } else if (AX_NVR_CHN_IDX_TYPE::SUB1 == enChn) {
+                return devId * 2 + 1;
+            } else {
+                return -1;
+            }
+        }
+    } else if (AX_NVR_CHN_VIEW_TYPE::PATROL == enView) {
+        return MAX_DEVICE_COUNT * 2 + 1 + devId;
+    } else {
+        return -1;
+    }
 }

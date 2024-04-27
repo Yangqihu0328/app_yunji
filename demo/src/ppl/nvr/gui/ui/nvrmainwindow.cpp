@@ -85,6 +85,13 @@ NVRMainWindow::NVRMainWindow(unsigned int type, unsigned int w, unsigned int h, 
             connect(m_pTimerPolling, SIGNAL(timeout()), this, SLOT(OnTimeOutPolling()));
 
             m_pTcpSocket = new QTcpSocket(this);
+
+            connect(&m_watcherRPatrol, &QFutureWatcher<AX_NVR_ACTION_RES_T>::started, [=]{
+                if (ui->pushButtonPolling) {
+                    ui->pushButtonPolling->setEnabled(AX_FALSE);
+                }
+            });
+
             connect(&m_watcherRPatrol, &QFutureWatcher<AX_NVR_ACTION_RES_T>::finished, [=]{
 
                 AX_NVR_ACTION_RES_T res = m_watcherRPatrol.resultAt(0);
@@ -166,6 +173,10 @@ NVRMainWindow::NVRMainWindow(unsigned int type, unsigned int w, unsigned int h, 
                     } else {
                         LOG_M_E(TAG, "[%s][%d] TcpSocket connect failed.", __func__, __LINE__);
                     }
+                }
+
+                if (ui->pushButtonPolling) {
+                    ui->pushButtonPolling->setEnabled(AX_TRUE);
                 }
             });
 

@@ -82,7 +82,7 @@ void PreviewMain::showEvent(QShowEvent *event) {
         // get current labels index list
         const ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
         if (vecViewChn.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
             break;
         }
 
@@ -92,7 +92,7 @@ void PreviewMain::showEvent(QShowEvent *event) {
                                                                         m_nLeftMargin, m_nTopMargin,
                                                                         m_nRightMargin, m_nBottomMargin);
         if (vecVoRect.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
             break;
         }
 
@@ -100,6 +100,7 @@ void PreviewMain::showEvent(QShowEvent *event) {
         AX_NVR_VIEW_CHANGE_TYPE enChangeType = AX_NVR_VIEW_CHANGE_TYPE::SHOW;
         this->update_display(vecViewChn, vecVoRect, enChangeType, enSplitType);
 
+        m_pScaleLabelSeled = (ScaleLabel*)m_pSplitWidgetMgr->GetCurrentStartWidget();
     } while (0);
 
     return QWidget::showEvent(event);
@@ -117,7 +118,7 @@ void PreviewMain::hideEvent(QHideEvent *event) {
         // get current labels index list
         const ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
         if (vecViewChn.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
             break;
         }
 
@@ -127,7 +128,7 @@ void PreviewMain::hideEvent(QHideEvent *event) {
                                                                         m_nLeftMargin, m_nTopMargin,
                                                                         m_nRightMargin, m_nBottomMargin);
         if (vecVoRect.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
             break;
         }
 
@@ -147,7 +148,8 @@ void PreviewMain::hideEvent(QHideEvent *event) {
             AX_BOOL bEnable = AX_FALSE;
 
             std::thread thread([this, interface, bEnable, res]() mutable {
-
+                pthread_setname_np(pthread_self(), "AppPreviewHide");
+                LOG_MM_W(TAG, "HideEvent Action +++");
                 res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_ERR;
 
                 do {
@@ -176,6 +178,8 @@ void PreviewMain::hideEvent(QHideEvent *event) {
 
                 interface.reportResult(res, 0);
                 interface.reportFinished();
+
+                LOG_MM_W(TAG, "HideEvent Action ---");
             });
 
             // detach thred, Use Future to ensure exit
@@ -230,7 +234,7 @@ bool PreviewMain::eventFilter(QObject *watched, QEvent *event) {
         // get current labels index list
         const ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
         if (vecViewChn.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
             break;
         }
 
@@ -250,7 +254,7 @@ bool PreviewMain::eventFilter(QObject *watched, QEvent *event) {
                                                     m_nRightMargin, m_nBottomMargin);
         }
         if (vecVoRect.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
             break;
         }
 
@@ -285,7 +289,7 @@ void PreviewMain::OnChangeSplitVideo(SPLIT_TYPE enSplitType) {
         // get current labels index list
         const ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
         if (vecViewChn.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
             break;
         }
 
@@ -295,7 +299,7 @@ void PreviewMain::OnChangeSplitVideo(SPLIT_TYPE enSplitType) {
                                                                         m_nLeftMargin, m_nTopMargin,
                                                                         m_nRightMargin, m_nBottomMargin);
         if (vecVoRect.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
             break;
         }
 
@@ -337,7 +341,8 @@ void PreviewMain::OnEnablePip(bool bEnable) {
         interface.reportStarted();
 
         std::thread thread([this, interface, rect, bEnable, res]() mutable {
-
+            pthread_setname_np(pthread_self(), "AppPreviewPip");
+            LOG_MM_W(TAG, "EnablePIP Action +++");
             res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_ERR;
 
             do {
@@ -350,7 +355,6 @@ void PreviewMain::OnEnablePip(bool bEnable) {
                 }
 
                 if (bEnable) {
-
                     if (!pPrimaryDispCtrl->EnablePip(rect)) {
                         LOG_M_E(TAG, "[%s][%d] enable pip channel failed.", __func__, __LINE__);
                         break;
@@ -387,6 +391,8 @@ void PreviewMain::OnEnablePip(bool bEnable) {
             if (AX_NVR_TS_RUN_MODE::DISABLE != tTsCfg.eMode) {
                 emit signal_result_feedback(res);
             }
+
+            LOG_MM_W(TAG, "EnablePIP Action ---");
         });
 
         // detach thred, Use Future to ensure exit
@@ -395,6 +401,7 @@ void PreviewMain::OnEnablePip(bool bEnable) {
         if (!bEnable) {
             m_pPreviewPip->ClosePip();
         }
+
     } while(0);
 }
 
@@ -419,9 +426,12 @@ void PreviewMain::OnChangeMainSub1(void) {
                                                                         m_nLeftMargin, m_nTopMargin,
                                                                         m_nRightMargin, m_nBottomMargin);
         if (vecVoRect.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
             break;
         }
+
+        // Quit zoom mode
+        m_pScaleLabelSeled->Reset();
 
         // change type
         AX_NVR_VIEW_CHANGE_TYPE enChangeType = AX_NVR_VIEW_CHANGE_TYPE::MAINSUB;
@@ -440,6 +450,13 @@ void PreviewMain::OnChangePrevNext(PREV_NEXT_TYPE enPrevNextType) {
         }
 
         if (!m_pSplitWidgetMgr->ChangePrevNextWidgets(enPrevNextType)) {
+            AX_NVR_TEST_SUITE_CONFIG_T tTsCfg = CNVRConfigParser::GetInstance()->GetTestSuiteConfig();
+            if (AX_NVR_TS_RUN_MODE::DISABLE != tTsCfg.eMode) {
+                AX_NVR_ACTION_RES_T res;
+                res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_OK;
+                emit signal_result_feedback(res);
+            }
+
             LOG_M_D(TAG, "[%s][%d] Change Prev/Next=%d failed. ", __func__, __LINE__, enPrevNextType);
             break;
         }
@@ -449,7 +466,7 @@ void PreviewMain::OnChangePrevNext(PREV_NEXT_TYPE enPrevNextType) {
         // get current labels index list
         const ax_nvr_channel_vector vecViewChn = m_pSplitWidgetMgr->GetViewChannels(enSplitType);
         if (vecViewChn.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout channel invalid", __func__, __LINE__);
             break;
         }
 
@@ -459,7 +476,7 @@ void PreviewMain::OnChangePrevNext(PREV_NEXT_TYPE enPrevNextType) {
                                                                         m_nLeftMargin, m_nTopMargin,
                                                                         m_nRightMargin, m_nBottomMargin);
         if (vecVoRect.size() == 0) {
-            LOG_M_D(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
+            LOG_M_E(TAG, "[%s][%d] layout rect invalid", __func__, __LINE__);
             break;
         }
 
@@ -489,6 +506,8 @@ void PreviewMain::update_display(const ax_nvr_channel_vector &vecViewChn, const 
     interface.reportStarted();
 
     std::thread thread([this, interface, vecViewChn, vecVoRect, enChangeType, res]() mutable {
+        pthread_setname_np(pthread_self(), "AppPreviewUpd");
+        LOG_MM_W(TAG, "Thread Action %d +++ ", enChangeType);
         res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_ERR;
 
         do {
@@ -496,14 +515,15 @@ void PreviewMain::update_display(const ax_nvr_channel_vector &vecViewChn, const 
             CAXNVRDisplayCtrl *pPrimaryDispCtrl = CAXNVRFramework::GetInstance()->PrimaryDispCtrl();
             CAXNVRPreviewCtrl *pPreview = CAXNVRFramework::GetInstance()->PreviewCtrl();
             if (pPrimaryDispCtrl == nullptr || pPreview == nullptr) {
-                LOG_M_E(TAG, "[%s][%d] invalid point", __func__, __LINE__);
+                LOG_MM_E(TAG, "invalid point");
                 break;
             }
 
             if (enChangeType == AX_NVR_VIEW_CHANGE_TYPE::MAINSUB) {
                 if (!pPreview->SwitchPreviewMainSub(vecViewChn)) {
-                    LOG_M_E(TAG, "[%s][%d] Switch Preview Main/Sub failed", __func__, __LINE__);
+                    LOG_MM_E(TAG, "Switch Preview Main/Sub failed");
                 }
+
                 res.enResult = AX_NVR_PREVIEW_RES_TYPE::PREVIEW_OK;
                 res.enPreviewActionType = PREVIEW_ACTION_TYPE::PREVIEW_MAINSUB;
                 break;
@@ -523,7 +543,6 @@ void PreviewMain::update_display(const ax_nvr_channel_vector &vecViewChn, const 
             case AX_NVR_VIEW_CHANGE_TYPE::MIN:
             case AX_NVR_VIEW_CHANGE_TYPE::MAX:
             case AX_NVR_VIEW_CHANGE_TYPE::SHOW:
-                pPrimaryDispCtrl->StopFBChannels();
                 break;
             case AX_NVR_VIEW_CHANGE_TYPE::UPDATE:
             case AX_NVR_VIEW_CHANGE_TYPE::HIDE:
@@ -531,17 +550,16 @@ void PreviewMain::update_display(const ax_nvr_channel_vector &vecViewChn, const 
                     pPrimaryDispCtrl->StopPipFBChannel();
 
                     if (!pPreview->StopPip()) {
-                        LOG_M_E(TAG, "[%s][%d] stop pip channel display failed.", __func__, __LINE__);
+                        LOG_MM_E(TAG, "stop pip channel display failed.");
                         break;
                     }
 
                     if (!pPrimaryDispCtrl->DisablePip()) {
-                        LOG_M_E(TAG, "[%s][%d] disable pip channel failed.", __func__, __LINE__);
+                        LOG_MM_E(TAG, "disable pip channel failed.");
                         break;
                     }
                 }
 
-                pPrimaryDispCtrl->StopFBChannels();
                 pPreview->StopPreview();
                 break;
             default:
@@ -550,7 +568,7 @@ void PreviewMain::update_display(const ax_nvr_channel_vector &vecViewChn, const 
 
             // Update VO attr
             if (!pPrimaryDispCtrl->UpdateView(vecViewChn, vecVoRect, AX_NVR_VIEW_TYPE::PREVIEW, enChangeType)) {
-                LOG_M_E(TAG, "[%s][%d] UpdateView changetype=%d", __func__, __LINE__, enChangeType);
+                LOG_MM_E(TAG, "UpdateView changetype=%d", enChangeType);
                 break;
             }
 
@@ -560,13 +578,10 @@ void PreviewMain::update_display(const ax_nvr_channel_vector &vecViewChn, const 
             case AX_NVR_VIEW_CHANGE_TYPE::MIN:
             case AX_NVR_VIEW_CHANGE_TYPE::MAX:
                 bRet = pPreview->UpdatePreview(vecViewChn);
-                pPrimaryDispCtrl->StartFBChannels();
-
                 break;
             case AX_NVR_VIEW_CHANGE_TYPE::UPDATE:
             case AX_NVR_VIEW_CHANGE_TYPE::SHOW:
                 bRet = pPreview->StartPreview(vecViewChn);
-                pPrimaryDispCtrl->StartFBChannels();
                 break;
             case AX_NVR_VIEW_CHANGE_TYPE::HIDE:
             default:
@@ -575,7 +590,7 @@ void PreviewMain::update_display(const ax_nvr_channel_vector &vecViewChn, const 
             }
 
             if (!bRet) {
-                LOG_M_E(TAG, "[%s][%d] Preview Action=%d failed.", __func__, __LINE__, enChangeType);
+                LOG_MM_E(TAG, "Preview Action=%d failed.", enChangeType);
                 break;
             }
 
@@ -609,6 +624,8 @@ void PreviewMain::update_display(const ax_nvr_channel_vector &vecViewChn, const 
                 emit signal_result_feedback(res);
             }
         }
+
+        LOG_MM_W(TAG, "Thread Action %d ---", enChangeType);
     });
 
     // detach thred, Use Future to ensure exit
@@ -620,8 +637,7 @@ void PreviewMain::update_display(const ax_nvr_channel_vector &vecViewChn, const 
     }
 }
 
-bool PreviewMain::TestChangePrevNext(PREV_NEXT_TYPE enPrevNextType)
-{
+bool PreviewMain::TestChangePrevNext(PREV_NEXT_TYPE enPrevNextType) {
     if (m_pSplitWidgetMgr) {
         return m_pSplitWidgetMgr->ChangePrevNextWidgets(enPrevNextType, true);
     }
