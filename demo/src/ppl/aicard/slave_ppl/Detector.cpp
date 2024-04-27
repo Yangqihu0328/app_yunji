@@ -98,6 +98,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
     const AX_U32 TOTAL_GRP_COUNT = m_stAttr.nGrpCount;
     CAXFrame axFrame;
     AX_U32 nSkipCount = 0;
+    printf("DETECT THREAD IS RUNNING GGGGGGGGGGGGGGGGGGGGGGG\n");
     while (m_DetectThread.IsRunning()) {
         for (nCurrGrp = nNextGrp; nCurrGrp < TOTAL_GRP_COUNT; ++nCurrGrp) {
             if (m_arrFrameQ[nCurrGrp].Pop(axFrame, 0)) {
