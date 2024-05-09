@@ -93,6 +93,9 @@ AX_VOID CFileStreamer::DemuxThread(AX_VOID* pArg) {
                         }
                     }
 
+                    // sleep for 10 millseconds to avoid ring buffer full
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
                     if (m_nMaxSendNaluIntervalMilliseconds > 0) {
                         AX_U32 ms = u(e);
                         if (ms > 10) {
