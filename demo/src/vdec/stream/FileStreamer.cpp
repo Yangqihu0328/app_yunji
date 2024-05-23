@@ -93,6 +93,7 @@ AX_VOID CFileStreamer::DemuxThread(AX_VOID* pArg) {
                         }
                     }
 
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     if (m_nMaxSendNaluIntervalMilliseconds > 0) {
                         AX_U32 ms = u(e);
                         if (ms > 10) {

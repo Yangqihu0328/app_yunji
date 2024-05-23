@@ -13,6 +13,9 @@ INC_PATH            := $(MSP_OUT_PATH)/include
 SRC_RELATIVE_PATH   := $(subst $(HOME_PATH)/,,$(SRC_PATH))
 TARGET_OUT_PATH     := $(OBJ_OUT_PATH)/$(SRC_RELATIVE_PATH)
 ROOTFS_TARGET_PATH  := $(MSP_OUT_PATH)
+JSON_INCLUDE         := $(HOME_PATH)/app/demo/3rd/json/include
+MQTT_INCLUDE         := $(HOME_PATH)/app/demo/3rd/mqtt/include
+MQTT_LIB             := $(HOME_PATH)/app/demo/3rd/mqtt/lib
 DEMO_SRC_PATH       := $(HOME_PATH)/app/demo/src
 DEMO_BIN_PATH       := $(HOME_PATH)/app/demo/bin/aicard/master
 THIRD_PARTY_PATH    := $(HOME_PATH)/third-party
@@ -39,7 +42,10 @@ SRCCPPS             := $(wildcard $(SRC_PATH)/*.cpp) \
 
 CINCLUDE            := -I$(SRC_PATH) \
                        -I$(INC_PATH) \
+                       -I$(MQTT_INCLUDE) \
+                       -I$(JSON_INCLUDE) \
                        -I$(DEMO_SRC_PATH)/header \
+                       -I$(DEMO_SRC_PATH)/encoder \
 					   -I$(DEMO_SRC_PATH)/vdec \
                        -I$(DEMO_SRC_PATH)/vdec/stream \
                        -I$(DEMO_SRC_PATH)/option_helper \
@@ -64,7 +70,7 @@ CINCLUDE            := -I$(SRC_PATH) \
 TARGET              := $(TARGET_OUT_PATH)/$(MOD_NAME)
 
 # build flags
-CPPFLAGS            := --std=c++11
+CPPFLAGS            := --std=c++14
 CFLAGS              := $(CPPFLAGS) -Wall -Wl,-rpath-link=$(LIB_PATH):$(THIRD_PARTY_PATH)/ffmpeg/lib:-L$(THIRD_PARTY_PATH)/openssl/lib
 CFLAGS              += -DAPP_BUILD_VERSION=\"$(SDK_VERSION)\"
 
@@ -100,7 +106,7 @@ CLIB                += -lax_pcie_msg
 CLIB                += -L$(THIRD_PARTY_PATH)/drm/lib -ldrm
 CLIB                += -L$(THIRD_PARTY_PATH)/ffmpeg/lib -lavcodec -lavutil -lavformat
 CLIB                += -L$(THIRD_PARTY_PATH)/openssl/lib -lssl -lcrypto
-
+CLIB                += -L$(MQTT_LIB) -lMQTTPacketClient
 
 # install
 INSTALL_TARGET      := $(TARGET)

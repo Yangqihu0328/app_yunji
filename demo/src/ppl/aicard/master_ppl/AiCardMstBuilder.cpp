@@ -8,8 +8,9 @@
  *
  **************************************************************************************************/
 
-#include "AiCardMstBuilder.hpp"
 #include <stdlib.h>
+#include "AiCardMstBuilder.hpp"
+#include "EncoderOptionHelper.h"
 #include "AXPoolManager.hpp"
 #include "AppLogApi.h"
 #include "DispatchObserver.hpp"
@@ -68,9 +69,9 @@ AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
 
     /* [7]: Init data sender. */
     /* Transfer module must be initialized before Decoder to make sure that register option for FileStreamer observer is earlier */
-    if (!InitTransHelper()) {
-        return AX_FALSE;
-    }
+    // if (!InitTransHelper()) {
+    //     return AX_FALSE;
+    // }
 
     /* [8]: Init video decoder */
     streamConfig.nChnW[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Width;
@@ -80,9 +81,15 @@ AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
     }
 
     /* [9]: Init AI switch simulator */
-    if (!InitAiSwitchSimlator()) {
+    // if (!InitAiSwitchSimlator()) {
+    //     return AX_FALSE;
+    // }
+
+    /* [9]: Init Mqtt client */
+    if (!InitMqttClient()) {
         return AX_FALSE;
     }
+
 
     return AX_TRUE;
 }
@@ -181,6 +188,75 @@ AX_BOOL CAiCardMstBuilder::InitDispatcher(const string &strFontPath) {
         }
     }
 
+    return AX_TRUE;
+}
+
+AX_BOOL CAiCardMstBuilder::InitJenc() {
+    LOG_MM(AICARD, "+++");
+
+    for (AX_U8 i = 0; i < MAX_JENC_CHANNEL_NUM; i++) {
+        JPEG_CONFIG_T tJencCfg;
+
+        do {
+            if (APP_JENC_CONFIG(m_nScenario, i, tJencCfg)) {
+                CJpegEncoder* pJencInstance = new CJpegEncoder(tJencCfg);
+                if (!pJencInstance->Init()) {
+                    break;
+                }
+
+                /* Step-8-2: IVPS register JENC observers and init JENC attributes according to IVPS attributes */
+                IPC_MOD_INFO_T tDstMod = {AX_ID_VENC, 0, pJencInstance->GetChannel()};
+                vector<IPC_MOD_RELATIONSHIP_T> vecRelations;
+                if (!GetRelationsByDstMod(tDstMod, vecRelations)) {
+                    LOG_MM_E(PPL, "Can not find relation for dest module: (Module:%s, Grp:%d, Chn:%d)",
+                             ModType2String(tDstMod.eModType).c_str(), tDstMod.nGroup, tDstMod.nChannel);
+                    return AX_FALSE;
+                }
+
+                IPC_MOD_RELATIONSHIP_T& tRelation = vecRelations[0];
+                if (tRelation.bLink) {
+                    /* Under link mode, any module must transfer attributes, like resolution info, to jenc instance. */
+                    JPEG_CONFIG_T* pConfig = pJencInstance->GetChnCfg();
+                    if (E_PPL_MOD_TYPE_IVPS == tRelation.tSrcModChn.eModType) {
+                        pConfig->nWidth =
+                            m_vecIvpsInstance[tRelation.tSrcModChn.nGroup]->GetGrpCfg()->arrChnResolution[tRelation.tSrcModChn.nChannel][0];
+                        pConfig->nHeight =
+                            m_vecIvpsInstance[tRelation.tSrcModChn.nGroup]->GetGrpCfg()->arrChnResolution[tRelation.tSrcModChn.nChannel][1];
+                        pConfig->bFBC =
+                            m_vecIvpsInstance[tRelation.tSrcModChn.nGroup]->GetGrpCfg()->arrChnFBC[tRelation.tSrcModChn.nChannel][0] == 0
+                                ? AX_FALSE
+                                : AX_TRUE;
+                        pConfig->nSrcFrameRate =
+                            m_vecIvpsInstance[tRelation.tSrcModChn.nGroup]->GetGrpCfg()->arrChnFramerate[tRelation.tSrcModChn.nChannel][1];
+                    }
+                    pConfig->bLink = AX_TRUE;
+                } else {
+                    if (E_PPL_MOD_TYPE_IVPS == tRelation.tSrcModChn.eModType) {
+                        LOG_MM_E(AICARD, "Unspport unlink mode");
+                    }
+                }
+
+                /* Step-8-3: Initialize JENC with latest attributes */
+                if (!pJencInstance->InitParams()) {
+                    return AX_FALSE;
+                }
+
+                /* Register unique capture channel, only the first setting will be effective */
+                CWebServer::GetInstance()->RegistUniCaptureChn(pJencInstance->GetChannel());
+
+                /* Step-8-4: Register observers */
+                m_vecWebObs.emplace_back(CObserverMaker::CreateObserver<CWebObserver>(CWebServer::GetInstance()));
+                pJencInstance->RegObserver(m_vecWebObs[m_vecWebObs.size() - 1].get());
+
+                /* Step-8-5: Save instance */
+                m_vecJencInstance.emplace_back(pJencInstance);
+
+                LOG_M_I(AICARD, "Init jenc channel %d successfully.", i);
+            }
+        } while (0);
+    }
+
+    LOG_MM(AICARD, "---");
     return AX_TRUE;
 }
 
@@ -384,6 +460,37 @@ AX_BOOL CAiCardMstBuilder::InitAiSwitchSimlator() {
     return AX_TRUE;
 }
 
+
+AX_BOOL CAiCardMstBuilder::InitMqttClient() {
+    /*TODO: support param from ini*/
+    // CAiSwitchConfig *pConfig = CAiSwitchConfig::GetInstance();
+    // if (!pConfig->Init() || 0 == pConfig->GetAttrCount()) {
+    //     LOG_M_E(AICARD, "Parse ai switch config file failed.");
+    //     return AX_FALSE;
+    // }
+    // CAiSwitchConfig *pConfig 
+
+    //C++的结构体初始化顺序要按照定义顺序一样，
+    MQTT_CONFIG_T mqtt_config{
+        .topic = "Yj_HeartBeat",
+        .sub_topic = "YJ_test",
+        .hostname = "192.168.0.62",
+        .client_name = "YJ_aibox", //YJ_aibox
+        .version = 3,
+        .port = 1883
+    };
+
+    mqtt_client_info = std::make_unique<MqttClientInfo>();
+    if (!mqtt_client_info) {
+        LOG_MM_E(AICARD, "Create MqttClientInfo instance failed.");
+        return AX_FALSE;
+    }
+    mqtt_client_info->Init(mqtt_config);
+    return AX_TRUE;
+}
+
+
+
 AX_BOOL CAiCardMstBuilder::DeInit(AX_VOID) {
     /* destory instances */
 #define DESTORY_INSTANCE(p) \
@@ -398,7 +505,7 @@ AX_BOOL CAiCardMstBuilder::DeInit(AX_VOID) {
         DESTORY_INSTANCE(m);
     }
 
-    DESTORY_INSTANCE(m_transHelper);
+    // DESTORY_INSTANCE(m_transHelper);
 
     for (auto &&m : m_arrDispatcher) {
         DESTORY_INSTANCE(m);
@@ -408,6 +515,7 @@ AX_BOOL CAiCardMstBuilder::DeInit(AX_VOID) {
     /* If private pool, destory consumer before producer */
     DESTORY_INSTANCE(m_disp);
     DESTORY_INSTANCE(m_vdec);
+    DESTORY_INSTANCE(mqtt_client_info);
 
 #undef DESTORY_INSTANCE
 
@@ -417,7 +525,6 @@ AX_BOOL CAiCardMstBuilder::DeInit(AX_VOID) {
 
 AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
     LOG_MM_W(AICARD, "+++");
-
     if (!Init()) {
         DeInit();
         return AX_FALSE;
@@ -447,14 +554,14 @@ AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
             return AX_FALSE;
         }
 
-        if (m_transHelper) {
-            if (!m_transHelper->Start()) {
-                return AX_FALSE;
-            }
-        } else {
-            LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module is disabled <<<<<<<<<<<<<<<<<<<<<");
-            return AX_FALSE;
-        }
+        // if (m_transHelper) {
+        //     if (!m_transHelper->Start()) {
+        //         return AX_FALSE;
+        //     }
+        // } else {
+        //     LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module is disabled <<<<<<<<<<<<<<<<<<<<<");
+        //     return AX_FALSE;
+        // }
 
         for (auto &&m : m_arrStreamer) {
             if (m) {
@@ -463,12 +570,20 @@ AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
             }
         }
 
-        if (m_aiSwitchSimulator) {
-            if (!m_aiSwitchSimulator->Start()) {
+        // if (m_aiSwitchSimulator) {
+        //     if (!m_aiSwitchSimulator->Start()) {
+        //         return AX_FALSE;
+        //     }
+        // } else {
+        //     LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> AI SWITCH SIMULATOR module is disabled <<<<<<<<<<<<<<<<<<<<<");
+        // }
+
+        if (mqtt_client_info) {
+            if (!mqtt_client_info->Start()) {
                 return AX_FALSE;
             }
         } else {
-            LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> AI SWITCH SIMULATOR module is disabled <<<<<<<<<<<<<<<<<<<<<");
+            LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> MQTT module is disabled <<<<<<<<<<<<<<<<<<<<<");
         }
 
         CPrintHelper::GetInstance()->Start();
@@ -516,13 +631,13 @@ AX_BOOL CAiCardMstBuilder::Stop(AX_VOID) {
         m->Clear();
     }
 
-    if (m_transHelper) {
-        if (!m_transHelper->Stop()) {
-            LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop failed <<<<<<<<<<<<<<<<<<<<<");
-        } else {
-            LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop successfully <<<<<<<<<<<<<<<<<<<<<");
-        }
-    }
+    // if (m_transHelper) {
+    //     if (!m_transHelper->Stop()) {
+    //         LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop failed <<<<<<<<<<<<<<<<<<<<<");
+    //     } else {
+    //         LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop successfully <<<<<<<<<<<<<<<<<<<<<");
+    //     }
+    // }
 
     if (m_disp) {
         if (!m_disp->Stop()) {
@@ -532,11 +647,19 @@ AX_BOOL CAiCardMstBuilder::Stop(AX_VOID) {
         }
     }
 
-    if (m_aiSwitchSimulator) {
-        if (!m_aiSwitchSimulator->Stop()) {
-            LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> AI SWITCH SIMULATOR module stop failed <<<<<<<<<<<<<<<<<<<<<");
+    // if (m_aiSwitchSimulator) {
+    //     if (!m_aiSwitchSimulator->Stop()) {
+    //         LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> AI SWITCH SIMULATOR module stop failed <<<<<<<<<<<<<<<<<<<<<");
+    //     } else {
+    //         LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> AI SWITCH SIMULATOR module stop successfully <<<<<<<<<<<<<<<<<<<<<");
+    //     }
+    // }
+
+    if (mqtt_client_info) {
+        if (!mqtt_client_info->Stop()) {
+            LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> MQTT Client module stop failed <<<<<<<<<<<<<<<<<<<<<");
         } else {
-            LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> AI SWITCH SIMULATOR module stop successfully <<<<<<<<<<<<<<<<<<<<<");
+            LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> MQTT Client module stop successfully <<<<<<<<<<<<<<<<<<<<<");
         }
     }
 

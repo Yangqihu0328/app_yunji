@@ -23,6 +23,9 @@
 #include "TransferHelper.hpp"
 #include "AiSwitchSimulator.hpp"
 
+//3rd
+#include "MqttClientInfo.hpp"
+
 using namespace aicard_mst;
 
 class CAiCardMstBuilder final {
@@ -42,8 +45,10 @@ protected:
     AX_BOOL InitDisplay(const DISPVO_CONFIG_T& dispVoConfig);
     AX_BOOL InitDispatcher(const std::string& strFontPath);
     AX_BOOL InitDecoder(const STREAM_CONFIG_T& streamConfig);
+    AX_BOOL InitJenc();
     AX_BOOL InitTransHelper();
     AX_BOOL InitAiSwitchSimlator();
+    AX_BOOL InitMqttClient();
 
 protected:
     CAiCardMstAppSys m_sys;
@@ -56,4 +61,6 @@ protected:
     std::vector<IStreamerHandlerPtr> m_arrStreamer;
     std::unique_ptr<CTransferHelper> m_transHelper;
     std::unique_ptr<CAiSwitchSimulator> m_aiSwitchSimulator;
+    std::unique_ptr<MqttClientInfo> mqtt_client_info;
+    
 };

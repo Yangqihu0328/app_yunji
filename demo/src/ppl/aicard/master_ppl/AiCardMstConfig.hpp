@@ -30,6 +30,16 @@ typedef struct {
     std::vector<std::string> v;
 } STREAM_CONFIG_T;
 
+
+typedef struct {
+    std::string topic;
+    std::string sub_topic;
+    std::string hostname;
+    std::string client_name;
+    AX_U8 version;
+    AX_U32 port;
+} MQTT_CONFIG_T;
+
 typedef struct {
     AX_U32 nDevId;
     AX_U32 nHDMI;

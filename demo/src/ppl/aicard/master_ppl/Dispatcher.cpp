@@ -31,6 +31,9 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
                 if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
                     axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
                 }
+    
+                //测试，每3s保存一张图片
+                
 
                 DrawBox(axFrame, fhvp);
             }

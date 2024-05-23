@@ -594,7 +594,7 @@ AX_BOOL CVideoDecoder::CreateDecoder(AX_VDEC_GRP vdGrp, const VDEC_GRP_INFO_T& s
             In order to decrease VB num, config VDEC to decode order (no reorder)
             Make sure video stream has no B frames
         */
-        stGrpParam.stVdecVideoParam.enOutputOrder = AX_VDEC_OUTPUT_ORDER_DEC;
+        stGrpParam.stVdecVideoParam.enOutputOrder = AX_VDEC_OUTPUT_ORDER_DISP;
         // stGrpParam.bFrameRateCtrl = stGrpInfo.stAttr.bFramerateCtrl;
         // if (stGrpParam.bFrameRateCtrl && stGrpInfo.stAttr.nFps > 0) {
         //     stGrpParam.f32FPS = stGrpInfo.stAttr.nFps;
