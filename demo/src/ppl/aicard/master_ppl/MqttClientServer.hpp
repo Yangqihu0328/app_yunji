@@ -33,6 +33,7 @@
 #include "ax_global_type.h"
 #include "AXThread.hpp"
 #include "PcieAdapter.hpp"
+#include "TransferHelper.hpp"
 #include "EncoderOptionHelper.h"
 #include "AiCardMstConfig.hpp"
 #include "MQTTClient.h"
@@ -296,6 +297,7 @@ public:
     AX_BOOL Start(AX_VOID);
     AX_BOOL Stop(AX_VOID);
 
+	AX_VOID BindTransfer(CTransferHelper* pInstance);
 	virtual AX_BOOL OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nChn, AX_VOID* pData) override;
 	AX_BOOL OnRegisterObserver(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nChn, OBS_TRANS_ATTR_PTR pParams) override {
         return AX_TRUE;
@@ -303,7 +305,6 @@ public:
 
 private:
     AX_VOID WorkThread(AX_VOID* pArg);
-	AX_VOID BindTransfer(CTransferHelper* pInstance);
 	AX_BOOL SaveJpgFile(AX_VOID* data, AX_U32 size, JPEG_DATA_INFO_T* pJpegInfo);
 	AX_VOID SendAlarmMsg(MQTT::Message &message);
 	AX_VOID SendBoardHeart(MQTT::Message &message);
@@ -316,7 +317,6 @@ protected:
 	std::unique_ptr<CAXLockQ<QUEUE_T>> arrjpegQ;
 
     CAXThread m_threadWork;
-	CTransferHelper* m_pTransferHelper {nullptr};
 	std::string topic;
 	std::string sub_topic;
 };

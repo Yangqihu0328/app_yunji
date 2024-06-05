@@ -2,6 +2,7 @@
 #include "AppLog.hpp"
 #include "MqttClientServer.hpp"
 #include "nlohmann/json.hpp"
+#include "AiSwitchConfig.hpp"
 
 #define MQTT_CLIENT "MQTT_CLIENT"
 
@@ -9,6 +10,8 @@ using namespace std;
 using json = nlohmann::json;
 
 static int arrivedcount = 0;
+CTransferHelper* m_pTransferHelper = nullptr;
+
 static void messageArrived(MQTT::MessageData& md) {
     MQTT::Message &message = md.message;
 
@@ -17,26 +20,14 @@ static void messageArrived(MQTT::MessageData& md) {
     printf("Payload %.*s\n", (int)message.payloadlen, (char*)message.payload);
 
 
-    std::string msg =  message.payload;
+    char * msg =  (char*)message.payload;
     AI_CARD_AI_SWITCH_ATTR_T tAiAttr;
-    CAiSwitchConfig::GetInstance()->GetNextAttr(tAiAttr)
-    if (msg == "swtich_next_algo") {
+    CAiSwitchConfig::GetInstance()->GetNextAttr(tAiAttr);
+    if (!strcmp(msg, "swtich_next_algo")) {
         m_pTransferHelper->SendAiAttr(tAiAttr);
     }
 }
 
-
-typedef struct {
-    AX_U32 nPPL {0};
-    AX_U32 nVNPU {0};
-    AX_BOOL bTrackEnable {AX_FALSE};
-} AI_CARD_AI_SWITCH_DET_CHN_PARAM_T;
-
-typedef struct {
-    AX_CHAR szModelPath[128] {0};
-    AX_S32 nChannelNum {0};
-    AI_CARD_AI_SWITCH_DET_CHN_PARAM_T arrChnParam[3];
-} AI_CARD_AI_SWITCH_ATTR_T;
 
 static int MqttGetTemperature(int &temp) {
 
