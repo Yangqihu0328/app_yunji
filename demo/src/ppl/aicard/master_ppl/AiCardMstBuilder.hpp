@@ -27,26 +27,8 @@
 #include "AXRtspServer.h"
 #include "AXRtspObserver.h"
 #include "BaseLinkage.h"
-#include "linker.hpp"
 
 using namespace aicard_mst;
-
-typedef struct _IPC_MOD_RELATIONSHIP_T {
-    AX_U32 nIndex;
-    IPC_MOD_INFO_T tSrcModChn;
-    IPC_MOD_INFO_T tDstModChn;
-    AX_BOOL bLink;
-
-    _IPC_MOD_RELATIONSHIP_T() {
-        memset(this, 0, sizeof(_IPC_MOD_RELATIONSHIP_T));
-        tSrcModChn.eModType = E_PPL_MOD_TYPE_MAX;
-        tDstModChn.eModType = E_PPL_MOD_TYPE_MAX;
-    }
-
-    AX_BOOL Valid() const {
-        return (tSrcModChn.eModType != E_PPL_MOD_TYPE_MAX && tDstModChn.eModType != E_PPL_MOD_TYPE_MAX) ? AX_TRUE : AX_FALSE;
-    }
-} IPC_MOD_RELATIONSHIP_T, PPL_MOD_RELATIONSHIP_T;
 
 class CAiCardMstBuilder final {
 public:
