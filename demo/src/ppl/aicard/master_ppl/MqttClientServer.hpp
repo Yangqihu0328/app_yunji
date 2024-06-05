@@ -29,10 +29,11 @@
 #include <iomanip>
 #include <ctime>
 
-
+#include "IObserver.h"
 #include "ax_global_type.h"
 #include "AXThread.hpp"
-
+#include "PcieAdapter.hpp"
+#include "EncoderOptionHelper.h"
 #include "AiCardMstConfig.hpp"
 #include "MQTTClient.h"
 
@@ -224,11 +225,70 @@ private:
 	struct timeval end_time;
 };
 
+typedef enum {
+    JPEG_TYPE_BODY = 0,
+    JPEG_TYPE_VEHICLE,
+    JPEG_TYPE_CYCLE,
+    JPEG_TYPE_FACE,
+    JPEG_TYPE_PLATE,
+    JPEG_TYPE_CAPTURE,
+    JPE_TYPE_FLASH,
+    JPEG_TYPE_BUTT
+} JPEG_TYPE_E;
 
-class MqttClientInfo {
+typedef struct {
+    AX_U8 nSnsSrc;
+    AX_U8 nChannel;
+    AX_U32 nWidth;
+    AX_U32 nHeight;
+} JPEG_HEAD_INFO_T;
+
+typedef struct _JPEG_CAPTURE_INFO_T {
+    JPEG_HEAD_INFO_T tHeaderInfo;
+    AX_VOID* pData;
+
+    _JPEG_CAPTURE_INFO_T() {
+        memset(this, 0, sizeof(_JPEG_CAPTURE_INFO_T));
+    }
+} JPEG_CAPTURE_INFO_T;
+
+typedef struct {
+    AX_U8 nGender; /* 0-female, 1-male */
+    AX_U8 nAge;
+    AX_CHAR szMask[32];
+    AX_CHAR szInfo[32];
+} JPEG_FACE_INFO_T;
+
+typedef struct {
+    AX_CHAR szNum[16];
+    AX_CHAR szColor[32];
+} JPEG_PLATE_INFO_T;
+
+typedef struct _JPEG_DATA_INFO_T {
+    JPEG_TYPE_E eType; /* JPEG_TYPE_E */
+    union {
+        JPEG_CAPTURE_INFO_T tCaptureInfo;
+        JPEG_FACE_INFO_T tFaceInfo;
+        JPEG_PLATE_INFO_T tPlateInfo;
+    };
+
+    _JPEG_DATA_INFO_T() {
+        eType = JPEG_TYPE_BUTT;
+    }
+} JPEG_DATA_INFO_T;
+
+#define MAX_BUF_LENGTH (1920*1080*3/2)
+typedef struct _QUEUE_T {
+	JPEG_DATA_INFO_T tJpegInfo;
+	AX_U8 *jpg_buf;
+	AX_U32 buf_length;
+} QUEUE_T;
+
+
+class MqttClientServer final: public IObserver {
 public:
-	MqttClientInfo(AX_VOID) = default;
-    ~MqttClientInfo(AX_VOID) = default;
+    MqttClientServer() = default;
+    virtual ~MqttClientServer(AX_VOID) = default;
 
 	AX_BOOL Init(MQTT_CONFIG_T &mqtt_config);
     AX_BOOL DeInit(AX_VOID);
@@ -236,15 +296,27 @@ public:
     AX_BOOL Start(AX_VOID);
     AX_BOOL Stop(AX_VOID);
 
+	virtual AX_BOOL OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nChn, AX_VOID* pData) override;
+	AX_BOOL OnRegisterObserver(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nChn, OBS_TRANS_ATTR_PTR pParams) override {
+        return AX_TRUE;
+    }
+
 private:
     AX_VOID WorkThread(AX_VOID* pArg);
+	AX_VOID BindTransfer(CTransferHelper* pInstance);
+	AX_BOOL SaveJpgFile(AX_VOID* data, AX_U32 size, JPEG_DATA_INFO_T* pJpegInfo);
+	AX_VOID SendAlarmMsg(MQTT::Message &message);
+	AX_VOID SendBoardHeart(MQTT::Message &message);
 
 protected:
+	std::mutex m_mtxConnStatus;
 	std::unique_ptr<IPStack> ipstack;
     std::unique_ptr<Countdown> countdown;
     std::unique_ptr<MQTT::Client<IPStack, Countdown>> client;
+	std::unique_ptr<CAXLockQ<QUEUE_T>> arrjpegQ;
 
     CAXThread m_threadWork;
+	CTransferHelper* m_pTransferHelper {nullptr};
 	std::string topic;
 	std::string sub_topic;
 };

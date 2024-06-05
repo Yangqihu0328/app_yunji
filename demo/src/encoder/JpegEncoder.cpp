@@ -125,7 +125,6 @@ AX_VOID CJpegEncoder::RegObserver(IObserver* pObserver) {
         OBS_TRANS_ATTR_T tTransAttr;
         tTransAttr.nWidth = m_tJpegConfig.nWidth;
         tTransAttr.nHeight = m_tJpegConfig.nHeight;
-
         if (pObserver->OnRegisterObserver(E_OBS_TARGET_TYPE_JENC, m_tJpegConfig.nPipeSrc, m_tJpegConfig.nChannel, &tTransAttr)) {
             m_vecObserver.emplace_back(pObserver);
         }
@@ -180,7 +179,7 @@ AX_BOOL CJpegEncoder::InitParams() {
     m_tJencChnAttr.stRcAttr.stFrameRate.fSrcFrameRate = (AX_F32)m_tJpegConfig.nSrcFrameRate;
     m_tJencChnAttr.stRcAttr.stFrameRate.fDstFrameRate = (AX_F32)m_tJpegConfig.nSrcFrameRate;
     m_pFramectrl = new CFramerateCtrlHelper(m_tJpegConfig.nSrcFrameRate, m_tJpegConfig.nDstFrameRate);
-    LOG_M(JENC, "JENC attr: chn:%d, w:%d, h:%d, link:%d, memSrc:%d,frameRate[%d,%d]", m_tJpegConfig.nChannel,
+    LOG_M_D(JENC, "JENC attr: chn:%d, w:%d, h:%d, link:%d, memSrc:%d,frameRate[%d,%d]", m_tJpegConfig.nChannel,
           m_tJencChnAttr.stVencAttr.u32PicWidthSrc, m_tJencChnAttr.stVencAttr.u32PicHeightSrc,
           m_tJencChnAttr.stVencAttr.enLinkMode == AX_VENC_LINK_MODE ? AX_TRUE : AX_FALSE, m_tJencChnAttr.stVencAttr.enMemSource,
           m_tJpegConfig.nSrcFrameRate, m_tJpegConfig.nDstFrameRate);

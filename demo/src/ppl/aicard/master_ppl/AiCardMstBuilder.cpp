@@ -10,7 +10,7 @@
 
 #include <stdlib.h>
 #include "AiCardMstBuilder.hpp"
-#include "EncoderOptionHelper.h"
+
 #include "AXPoolManager.hpp"
 #include "AppLogApi.h"
 #include "DispatchObserver.hpp"
@@ -19,6 +19,7 @@
 #include "StreamerFactory.hpp"
 #include "VoObserver.hpp"
 #include "make_unique.hpp"
+#include "EncoderOptionHelper.h"
 
 #define AICARD "AICARD_MST"
 using namespace std;
@@ -28,6 +29,7 @@ using namespace std;
 #define VDEC_CHN2 2
 #define DISPVO_CHN VDEC_CHN1
 #define DETECT_CHN VDEC_CHN2
+#define ENC_MAX_BUF_SIZE (3840 * 2160 * 3 / 2)
 
 AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
     CAiCardMstConfig *pConfig = CAiCardMstConfig::GetInstance();
@@ -62,21 +64,41 @@ AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
     /* [5]: Init detector and observer */
     CDetectResult::GetInstance()->Clear();
 
-    /* [6]: Init dispatchers */
+    /* [6]: Init Mqtt client */
+    if (!InitMqttClient()) {
+        return AX_FALSE;
+    }
+
+    /*[7]: jenc initialize */
+    if (!InitJenc()) {
+        return AX_FALSE;
+    }
+
+    /* [8]: Init video Encoder and observer */
+    if (!InitEncoder(streamConfig)) {
+        return AX_FALSE;
+    }
+
+    /* [8]: Init dispatchers */
     if (!InitDispatcher(dispVoConfig.strBmpPath)) {
         return AX_FALSE;
     }
 
-    /* [7]: Init data sender. */
+    /* [9]: Init data sender. */
     /* Transfer module must be initialized before Decoder to make sure that register option for FileStreamer observer is earlier */
-    // if (!InitTransHelper()) {
-    //     return AX_FALSE;
-    // }
+    if (!InitTransHelper()) {
+        return AX_FALSE;
+    }
 
-    /* [8]: Init video decoder */
+    /* [10]: Init video decoder */
     streamConfig.nChnW[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Width;
     streamConfig.nChnH[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Height;
     if (!InitDecoder(streamConfig)) {
+        return AX_FALSE;
+    }
+
+    /* Step-14: Initialize RTSP */
+    if (!CAXRtspServer::GetInstance()->Init()) {
         return AX_FALSE;
     }
 
@@ -84,12 +106,6 @@ AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
     // if (!InitAiSwitchSimlator()) {
     //     return AX_FALSE;
     // }
-
-    /* [9]: Init Mqtt client */
-    if (!InitMqttClient()) {
-        return AX_FALSE;
-    }
-
 
     return AX_TRUE;
 }
@@ -159,6 +175,62 @@ AX_BOOL CAiCardMstBuilder::InitDisplay(const DISPVO_CONFIG_T &dispVoConfig) {
     return AX_TRUE;
 }
 
+AX_BOOL CAiCardMstBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
+    int encoding_num = streamConfig.nDecodeGrps > MAX_VENC_CHANNEL_NUM ? MAX_VENC_CHANNEL_NUM : streamConfig.nDecodeGrps;
+    m_vencObservers.resize(encoding_num);
+    m_vecRtspObs.resize(encoding_num);
+    for (AX_U8 i = 0; i < encoding_num; i++) {    
+        VIDEO_CONFIG_T tConfig;
+        do {
+                tConfig.nChannel = i;
+                tConfig.ePayloadType = PT_H264;
+                tConfig.nGOP = 30;
+                tConfig.fFramerate = (AX_F32)30;
+                tConfig.nWidth = m_disp->GetVideoLayout()[0].u32Width;
+                tConfig.nHeight = m_disp->GetVideoLayout()[0].u32Height;
+                tConfig.nBufSize = ENC_MAX_BUF_SIZE;
+                tConfig.nBitrate =  8192;
+                tConfig.bFBC = AX_FALSE;
+                tConfig.nInFifoDepth = 1;
+                tConfig.nOutFifoDepth = 1;
+                tConfig.bLink = AX_FALSE;
+                tConfig.eRcType = AX_VENC_RC_MODE_H264CBR;
+                tConfig.eMemSource = AX_MEMORY_SOURCE_CMM;
+                tConfig.stEncodeCfg[0].ePayloadType = tConfig.ePayloadType;
+                tConfig.stEncodeCfg[0].stRCInfo[0].eRcType = AX_VENC_RC_MODE_H264CBR;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMinQp = 0;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMaxQp = 51;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMinIQp = 0;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIQp = 51;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMinIProp = 10;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIProp = 40;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nIntraQpDelta = -2;  
+                CVideoEncoder* pVencInstance = new CVideoEncoder(tConfig);
+                
+                if (!pVencInstance->Init()) {
+                    LOG_MM_E(AICARD, "Init video Encoder fail!!!!");
+                    break;
+                }
+
+                if (!pVencInstance->InitParams()) {
+                    LOG_MM_E(AICARD, "Init venc params %d failed.", tConfig.nChannel);
+                    return AX_FALSE;
+                }
+                
+                m_vencObservers[i] = CObserverMaker::CreateObserver<CVencObserver>(pVencInstance);
+                
+                /* register rtsp  */
+                m_vecRtspObs[i] = CObserverMaker::CreateObserver<CAXRtspObserver>(CAXRtspServer::GetInstance());
+                
+                pVencInstance->RegObserver(m_vecRtspObs[i].get()); // register each rtsp observer to each encoder instance 
+                
+                m_vecVencInstance.emplace_back(pVencInstance);
+        } while (0);
+    }
+
+    return AX_TRUE;
+}
+
 AX_BOOL CAiCardMstBuilder::InitDispatcher(const string &strFontPath) {
     m_arrDispatcher.resize(m_nDecodeGrpCount);
     m_arrDispatchObserver.resize(m_nDecodeGrpCount);
@@ -170,6 +242,14 @@ AX_BOOL CAiCardMstBuilder::InitDispatcher(const string &strFontPath) {
         } else {
             if (m_dispObserver) {
                 m_arrDispatcher[i]->RegObserver(m_dispObserver.get());
+            }
+            
+            if (m_vencObservers.size() && i < MAX_VENC_CHANNEL_NUM) {
+                m_arrDispatcher[i]->RegObserver(m_vencObservers[i].get());
+            }
+
+            if (m_jenc) {
+                m_arrDispatcher[i]->RegObserver(m_jenc.get());
             }
         }
 
@@ -194,67 +274,38 @@ AX_BOOL CAiCardMstBuilder::InitDispatcher(const string &strFontPath) {
 AX_BOOL CAiCardMstBuilder::InitJenc() {
     LOG_MM(AICARD, "+++");
 
-    for (AX_U8 i = 0; i < MAX_JENC_CHANNEL_NUM; i++) {
-        JPEG_CONFIG_T tJencCfg;
+    JPEG_CONFIG_T tJencCfg;
+    do {
+        tJencCfg.nSrcFrameRate = 0;
+        tJencCfg.nWidth = 1920;
+        tJencCfg.nHeight = 1080;
+        tJencCfg.bLink = AX_FALSE;
+        tJencCfg.nChannel = 0;
+        tJencCfg.nPipeSrc = 0;
+        tJencCfg.nJpegType = 5;
+        tJencCfg.nInFifoDepth = 1;
+        tJencCfg.nOutFifoDepth = 1;
+        tJencCfg.eMemSource = (AX_MEMORY_SOURCE_E)1;
+        tJencCfg.nQpLevel = 70;
+        tJencCfg.nDstFrameRate = 1;
+        tJencCfg.nBufSize = 1920 * 1080 * 3 / 2;
 
-        do {
-            if (APP_JENC_CONFIG(m_nScenario, i, tJencCfg)) {
-                CJpegEncoder* pJencInstance = new CJpegEncoder(tJencCfg);
-                if (!pJencInstance->Init()) {
-                    break;
-                }
+        m_jenc = std::make_unique<CJpegEncoder>(tJencCfg);
+        if (!m_jenc) {
+            LOG_MM_E(AICARD, "Create m_jenc instance fail");
+            return AX_FALSE;
+        }
 
-                /* Step-8-2: IVPS register JENC observers and init JENC attributes according to IVPS attributes */
-                IPC_MOD_INFO_T tDstMod = {AX_ID_VENC, 0, pJencInstance->GetChannel()};
-                vector<IPC_MOD_RELATIONSHIP_T> vecRelations;
-                if (!GetRelationsByDstMod(tDstMod, vecRelations)) {
-                    LOG_MM_E(PPL, "Can not find relation for dest module: (Module:%s, Grp:%d, Chn:%d)",
-                             ModType2String(tDstMod.eModType).c_str(), tDstMod.nGroup, tDstMod.nChannel);
-                    return AX_FALSE;
-                }
+        if (!m_jenc->Init()) {
+            break;
+        }
 
-                IPC_MOD_RELATIONSHIP_T& tRelation = vecRelations[0];
-                if (tRelation.bLink) {
-                    /* Under link mode, any module must transfer attributes, like resolution info, to jenc instance. */
-                    JPEG_CONFIG_T* pConfig = pJencInstance->GetChnCfg();
-                    if (E_PPL_MOD_TYPE_IVPS == tRelation.tSrcModChn.eModType) {
-                        pConfig->nWidth =
-                            m_vecIvpsInstance[tRelation.tSrcModChn.nGroup]->GetGrpCfg()->arrChnResolution[tRelation.tSrcModChn.nChannel][0];
-                        pConfig->nHeight =
-                            m_vecIvpsInstance[tRelation.tSrcModChn.nGroup]->GetGrpCfg()->arrChnResolution[tRelation.tSrcModChn.nChannel][1];
-                        pConfig->bFBC =
-                            m_vecIvpsInstance[tRelation.tSrcModChn.nGroup]->GetGrpCfg()->arrChnFBC[tRelation.tSrcModChn.nChannel][0] == 0
-                                ? AX_FALSE
-                                : AX_TRUE;
-                        pConfig->nSrcFrameRate =
-                            m_vecIvpsInstance[tRelation.tSrcModChn.nGroup]->GetGrpCfg()->arrChnFramerate[tRelation.tSrcModChn.nChannel][1];
-                    }
-                    pConfig->bLink = AX_TRUE;
-                } else {
-                    if (E_PPL_MOD_TYPE_IVPS == tRelation.tSrcModChn.eModType) {
-                        LOG_MM_E(AICARD, "Unspport unlink mode");
-                    }
-                }
+        if (!m_jenc->InitParams()) {
+            return AX_FALSE;
+        }
 
-                /* Step-8-3: Initialize JENC with latest attributes */
-                if (!pJencInstance->InitParams()) {
-                    return AX_FALSE;
-                }
-
-                /* Register unique capture channel, only the first setting will be effective */
-                CWebServer::GetInstance()->RegistUniCaptureChn(pJencInstance->GetChannel());
-
-                /* Step-8-4: Register observers */
-                m_vecWebObs.emplace_back(CObserverMaker::CreateObserver<CWebObserver>(CWebServer::GetInstance()));
-                pJencInstance->RegObserver(m_vecWebObs[m_vecWebObs.size() - 1].get());
-
-                /* Step-8-5: Save instance */
-                m_vecJencInstance.emplace_back(pJencInstance);
-
-                LOG_M_I(AICARD, "Init jenc channel %d successfully.", i);
-            }
-        } while (0);
-    }
+        m_jenc->RegObserver(mqtt_client_server.get());
+    } while (0);
 
     LOG_MM(AICARD, "---");
     return AX_TRUE;
@@ -462,7 +513,14 @@ AX_BOOL CAiCardMstBuilder::InitAiSwitchSimlator() {
 
 
 AX_BOOL CAiCardMstBuilder::InitMqttClient() {
-    /*TODO: support param from ini*/
+    //get ini config for ai switch
+    CAiSwitchConfig *pConfig = CAiSwitchConfig::GetInstance();
+    if (!pConfig->Init() || 0 == pConfig->GetAttrCount()) {
+        LOG_M_E(AICARD, "Parse ai switch config file failed.");
+        return AX_FALSE;
+    }
+
+    /*TODO: support param from ini for mqtt*/
     // CAiSwitchConfig *pConfig = CAiSwitchConfig::GetInstance();
     // if (!pConfig->Init() || 0 == pConfig->GetAttrCount()) {
     //     LOG_M_E(AICARD, "Parse ai switch config file failed.");
@@ -480,12 +538,16 @@ AX_BOOL CAiCardMstBuilder::InitMqttClient() {
         .port = 1883
     };
 
-    mqtt_client_info = std::make_unique<MqttClientInfo>();
-    if (!mqtt_client_info) {
-        LOG_MM_E(AICARD, "Create MqttClientInfo instance failed.");
+    mqtt_client_server = std::make_unique<MqttClientServer>();
+    if (!mqtt_client_server) {
+        LOG_MM_E(AICARD, "Create MqttClientServer instance failed.");
         return AX_FALSE;
     }
-    mqtt_client_info->Init(mqtt_config);
+
+    mqtt_client_server->Init(mqtt_config);
+
+    mqtt_client_server->BindTransfer(m_transHelper.get());
+
     return AX_TRUE;
 }
 
@@ -505,7 +567,7 @@ AX_BOOL CAiCardMstBuilder::DeInit(AX_VOID) {
         DESTORY_INSTANCE(m);
     }
 
-    // DESTORY_INSTANCE(m_transHelper);
+    DESTORY_INSTANCE(m_transHelper);
 
     for (auto &&m : m_arrDispatcher) {
         DESTORY_INSTANCE(m);
@@ -513,9 +575,10 @@ AX_BOOL CAiCardMstBuilder::DeInit(AX_VOID) {
     m_arrDispatcher.clear();
 
     /* If private pool, destory consumer before producer */
+    DESTORY_INSTANCE(m_jenc);
     DESTORY_INSTANCE(m_disp);
     DESTORY_INSTANCE(m_vdec);
-    DESTORY_INSTANCE(mqtt_client_info);
+    DESTORY_INSTANCE(mqtt_client_server);
 
 #undef DESTORY_INSTANCE
 
@@ -539,6 +602,23 @@ AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
             LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> DISP module is disabled <<<<<<<<<<<<<<<<<<<<<");
         }
 
+        /* Start Rtsp server */
+        if (!CAXRtspServer::GetInstance()->Start()) {
+            LOG_MM_E(AICARD, "Start rtsp server failed.");
+            return AX_FALSE;
+        }
+
+        
+        /* Start video Encoder module */
+        for (auto& pInstance : m_vecVencInstance) {
+            STAGE_START_PARAM_T tStartParam;
+            tStartParam.bStartProcessingThread = AX_TRUE;
+            if (!pInstance->Start(&tStartParam)) {
+                LOG_MM_E(AICARD, "Start venc failed.");
+                return AX_FALSE;
+            }
+        }
+        
         for (auto &m : m_arrDispatcher) {
             if (!m->Start()) {
                 return AX_FALSE;
@@ -554,14 +634,26 @@ AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
             return AX_FALSE;
         }
 
-        // if (m_transHelper) {
-        //     if (!m_transHelper->Start()) {
-        //         return AX_FALSE;
-        //     }
-        // } else {
-        //     LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module is disabled <<<<<<<<<<<<<<<<<<<<<");
-        //     return AX_FALSE;
-        // }
+        if (m_transHelper) {
+            if (!m_transHelper->Start()) {
+                return AX_FALSE;
+            }
+        } else {
+            LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module is disabled <<<<<<<<<<<<<<<<<<<<<");
+            return AX_FALSE;
+        }
+
+        if (m_jenc) {
+            STAGE_START_PARAM_T tStartParam;
+            tStartParam.bStartProcessingThread = AX_FALSE;
+            if (!m_jenc->Start(&tStartParam)) {
+                LOG_MM_E(AICARD, "Start jenc failed.");
+                return AX_FALSE;
+            }
+        } else {
+            LOG_MM_E(AICARD, "need init jenc firtst.");
+            return AX_FALSE;
+        }
 
         for (auto &&m : m_arrStreamer) {
             if (m) {
@@ -578,8 +670,8 @@ AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
         //     LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> AI SWITCH SIMULATOR module is disabled <<<<<<<<<<<<<<<<<<<<<");
         // }
 
-        if (mqtt_client_info) {
-            if (!mqtt_client_info->Start()) {
+        if (mqtt_client_server) {
+            if (!mqtt_client_server->Start()) {
                 return AX_FALSE;
             }
         } else {
@@ -631,13 +723,22 @@ AX_BOOL CAiCardMstBuilder::Stop(AX_VOID) {
         m->Clear();
     }
 
-    // if (m_transHelper) {
-    //     if (!m_transHelper->Stop()) {
-    //         LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop failed <<<<<<<<<<<<<<<<<<<<<");
-    //     } else {
-    //         LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop successfully <<<<<<<<<<<<<<<<<<<<<");
-    //     }
-    // }
+    if (m_transHelper) {
+        if (!m_transHelper->Stop()) {
+            LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop failed <<<<<<<<<<<<<<<<<<<<<");
+        } else {
+            LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop successfully <<<<<<<<<<<<<<<<<<<<<");
+        }
+    }
+
+
+    if (m_jenc) {
+        if (!m_jenc->Stop()) {
+            LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> Venc Jpeg module stop failed <<<<<<<<<<<<<<<<<<<<<");
+        } else {
+            LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> Venc Jpeg module stop successfully <<<<<<<<<<<<<<<<<<<<<");
+        }
+    }
 
     if (m_disp) {
         if (!m_disp->Stop()) {
@@ -655,8 +756,8 @@ AX_BOOL CAiCardMstBuilder::Stop(AX_VOID) {
     //     }
     // }
 
-    if (mqtt_client_info) {
-        if (!mqtt_client_info->Stop()) {
+    if (mqtt_client_server) {
+        if (!mqtt_client_server->Stop()) {
             LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> MQTT Client module stop failed <<<<<<<<<<<<<<<<<<<<<");
         } else {
             LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> MQTT Client module stop successfully <<<<<<<<<<<<<<<<<<<<<");

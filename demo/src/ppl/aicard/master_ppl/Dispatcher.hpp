@@ -13,9 +13,11 @@
 #include "AXFrame.hpp"
 #include "AXLockQ.hpp"
 #include "AXThread.hpp"
+#include "AXStage.hpp"
 #include "BmpOSD.hpp"
 #include "DetectResult.hpp"
 #include "IObserver.h"
+
 
 #define DRAW_FHVP_LABEL
 /**
@@ -43,6 +45,8 @@ public:
 
     AX_BOOL RegObserver(IObserver* pObs);
     AX_BOOL UnRegObserver(IObserver* pObs);
+    AX_BOOL RegObserver(CAXStage* pObs);
+    AX_BOOL UnRegObserver(CAXStage* pObs);
 
     AX_S32  GetGrp() { return m_vdGrp; };
 
@@ -55,6 +59,7 @@ protected:
     CAXLockQ<CAXFrame> m_qFrame;
     CAXThread m_DispatchThread;
     std::list<IObserver*> m_lstObs;
+    std::list<CAXStage*> s_lstObs;
     AX_S32 m_vdGrp{0};
 
 #ifdef DRAW_FHVP_LABEL

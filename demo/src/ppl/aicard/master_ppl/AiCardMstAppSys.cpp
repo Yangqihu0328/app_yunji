@@ -18,8 +18,11 @@
 #include "ax_engine_api.h"
 #include "ax_ivps_api.h"
 #include "ax_sys_api.h"
+#include "ax_venc_api.h"
 #include "ax_vdec_api.h"
 #include "ax_vo_api.h"
+#include "ax_venc_api.h"
+#include "OptionHelper.h"
 #include "AiCardMstConfig.hpp"
 
 using namespace std;
@@ -89,7 +92,9 @@ AX_BOOL CAiCardMstAppSys::InitSysMods(AX_VOID) {
     m_arrMods.clear();
     m_arrMods.reserve(8);
     m_arrMods.push_back({AX_FALSE, "SYS", bind(&CAiCardMstAppSys::APP_SYS_Init, this), bind(&CAiCardMstAppSys::APP_SYS_DeInit, this)});
+    m_arrMods.push_back({AX_FALSE, "VENC", bind(&CAiCardMstAppSys::APP_VENC_Init, this), bind(&CAiCardMstAppSys::APP_VENC_DeInit, this)});
     m_arrMods.push_back({AX_FALSE, "VDEC", bind(&CAiCardMstAppSys::APP_VDEC_Init, this), AX_VDEC_Deinit});
+    m_arrMods.push_back({AX_FALSE, "VENC", bind(&CAiCardMstAppSys::APP_VENC_Init, this), bind(&CAiCardMstAppSys::APP_VENC_DeInit, this)});
     m_arrMods.push_back({AX_FALSE, "IVPS", AX_IVPS_Init, AX_IVPS_Deinit});
 
 #ifndef __DUMMY_VO__
@@ -129,6 +134,34 @@ AX_BOOL CAiCardMstAppSys::DeInitSysMods(AX_VOID) {
 
     m_arrMods.clear();
     return AX_TRUE;
+}
+
+AX_S32 CAiCardMstAppSys::APP_VENC_Init() {
+    AX_S32 nRet = AX_SUCCESS;
+
+    AX_VENC_MOD_ATTR_T tModAttr;
+    memset(&tModAttr, 0, sizeof(AX_VENC_MOD_ATTR_T));
+    tModAttr.enVencType = AX_VENC_MULTI_ENCODER;
+    tModAttr.stModThdAttr.bExplicitSched = AX_FALSE;
+    tModAttr.stModThdAttr.u32TotalThreadNum = 1;
+
+    nRet = AX_VENC_Init(&tModAttr);
+    if (AX_SUCCESS != nRet) {
+        return nRet;
+    }
+
+    return AX_SUCCESS;
+}
+
+AX_S32 CAiCardMstAppSys::APP_VENC_DeInit() {
+    AX_S32 nRet = AX_SUCCESS;
+
+    nRet = AX_VENC_Deinit();
+    if (AX_SUCCESS != nRet) {
+        return nRet;
+    }
+
+    return AX_SUCCESS;
 }
 
 AX_S32 CAiCardMstAppSys::APP_VDEC_Init(AX_VOID) {

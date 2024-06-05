@@ -9,6 +9,7 @@
  **************************************************************************************************/
 
 #include "FramerateCtrlHelper.h"
+#include "stdio.h"
 
 CFramerateCtrlHelper::CFramerateCtrlHelper(AX_U32 nSrcFramerate, AX_U32 nDstFramerate)
     : m_nSrcFramerate(nSrcFramerate), m_nDstFramerate(nDstFramerate), m_nSeq(0) {

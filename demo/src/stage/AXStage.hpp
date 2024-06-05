@@ -43,9 +43,9 @@ public:
     virtual AX_BOOL Start(STAGE_START_PARAM_PTR pStartParams);
 
     virtual AX_BOOL EnqueueFrame(CAXFrame* pFrame);
+    virtual AX_BOOL ProcessFrame(CAXFrame* pFrame);
 
 protected:
-    virtual AX_BOOL ProcessFrame(CAXFrame* pFrame);
     virtual AX_VOID StageThreadFunc(AX_VOID* pArg);
 
 protected:

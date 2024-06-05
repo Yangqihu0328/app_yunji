@@ -21,10 +21,16 @@
 #include "VideoDecoder.hpp"
 #include "Vo.hpp"
 #include "TransferHelper.hpp"
+#include "EncoderOptionHelper.h"
 #include "AiSwitchSimulator.hpp"
+#include "VideoEncoder.h"
+#include "VencObserver.h"
+#include "AXRtspServer.h"
+#include "AXRtspObserver.h"
+#include "BaseLinkage.h"
 
 //3rd
-#include "MqttClientInfo.hpp"
+#include "MqttClientServer.hpp"
 
 using namespace aicard_mst;
 
@@ -43,6 +49,7 @@ protected:
 
     AX_BOOL InitStreamer(const STREAM_CONFIG_T& streamConfig);
     AX_BOOL InitDisplay(const DISPVO_CONFIG_T& dispVoConfig);
+    AX_BOOL InitEncoder(STREAM_CONFIG_T& streamConfig);
     AX_BOOL InitDispatcher(const std::string& strFontPath);
     AX_BOOL InitDecoder(const STREAM_CONFIG_T& streamConfig);
     AX_BOOL InitJenc();
@@ -53,14 +60,19 @@ protected:
 protected:
     CAiCardMstAppSys m_sys;
     AX_U32 m_nDecodeGrpCount{0};
+    AX_S32 m_nScenario{0};
     std::unique_ptr<CVideoDecoder> m_vdec;
     std::unique_ptr<CVo> m_disp;
+    std::unique_ptr<CJpegEncoder> m_jenc;
     std::vector<std::unique_ptr<CDispatcher>> m_arrDispatcher;
     IObserverUniquePtr m_dispObserver;
     std::vector<IObserverUniquePtr> m_arrDispatchObserver;
     std::vector<IStreamerHandlerPtr> m_arrStreamer;
     std::unique_ptr<CTransferHelper> m_transHelper;
     std::unique_ptr<CAiSwitchSimulator> m_aiSwitchSimulator;
-    std::unique_ptr<MqttClientInfo> mqtt_client_info;
+    std::vector<CVideoEncoder*> m_vecVencInstance;
+    std::vector<std::unique_ptr<IObserver>> m_vencObservers;
+    std::vector<std::unique_ptr<IObserver>> m_vecRtspObs;
+    std::unique_ptr<MqttClientServer> mqtt_client_server;
     
 };

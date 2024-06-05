@@ -86,9 +86,9 @@ public:
     }
 
     AX_VOID SetPauseFlag(AX_BOOL bGetFlag);
+    virtual AX_BOOL ProcessFrame(CAXFrame* pFrame) override;
 
 protected:
-    virtual AX_BOOL ProcessFrame(CAXFrame* pFrame) override;
     AX_VOID NotifyAll(AX_U32 nChannel, AX_VOID* pStream);
 
     AX_BOOL ResetQFactor(AX_U32 nQFactor);
