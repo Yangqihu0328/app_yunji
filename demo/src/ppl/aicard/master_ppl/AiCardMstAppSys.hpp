@@ -40,6 +40,8 @@ protected:
 
     virtual AX_S32 APP_SYS_Init(AX_VOID);
     virtual AX_S32 APP_SYS_DeInit(AX_VOID);
+    virtual AX_S32 APP_VENC_Init(AX_VOID);
+    virtual AX_S32 APP_VENC_DeInit(AX_VOID);
     virtual AX_S32 APP_VDEC_Init(AX_VOID);
 
 private:
