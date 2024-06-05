@@ -32,9 +32,9 @@ public:
             return AX_TRUE;
         }
 
-        if (m_nTargetPipeChannel != (eTarget << 24 | nGrp << 16 | nChn)) {
-            return AX_TRUE;
-        }
+        // if (m_nTargetPipeChannel != (eTarget << 24 | nGrp << 16 | nChn)) {
+        //     return AX_TRUE;
+        // }
 
         return m_pSink->EnqueueFrame(pFrame);
     }

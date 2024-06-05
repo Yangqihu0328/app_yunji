@@ -22,8 +22,31 @@
 #include "Vo.hpp"
 #include "TransferHelper.hpp"
 #include "AiSwitchSimulator.hpp"
+#include "VideoEncoder.h"
+#include "VencObserver.h"
+#include "AXRtspServer.h"
+#include "AXRtspObserver.h"
+#include "BaseLinkage.h"
+#include "linker.hpp"
 
 using namespace aicard_mst;
+
+typedef struct _IPC_MOD_RELATIONSHIP_T {
+    AX_U32 nIndex;
+    IPC_MOD_INFO_T tSrcModChn;
+    IPC_MOD_INFO_T tDstModChn;
+    AX_BOOL bLink;
+
+    _IPC_MOD_RELATIONSHIP_T() {
+        memset(this, 0, sizeof(_IPC_MOD_RELATIONSHIP_T));
+        tSrcModChn.eModType = E_PPL_MOD_TYPE_MAX;
+        tDstModChn.eModType = E_PPL_MOD_TYPE_MAX;
+    }
+
+    AX_BOOL Valid() const {
+        return (tSrcModChn.eModType != E_PPL_MOD_TYPE_MAX && tDstModChn.eModType != E_PPL_MOD_TYPE_MAX) ? AX_TRUE : AX_FALSE;
+    }
+} IPC_MOD_RELATIONSHIP_T, PPL_MOD_RELATIONSHIP_T;
 
 class CAiCardMstBuilder final {
 public:
@@ -40,6 +63,7 @@ protected:
 
     AX_BOOL InitStreamer(const STREAM_CONFIG_T& streamConfig);
     AX_BOOL InitDisplay(const DISPVO_CONFIG_T& dispVoConfig);
+    AX_BOOL InitEncoder(STREAM_CONFIG_T& streamConfig);
     AX_BOOL InitDispatcher(const std::string& strFontPath);
     AX_BOOL InitDecoder(const STREAM_CONFIG_T& streamConfig);
     AX_BOOL InitTransHelper();
@@ -56,4 +80,9 @@ protected:
     std::vector<IStreamerHandlerPtr> m_arrStreamer;
     std::unique_ptr<CTransferHelper> m_transHelper;
     std::unique_ptr<CAiSwitchSimulator> m_aiSwitchSimulator;
+
+    std::vector<CVideoEncoder*> m_vecVencInstance;
+    std::vector<std::unique_ptr<IObserver>> m_vencObservers;
+    std::vector<std::unique_ptr<IObserver>> m_vecRtspObs;
+
 };

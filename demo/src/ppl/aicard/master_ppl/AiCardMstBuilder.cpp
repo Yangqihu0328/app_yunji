@@ -18,6 +18,7 @@
 #include "StreamerFactory.hpp"
 #include "VoObserver.hpp"
 #include "make_unique.hpp"
+#include "EncoderOptionHelper.h"
 
 #define AICARD "AICARD_MST"
 using namespace std;
@@ -27,6 +28,7 @@ using namespace std;
 #define VDEC_CHN2 2
 #define DISPVO_CHN VDEC_CHN1
 #define DETECT_CHN VDEC_CHN2
+#define ENC_MAX_BUF_SIZE (3840 * 2160 * 3 / 2)
 
 AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
     CAiCardMstConfig *pConfig = CAiCardMstConfig::GetInstance();
@@ -61,6 +63,11 @@ AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
     /* [5]: Init detector and observer */
     CDetectResult::GetInstance()->Clear();
 
+    /* Init video Encoder and observer */
+    if (!InitEncoder(streamConfig)) {
+        return AX_FALSE;
+    }
+
     /* [6]: Init dispatchers */
     if (!InitDispatcher(dispVoConfig.strBmpPath)) {
         return AX_FALSE;
@@ -76,6 +83,11 @@ AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
     streamConfig.nChnW[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Width;
     streamConfig.nChnH[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Height;
     if (!InitDecoder(streamConfig)) {
+        return AX_FALSE;
+    }
+
+    /* Step-14: Initialize RTSP */
+    if (!CAXRtspServer::GetInstance()->Init()) {
         return AX_FALSE;
     }
 
@@ -152,6 +164,62 @@ AX_BOOL CAiCardMstBuilder::InitDisplay(const DISPVO_CONFIG_T &dispVoConfig) {
     return AX_TRUE;
 }
 
+AX_BOOL CAiCardMstBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
+    int encoding_num = streamConfig.nDecodeGrps > MAX_VENC_CHANNEL_NUM ? MAX_VENC_CHANNEL_NUM : streamConfig.nDecodeGrps;
+    m_vencObservers.resize(encoding_num);
+    m_vecRtspObs.resize(encoding_num);
+    for (AX_U8 i = 0; i < encoding_num; i++) {    
+        VIDEO_CONFIG_T tConfig;
+        do {
+                tConfig.nChannel = i;
+                tConfig.ePayloadType = PT_H264;
+                tConfig.nGOP = 30;
+                tConfig.fFramerate = (AX_F32)30;
+                tConfig.nWidth = m_disp->GetVideoLayout()[0].u32Width;
+                tConfig.nHeight = m_disp->GetVideoLayout()[0].u32Height;
+                tConfig.nBufSize = ENC_MAX_BUF_SIZE;
+                tConfig.nBitrate =  8192;
+                tConfig.bFBC = AX_FALSE;
+                tConfig.nInFifoDepth = 1;
+                tConfig.nOutFifoDepth = 1;
+                tConfig.bLink = AX_FALSE;
+                tConfig.eRcType = AX_VENC_RC_MODE_H264CBR;
+                tConfig.eMemSource = AX_MEMORY_SOURCE_CMM;
+                tConfig.stEncodeCfg[0].ePayloadType = tConfig.ePayloadType;
+                tConfig.stEncodeCfg[0].stRCInfo[0].eRcType = AX_VENC_RC_MODE_H264CBR;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMinQp = 0;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMaxQp = 51;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMinIQp = 0;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIQp = 51;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMinIProp = 10;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIProp = 40;
+                tConfig.stEncodeCfg[0].stRCInfo[0].nIntraQpDelta = -2;  
+                CVideoEncoder* pVencInstance = new CVideoEncoder(tConfig);
+                
+                if (!pVencInstance->Init()) {
+                    LOG_MM_E(AICARD, "Init video Encoder fail!!!!");
+                    break;
+                }
+
+                if (!pVencInstance->InitParams()) {
+                    LOG_MM_E(AICARD, "Init venc params %d failed.", tConfig.nChannel);
+                    return AX_FALSE;
+                }
+                
+                m_vencObservers[i] = CObserverMaker::CreateObserver<CVencObserver>(pVencInstance);
+                
+                /* register rtsp  */
+                m_vecRtspObs[i] = CObserverMaker::CreateObserver<CAXRtspObserver>(CAXRtspServer::GetInstance());
+                
+                pVencInstance->RegObserver(m_vecRtspObs[i].get()); // register each rtsp observer to each encoder instance 
+                
+                m_vecVencInstance.emplace_back(pVencInstance);
+        } while (0);
+    }
+
+    return AX_TRUE;
+}
+
 AX_BOOL CAiCardMstBuilder::InitDispatcher(const string &strFontPath) {
     m_arrDispatcher.resize(m_nDecodeGrpCount);
     m_arrDispatchObserver.resize(m_nDecodeGrpCount);
@@ -163,6 +231,10 @@ AX_BOOL CAiCardMstBuilder::InitDispatcher(const string &strFontPath) {
         } else {
             if (m_dispObserver) {
                 m_arrDispatcher[i]->RegObserver(m_dispObserver.get());
+            }
+            if (m_vencObservers.size() && i < MAX_VENC_CHANNEL_NUM) {
+                
+                m_arrDispatcher[i]->RegObserver(m_vencObservers[i].get());
             }
         }
 
@@ -432,6 +504,23 @@ AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
             LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> DISP module is disabled <<<<<<<<<<<<<<<<<<<<<");
         }
 
+        /* Start Rtsp server */
+        if (!CAXRtspServer::GetInstance()->Start()) {
+            LOG_MM_E(AICARD, "Start rtsp server failed.");
+            return AX_FALSE;
+        }
+
+        
+        /* Start video Encoder module */
+        for (auto& pInstance : m_vecVencInstance) {
+            STAGE_START_PARAM_T tStartParam;
+            tStartParam.bStartProcessingThread = AX_TRUE;
+            if (!pInstance->Start(&tStartParam)) {
+                LOG_MM_E(AICARD, "Start venc failed.");
+                return AX_FALSE;
+            }
+        }
+        
         for (auto &m : m_arrDispatcher) {
             if (!m->Start()) {
                 return AX_FALSE;
