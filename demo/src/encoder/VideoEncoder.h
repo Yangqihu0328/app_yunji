@@ -16,7 +16,7 @@
 #include "ax_venc_comm.h"
 #include "ax_venc_rc.h"
 
-#define MAX_VENC_CHANNEL_NUM (16)
+#define MAX_VENC_CHANNEL_NUM (33)
 #define APP_ENCODER_TYPE_MAX 4
 #define APP_RC_TYPE_MAX 4
 #define APP_ENCODE_PARSE_INVALID (0)

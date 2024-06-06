@@ -162,7 +162,6 @@ AX_VOID CVideoEncoder::NotifyAll(AX_U32 nChannel, AX_VOID* pStream) {
     if (nullptr == pStream) {
         return;
     }
-
     for (vector<IObserver*>::iterator it = m_vecObserver.begin(); it != m_vecObserver.end(); it++) {
         (*it)->OnRecvData(E_OBS_TARGET_TYPE_VENC, m_tVideoConfig.nPipeSrc, nChannel, pStream);
     }

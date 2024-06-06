@@ -107,7 +107,7 @@ CFLAGS              := $(CPPFLAGS) -Wall -Wl,-rpath-link=$(LIB_PATH):$(DEMO_BIN_
 CFLAGS              += -DAPP_BUILD_VERSION=\"$(SDK_VERSION)\"
 
 CFLAGS             += -D__RTSP_UNSUPPORT__
-CFLAGS             += -DSLT
+# CFLAGS             += -DSLT
 
 # Independant debug
 # CFLAGS             += -D__MASTER_DEBUG__

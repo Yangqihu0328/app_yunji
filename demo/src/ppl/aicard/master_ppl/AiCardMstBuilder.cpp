@@ -7,8 +7,6 @@
  * written consent of Axera Semiconductor (Shanghai) Co., Ltd.
  *
  **************************************************************************************************/
-
-#include <stdlib.h>
 #include "AiCardMstBuilder.hpp"
 
 #include "AXPoolManager.hpp"
@@ -63,6 +61,7 @@ AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
 
     /* [5]: Init detector and observer */
     CDetectResult::GetInstance()->Clear();
+
 
     /* [6]: Init Mqtt client */
     if (!InitMqttClient()) {
@@ -182,7 +181,7 @@ AX_BOOL CAiCardMstBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
     for (AX_U8 i = 0; i < encoding_num; i++) {    
         VIDEO_CONFIG_T tConfig;
         do {
-                tConfig.nChannel = i;
+                tConfig.nChannel = i+1;
                 tConfig.ePayloadType = PT_H264;
                 tConfig.nGOP = 30;
                 tConfig.fFramerate = (AX_F32)30;
@@ -231,46 +230,6 @@ AX_BOOL CAiCardMstBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
     return AX_TRUE;
 }
 
-AX_BOOL CAiCardMstBuilder::InitDispatcher(const string &strFontPath) {
-    m_arrDispatcher.resize(m_nDecodeGrpCount);
-    m_arrDispatchObserver.resize(m_nDecodeGrpCount);
-    for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
-        m_arrDispatcher[i] = make_unique<CDispatcher>();
-        if (!m_arrDispatcher[i]) {
-            LOG_MM_E(AICARD, "Create dispatcher %d instance fail", i);
-            return AX_FALSE;
-        } else {
-            if (m_dispObserver) {
-                m_arrDispatcher[i]->RegObserver(m_dispObserver.get());
-            }
-            
-            if (m_vencObservers.size() && i < MAX_VENC_CHANNEL_NUM) {
-                m_arrDispatcher[i]->RegObserver(m_vencObservers[i].get());
-            }
-
-            if (m_jenc) {
-                m_arrDispatcher[i]->RegObserver(m_jenc.get());
-            }
-        }
-
-        DISPATCH_ATTR_T stAttr;
-        stAttr.vdGrp = i;
-        stAttr.strBmpFontPath = strFontPath;
-        stAttr.nDepth = -1;
-        if (!m_arrDispatcher[i]->Init(stAttr)) {
-            return AX_FALSE;
-        }
-
-        m_arrDispatchObserver[i] = CObserverMaker::CreateObserver<CDispatchObserver>(m_arrDispatcher[i].get(), DISPVO_CHN);
-        if (!m_arrDispatchObserver[i]) {
-            LOG_MM_E(AICARD, "Create dispatch %d observer instance fail", i);
-            return AX_FALSE;
-        }
-    }
-
-    return AX_TRUE;
-}
-
 AX_BOOL CAiCardMstBuilder::InitJenc() {
     LOG_MM(AICARD, "+++");
 
@@ -308,6 +267,46 @@ AX_BOOL CAiCardMstBuilder::InitJenc() {
     } while (0);
 
     LOG_MM(AICARD, "---");
+    return AX_TRUE;
+}
+
+AX_BOOL CAiCardMstBuilder::InitDispatcher(const string &strFontPath) {
+    m_arrDispatcher.resize(m_nDecodeGrpCount);
+    m_arrDispatchObserver.resize(m_nDecodeGrpCount);
+    for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
+        m_arrDispatcher[i] = make_unique<CDispatcher>();
+        if (!m_arrDispatcher[i]) {
+            LOG_MM_E(AICARD, "Create dispatcher %d instance fail", i);
+            return AX_FALSE;
+        } else {
+            if (m_dispObserver) {
+                m_arrDispatcher[i]->RegObserver(m_dispObserver.get());
+            }
+
+            if (m_vencObservers.size() && i < MAX_VENC_CHANNEL_NUM) {
+                m_arrDispatcher[i]->RegObserver(m_vencObservers[i].get());
+            }
+
+            if (m_jenc) {
+                m_arrDispatcher[i]->RegObserver(m_jenc.get());
+            }
+        }
+
+        DISPATCH_ATTR_T stAttr;
+        stAttr.vdGrp = i;
+        stAttr.strBmpFontPath = strFontPath;
+        stAttr.nDepth = -1;
+        if (!m_arrDispatcher[i]->Init(stAttr)) {
+            return AX_FALSE;
+        }
+
+        m_arrDispatchObserver[i] = CObserverMaker::CreateObserver<CDispatchObserver>(m_arrDispatcher[i].get(), DISPVO_CHN);
+        if (!m_arrDispatchObserver[i]) {
+            LOG_MM_E(AICARD, "Create dispatch %d observer instance fail", i);
+            return AX_FALSE;
+        }
+    }
+
     return AX_TRUE;
 }
 
@@ -532,7 +531,7 @@ AX_BOOL CAiCardMstBuilder::InitMqttClient() {
     MQTT_CONFIG_T mqtt_config{
         .topic = "Yj_HeartBeat",
         .sub_topic = "YJ_test",
-        .hostname = "192.168.0.62",
+        .hostname = "192.168.0.79",
         .client_name = "YJ_aibox", //YJ_aibox
         .version = 3,
         .port = 1883

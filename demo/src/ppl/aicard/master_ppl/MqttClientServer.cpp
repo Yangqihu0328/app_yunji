@@ -328,7 +328,7 @@ AX_VOID MqttClientServer::SendAlarmMsg(MQTT::Message &message) {
         LOG_MM_E(MQTT_CLIENT, "Error %d from sending QoS 0 message", rc);
     LOG_MM_D(MQTT_CLIENT, "topic is %s", topic.c_str());
     //must modify packet type
-    client->yield(1*1000);
+    client->yield(3*1000);
 }
 
 AX_BOOL MqttClientServer::Init(MQTT_CONFIG_T &mqtt_config) {
