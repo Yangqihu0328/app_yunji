@@ -14,17 +14,16 @@ CTransferHelper* m_pTransferHelper = nullptr;
 
 static void messageArrived(MQTT::MessageData& md) {
     MQTT::Message &message = md.message;
-
-    printf("Message %d arrived: qos %d, retained %d, dup %d, packetid %d\n", 
-		++arrivedcount, message.qos, message.retained, message.dup, message.id);
-    printf("Payload %.*s\n", (int)message.payloadlen, (char*)message.payload);
-
-
+    LOG_MM_D(MQTT_CLIENT, "Message %d arrived: qos %d, retained %d, dup %d, packetid %d.",
+            ++arrivedcount, message.qos, message.retained, message.dup, message.id);
+    LOG_MM_D(MQTT_CLIENT, "Payload %.*s.", (int)message.payloadlen, (char*)message.payload);
     char * msg =  (char*)message.payload;
-    AI_CARD_AI_SWITCH_ATTR_T tAiAttr;
-    CAiSwitchConfig::GetInstance()->GetNextAttr(tAiAttr);
     if (!strcmp(msg, "swtich_next_algo")) {
-        m_pTransferHelper->SendAiAttr(tAiAttr);
+        AI_CARD_AI_SWITCH_ATTR_T tAiAttr;
+        CAiSwitchConfig::GetInstance()->GetNextAttr(tAiAttr);
+        if (m_pTransferHelper != nullptr) {
+            m_pTransferHelper->SendAiAttr(tAiAttr);
+        }
     }
 }
 
@@ -295,7 +294,7 @@ AX_VOID MqttClientServer::SendBoardHeart(MQTT::Message &message) {
         LOG_MM_E(MQTT_CLIENT, "Error %d from sending QoS 0 message", rc);
     LOG_MM_D(MQTT_CLIENT, "topic is %s", topic.c_str());
     //must modify packet type
-    client->yield(3*1000);
+    client->yield(1*1000);
 }
 
 AX_VOID MqttClientServer::SendAlarmMsg(MQTT::Message &message) {
@@ -328,7 +327,7 @@ AX_VOID MqttClientServer::SendAlarmMsg(MQTT::Message &message) {
         LOG_MM_E(MQTT_CLIENT, "Error %d from sending QoS 0 message", rc);
     LOG_MM_D(MQTT_CLIENT, "topic is %s", topic.c_str());
     //must modify packet type
-    client->yield(3*1000);
+    client->yield(5*1000);
 }
 
 AX_BOOL MqttClientServer::Init(MQTT_CONFIG_T &mqtt_config) {

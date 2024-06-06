@@ -62,50 +62,45 @@ AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
     /* [5]: Init detector and observer */
     CDetectResult::GetInstance()->Clear();
 
-
-    /* [6]: Init Mqtt client */
-    if (!InitMqttClient()) {
-        return AX_FALSE;
-    }
-
-    /*[7]: jenc initialize */
-    if (!InitJenc()) {
-        return AX_FALSE;
-    }
-
-    /* [8]: Init video Encoder and observer */
-    if (!InitEncoder(streamConfig)) {
-        return AX_FALSE;
-    }
-
-    /* [8]: Init dispatchers */
-    if (!InitDispatcher(dispVoConfig.strBmpPath)) {
-        return AX_FALSE;
-    }
-
-    /* [9]: Init data sender. */
+    /* [6]: Init data sender. */
     /* Transfer module must be initialized before Decoder to make sure that register option for FileStreamer observer is earlier */
     if (!InitTransHelper()) {
         return AX_FALSE;
     }
 
-    /* [10]: Init video decoder */
+    /* [7]: Init Mqtt client */
+    /* mqtt must before jpeg */
+    if (!InitMqttClient()) {
+        return AX_FALSE;
+    }
+
+    /* [8]: Initialize RTSP */
+    if (!CAXRtspServer::GetInstance()->Init()) {
+        return AX_FALSE;
+    }
+
+    /*[9]: jenc initialize */
+    if (!InitJenc()) {
+        return AX_FALSE;
+    }
+
+    /* [10]: Init video Encoder and observer */
+    if (!InitEncoder(streamConfig)) {
+        return AX_FALSE;
+    }
+
+    /* [11]: Init dispatchers */
+    /* dispatcher must before jpeg, encoder and mqtt */
+    if (!InitDispatcher(dispVoConfig.strBmpPath)) {
+        return AX_FALSE;
+    }
+
+    /* [12]: Init video decoder */
     streamConfig.nChnW[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Width;
     streamConfig.nChnH[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Height;
     if (!InitDecoder(streamConfig)) {
         return AX_FALSE;
     }
-
-    /* Step-14: Initialize RTSP */
-    if (!CAXRtspServer::GetInstance()->Init()) {
-        return AX_FALSE;
-    }
-
-    /* [9]: Init AI switch simulator */
-    // if (!InitAiSwitchSimlator()) {
-    //     return AX_FALSE;
-    // }
-
     return AX_TRUE;
 }
 
@@ -504,7 +499,7 @@ AX_BOOL CAiCardMstBuilder::InitAiSwitchSimlator() {
             return AX_FALSE;
         }
 
-        m_aiSwitchSimulator->BindTransfer(m_transHelper.get());
+        m_aiSwitchSimulator->(m_transHelper.get());
     }
 
     return AX_TRUE;
@@ -545,7 +540,7 @@ AX_BOOL CAiCardMstBuilder::InitMqttClient() {
 
     mqtt_client_server->Init(mqtt_config);
 
-    mqtt_client_server->BindTransfer(m_transHelper.get());
+    mqtt_client_server->(m_transHelper.get());
 
     return AX_TRUE;
 }
