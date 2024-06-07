@@ -499,7 +499,7 @@ AX_BOOL CAiCardMstBuilder::InitAiSwitchSimlator() {
             return AX_FALSE;
         }
 
-        m_aiSwitchSimulator->(m_transHelper.get());
+        m_aiSwitchSimulator->BindTransfer(m_transHelper.get());
     }
 
     return AX_TRUE;
@@ -540,7 +540,7 @@ AX_BOOL CAiCardMstBuilder::InitMqttClient() {
 
     mqtt_client_server->Init(mqtt_config);
 
-    mqtt_client_server->(m_transHelper.get());
+    mqtt_client_server->BindTransfer(m_transHelper.get());
 
     return AX_TRUE;
 }
