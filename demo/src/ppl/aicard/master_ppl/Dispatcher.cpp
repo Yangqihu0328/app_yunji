@@ -27,24 +27,22 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
     static int count = 0;
     while (m_DispatchThread.IsRunning()) {
         if (m_qFrame.Pop(axFrame, -1)) {
-            // if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
-            if (1) {
+            if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
                 /* CPU draw rectange, needs virtual address */
                 if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
                     axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
                 }
     
-                //测试，每3s保存一张图片
-                if (count == (30*3)) {
+                //TODO:测试，每10s保存一张图片,进行结果分析，然后进行告警。
+                if (count == (30*10)) {
                     for (auto& m : s_lstObs) {
                         m->ProcessFrame(&axFrame);
-                        // printf("ddddddddddd222\n");
                     }
                     count = 0; 
                 }
                 count++;
 
-                // DrawBox(axFrame, fhvp);
+                DrawBox(axFrame, fhvp);
             }
 
             for (auto& m : m_lstObs) {
