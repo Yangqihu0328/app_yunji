@@ -31,6 +31,7 @@ SRCCPPS             := $(wildcard $(SRC_PATH)/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/encoder/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/vdec/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/vdec/stream/FileStreamer.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/vdec/stream/RtspStreamer.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/log/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/stage/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/vo/*.cpp) \
@@ -39,6 +40,7 @@ SRCCPPS             := $(wildcard $(SRC_PATH)/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/FramerateCtrlHelper.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/ElapsedTimer.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/SpsParser.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/utils/ping4.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/yuv/BmpOSD.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/yuv/YuvHandler.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/rtsp/*.cpp) \
@@ -53,6 +55,7 @@ SRCCPPS             := $(wildcard $(SRC_PATH)/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/option_helper/OsdOptionHelper.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/option_helper/AudioOptionHelper.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/audio/*.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/ppl/nvr/hal/rtspdamon.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/config/ini/*.cpp)
 
 CINCLUDE            := -I$(SRC_PATH) \
@@ -82,6 +85,7 @@ CINCLUDE            := -I$(SRC_PATH) \
                        -I$(DEMO_SRC_PATH)/subfunc/eocw \
                        -I$(DEMO_SRC_PATH)/audio \
                        -I$(DEMO_SRC_PATH)/webserver \
+                       -I$(DEMO_SRC_PATH)/ppl/nvr/hal \
                        -I$(3RD_PATH)/inc/appweb \
                        -I$(3RD_PATH)/inc/live/groupsock \
                        -I$(3RD_PATH)/inc/live/liveMedia \
@@ -106,7 +110,7 @@ CPPFLAGS            := --std=c++14
 CFLAGS              := $(CPPFLAGS) -Wall -Wl,-rpath-link=$(LIB_PATH):$(DEMO_BIN_PATH)/lib:$(3RD_PATH)/lib:$(THIRD_PARTY_PATH)/ffmpeg/lib
 CFLAGS              += -DAPP_BUILD_VERSION=\"$(SDK_VERSION)\"
 
-CFLAGS             += -D__RTSP_UNSUPPORT__
+# CFLAGS             += -D__RTSP_UNSUPPORT__
 # CFLAGS             += -DSLT
 
 # Independant debug
