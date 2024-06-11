@@ -219,20 +219,20 @@ AX_VOID MqttClientServer::SendBoardHeart(MQTT::Message &message) {
     int temperature = -1;
     int ret = MqttGetTemperature(temperature);
     if (ret == -1) {
-        LOG_MM_E(MQTT_CLIENT, "MqttGetTemperature fail.");
+        LOG_MM_D(MQTT_CLIENT, "MqttGetTemperature fail.");
     }
     
     const std::string interfaceName = "eth0";
     std::string ipAddress;
     ret = MqttGetIP(interfaceName, ipAddress);
     if (ret == -1) {
-        LOG_MM_E(MQTT_CLIENT, "MqttGetIP 11 fail.");
+        LOG_MM_D(MQTT_CLIENT, "MqttGetIP fail.");
     }
 
     MemoryInfo memInfo = {0};
     ret = MqttMemoryInfo(memInfo);
     if (ret == -1) {
-        LOG_MM_E(MQTT_CLIENT, "MqttGetIP fail.");
+        LOG_MM_D(MQTT_CLIENT, "MqttMemoryInfo fail.");
     }
 
     FlashInfo falsh_info = {0};
@@ -291,7 +291,7 @@ AX_VOID MqttClientServer::SendBoardHeart(MQTT::Message &message) {
     
     int rc = client->publish(topic.c_str(), message);
     if (rc != 0)
-        LOG_MM_E(MQTT_CLIENT, "Error %d from sending QoS 0 message", rc);
+        LOG_MM_D(MQTT_CLIENT, "Error %d from sending QoS 0 message", rc);
     LOG_MM_D(MQTT_CLIENT, "topic is %s", topic.c_str());
     //must modify packet type
     client->yield(1*1000);
@@ -324,7 +324,7 @@ AX_VOID MqttClientServer::SendAlarmMsg(MQTT::Message &message) {
     
     int rc = client->publish(topic.c_str(), message);
     if (rc != 0)
-        LOG_MM_E(MQTT_CLIENT, "Error %d from sending QoS 0 message", rc);
+        LOG_MM_D(MQTT_CLIENT, "Error %d from sending QoS 0 message", rc);
     LOG_MM_D(MQTT_CLIENT, "topic is %s", topic.c_str());
     //must modify packet type
     client->yield(5*1000);
