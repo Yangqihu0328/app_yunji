@@ -267,7 +267,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
     if (!m_arrFrameQ) {
         LOG_MM_E(DETECTOR, "alloc queue fail");
         return AX_FALSE;
-    } else {
+    } else { 
         for (AX_U32 i = 0; i < stAttr.nGrpCount; ++i) {
             m_arrFrameQ[i].SetCapacity(10);
         }

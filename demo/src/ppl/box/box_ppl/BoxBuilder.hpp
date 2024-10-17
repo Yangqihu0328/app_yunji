@@ -23,6 +23,9 @@
 #include "VideoDecoder.hpp"
 #include "Vo.hpp"
 #include "linker.hpp"
+
+//3rd
+#include "MqttClient.hpp"
 using namespace boxconf;
 
 enum class AX_DISPDEV_TYPE {
@@ -50,6 +53,7 @@ protected:
     AX_BOOL InitDispRecorder(const std::string& strRecordPath, AX_S32 nMaxRecordSize, AX_BOOL bMP4);
 
     AX_BOOL InitDispatcher(const string& strFontPath, AX_U32 nDispType);
+    AX_BOOL InitMqtt();
 
     AX_BOOL InitDetector(const DETECT_CONFIG_T& detectConfig);
     AX_BOOL InitDecoder(const STREAM_CONFIG_T& streamConfig);
@@ -72,6 +76,7 @@ protected:
 
     std::vector<std::unique_ptr<CDispatcher>> m_arrDispatcher;
     std::vector<IObserverUniquePtr> m_arrDispatchObserver;
+    std::unique_ptr<MqttClient> mqtt_client;
 
     // primary
     std::unique_ptr<CVo> m_disp;
@@ -80,6 +85,7 @@ protected:
     // secondary
     std::unique_ptr<CVo> m_dispSecondary;
     IObserverUniquePtr m_dispObserverSecondary;
+    
 
     CLinker m_linker;
 

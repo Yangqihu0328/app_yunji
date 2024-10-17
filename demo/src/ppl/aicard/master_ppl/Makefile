@@ -38,6 +38,7 @@ SRCCPPS             := $(wildcard $(SRC_PATH)/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/pcie/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/pool/AXPoolManager.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/FramerateCtrlHelper.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/utils/DiskHelper.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/ElapsedTimer.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/SpsParser.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/ping4.cpp) \
@@ -91,6 +92,7 @@ CINCLUDE            := -I$(SRC_PATH) \
                        -I$(3RD_PATH)/inc/live/liveMedia \
                        -I$(3RD_PATH)/inc/live/UsageEnvironment \
                        -I$(3RD_PATH)/inc/live/BasicUsageEnvironment \
+                       -I$(3RD_PATH)/inc/http \
                        -I$(THIRD_PARTY_PATH)/ffmpeg/include \
                        -I$(MQTT_INCLUDE) \
                        -I$(JSON_INCLUDE) \
@@ -121,6 +123,7 @@ CFLAGS              += -DAPP_BUILD_VERSION=\"$(SDK_VERSION)\"
 
 # dump vdec decoded yuv saved in ./dump_stridexh_grpx_chnx.nv12.img
 # CFLAGS            += -D__DUMP_VDEC_FRAME__
+# CFLAGS            += -D__DUMP_DET_FRAME__
 
 # dump nalu before send to vdec
 # CFLAGS            += -D__DUMP_VDEC_NALU__

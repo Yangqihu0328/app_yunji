@@ -386,9 +386,10 @@ AX_S32 CDataStreamRecord::CreateDataFile(AX_U8 nDeviceID, AX_U8 nStreamID) {
     if (CDiskHelper::CreateDir(szDateDir, AX_FALSE)) {
         LOG_MM_I(TAG, "[%d][%d] Create date(%s) directory successfully.", nDeviceID, nStreamID, szDateDir);
 
-        AX_CHAR szFilePath[300] = {0};
         AX_CHAR szTimeBuf[16] = {0};
         CElapsedTimer::GetLocalTime(szTimeBuf, 16, '-', AX_FALSE);
+
+        AX_CHAR szFilePath[300] = {0};
         sprintf(szFilePath, "%s/%s/%s%s_%s.dat", m_mapDev2Dir[nDeviceID].c_str(), szDateBuf, 0 == nStreamID ? "main" : "sub", (0 == nStreamID ? "" : to_string(nStreamID).c_str()), szTimeBuf);
 
         AX_S32 nFD = m_mapDev2DSF[nDeviceID][nStreamID]->Open(szFilePath);

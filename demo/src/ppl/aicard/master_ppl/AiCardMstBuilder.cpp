@@ -28,6 +28,7 @@ using namespace std;
 #define DISPVO_CHN VDEC_CHN1
 #define DETECT_CHN VDEC_CHN2
 #define ENC_MAX_BUF_SIZE (3840 * 2160 * 3 / 2)
+#define SLAVE_ENABLE
 
 AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
     CAiCardMstConfig *pConfig = CAiCardMstConfig::GetInstance();
@@ -64,9 +65,11 @@ AX_BOOL CAiCardMstBuilder::Init(AX_VOID) {
 
     /* [6]: Init data sender. */
     /* Transfer module must be initialized before Decoder to make sure that register option for FileStreamer observer is earlier */
+#ifdef SLAVE_ENABLE
     if (!InitTransHelper()) {
         return AX_FALSE;
     }
+#endif
 
     /* [7]: Init Mqtt client */
     /* mqtt must before jpeg */
@@ -176,49 +179,49 @@ AX_BOOL CAiCardMstBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
     for (AX_U8 i = 0; i < encoding_num; i++) {    
         VIDEO_CONFIG_T tConfig;
         do {
-                tConfig.nChannel = i+1;
-                tConfig.ePayloadType = PT_H264;
-                tConfig.nGOP = 30;
-                tConfig.fFramerate = (AX_F32)30;
-                tConfig.nWidth = m_disp->GetVideoLayout()[0].u32Width;
-                tConfig.nHeight = m_disp->GetVideoLayout()[0].u32Height;
-                tConfig.nBufSize = ENC_MAX_BUF_SIZE;
-                tConfig.nBitrate =  8192;
-                tConfig.bFBC = AX_FALSE;
-                tConfig.nInFifoDepth = 1;
-                tConfig.nOutFifoDepth = 1;
-                tConfig.bLink = AX_FALSE;
-                tConfig.eRcType = AX_VENC_RC_MODE_H264CBR;
-                tConfig.eMemSource = AX_MEMORY_SOURCE_CMM;
-                tConfig.stEncodeCfg[0].ePayloadType = tConfig.ePayloadType;
-                tConfig.stEncodeCfg[0].stRCInfo[0].eRcType = AX_VENC_RC_MODE_H264CBR;
-                tConfig.stEncodeCfg[0].stRCInfo[0].nMinQp = 0;
-                tConfig.stEncodeCfg[0].stRCInfo[0].nMaxQp = 51;
-                tConfig.stEncodeCfg[0].stRCInfo[0].nMinIQp = 0;
-                tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIQp = 51;
-                tConfig.stEncodeCfg[0].stRCInfo[0].nMinIProp = 10;
-                tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIProp = 40;
-                tConfig.stEncodeCfg[0].stRCInfo[0].nIntraQpDelta = -2;  
-                CVideoEncoder* pVencInstance = new CVideoEncoder(tConfig);
-                
-                if (!pVencInstance->Init()) {
-                    LOG_MM_E(AICARD, "Init video Encoder fail!!!!");
-                    break;
-                }
+            tConfig.nChannel = i+1;
+            tConfig.ePayloadType = PT_H264;
+            tConfig.nGOP = 30;
+            tConfig.fFramerate = (AX_F32)30;
+            tConfig.nWidth = m_disp->GetVideoLayout()[0].u32Width;
+            tConfig.nHeight = m_disp->GetVideoLayout()[0].u32Height;
+            tConfig.nBufSize = ENC_MAX_BUF_SIZE;
+            tConfig.nBitrate =  8192;
+            tConfig.bFBC = AX_FALSE;
+            tConfig.nInFifoDepth = 1;
+            tConfig.nOutFifoDepth = 1;
+            tConfig.bLink = AX_FALSE;
+            tConfig.eRcType = AX_VENC_RC_MODE_H264CBR;
+            tConfig.eMemSource = AX_MEMORY_SOURCE_CMM;
+            tConfig.stEncodeCfg[0].ePayloadType = tConfig.ePayloadType;
+            tConfig.stEncodeCfg[0].stRCInfo[0].eRcType = AX_VENC_RC_MODE_H264CBR;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMinQp = 0;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMaxQp = 51;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMinIQp = 0;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIQp = 51;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMinIProp = 10;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIProp = 40;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nIntraQpDelta = -2;  
+            CVideoEncoder* pVencInstance = new CVideoEncoder(tConfig);
+            
+            if (!pVencInstance->Init()) {
+                LOG_MM_E(AICARD, "Init video Encoder fail!!!!");
+                break;
+            }
 
-                if (!pVencInstance->InitParams()) {
-                    LOG_MM_E(AICARD, "Init venc params %d failed.", tConfig.nChannel);
-                    return AX_FALSE;
-                }
-                
-                m_vencObservers[i] = CObserverMaker::CreateObserver<CVencObserver>(pVencInstance);
-                
-                /* register rtsp  */
-                m_vecRtspObs[i] = CObserverMaker::CreateObserver<CAXRtspObserver>(CAXRtspServer::GetInstance());
-                
-                pVencInstance->RegObserver(m_vecRtspObs[i].get()); // register each rtsp observer to each encoder instance 
-                
-                m_vecVencInstance.emplace_back(pVencInstance);
+            if (!pVencInstance->InitParams()) {
+                LOG_MM_E(AICARD, "Init venc params %d failed.", tConfig.nChannel);
+                return AX_FALSE;
+            }
+            
+            m_vencObservers[i] = CObserverMaker::CreateObserver<CVencObserver>(pVencInstance);
+            
+            /* register rtsp  */
+            m_vecRtspObs[i] = CObserverMaker::CreateObserver<CAXRtspObserver>(CAXRtspServer::GetInstance());
+            
+            pVencInstance->RegObserver(m_vecRtspObs[i].get()); // register each rtsp observer to each encoder instance 
+            
+            m_vecVencInstance.emplace_back(pVencInstance);
         } while (0);
     }
 
@@ -505,7 +508,6 @@ AX_BOOL CAiCardMstBuilder::InitAiSwitchSimlator() {
     return AX_TRUE;
 }
 
-
 AX_BOOL CAiCardMstBuilder::InitMqttClient() {
     //get ini config for ai switch
     CAiSwitchConfig *pConfig = CAiSwitchConfig::GetInstance();
@@ -514,20 +516,12 @@ AX_BOOL CAiCardMstBuilder::InitMqttClient() {
         return AX_FALSE;
     }
 
-    /*TODO: support param from ini for mqtt*/
-    // CAiSwitchConfig *pConfig = CAiSwitchConfig::GetInstance();
-    // if (!pConfig->Init() || 0 == pConfig->GetAttrCount()) {
-    //     LOG_M_E(AICARD, "Parse ai switch config file failed.");
-    //     return AX_FALSE;
-    // }
-    // CAiSwitchConfig *pConfig 
-
     //C++的结构体初始化顺序要按照定义顺序一样，
     MQTT_CONFIG_T mqtt_config{
-        .topic = "Yj_HeartBeat",
-        .sub_topic = "YJ_test",
-        .hostname = "192.168.0.79",
-        .client_name = "YJ_aibox", //YJ_aibox
+        .topic = "master-message",
+        .hostname = "127.0.0.1",
+        .client_name = "master-client",
+        .client_passwd = "yunji123456",
         .version = 3,
         .port = 1883
     };
@@ -545,8 +539,6 @@ AX_BOOL CAiCardMstBuilder::InitMqttClient() {
     return AX_TRUE;
 }
 
-
-
 AX_BOOL CAiCardMstBuilder::DeInit(AX_VOID) {
     /* destory instances */
 #define DESTORY_INSTANCE(p) \
@@ -561,7 +553,9 @@ AX_BOOL CAiCardMstBuilder::DeInit(AX_VOID) {
         DESTORY_INSTANCE(m);
     }
 
+#ifdef SLAVE_ENABLE
     DESTORY_INSTANCE(m_transHelper);
+#endif
 
     for (auto &&m : m_arrDispatcher) {
         DESTORY_INSTANCE(m);
@@ -628,6 +622,7 @@ AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
             return AX_FALSE;
         }
 
+#ifdef SLAVE_ENABLE
         if (m_transHelper) {
             if (!m_transHelper->Start()) {
                 return AX_FALSE;
@@ -636,6 +631,7 @@ AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
             LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module is disabled <<<<<<<<<<<<<<<<<<<<<");
             return AX_FALSE;
         }
+#endif
 
         if (m_jenc) {
             STAGE_START_PARAM_T tStartParam;
@@ -717,6 +713,7 @@ AX_BOOL CAiCardMstBuilder::Stop(AX_VOID) {
         m->Clear();
     }
 
+#ifdef SLAVE_ENABLE
     if (m_transHelper) {
         if (!m_transHelper->Stop()) {
             LOG_MM_E(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop failed <<<<<<<<<<<<<<<<<<<<<");
@@ -724,7 +721,7 @@ AX_BOOL CAiCardMstBuilder::Stop(AX_VOID) {
             LOG_MM_C(AICARD, ">>>>>>>>>>>>>>>> TRANSFER module stop successfully <<<<<<<<<<<<<<<<<<<<<");
         }
     }
-
+#endif
 
     if (m_jenc) {
         if (!m_jenc->Stop()) {
@@ -794,4 +791,64 @@ AX_BOOL CAiCardMstBuilder::QueryStreamsAllEof(AX_VOID) {
     }
 
     return (nEofCnt >= m_arrStreamer.size()) ? AX_TRUE : AX_FALSE;
+}
+
+AX_BOOL CAiCardMstBuilder::StartStream(AX_S32 channelId) {
+    LOG_MM_W(AICARD, "+++");
+    STREAM_CONFIG_T streamConfig = CAiCardMstConfig::GetInstance()->GetStreamConfig();
+    if (channelId < (int)streamConfig.v.size()) {
+        STREAMER_ATTR_T stAttr;
+        stAttr.strPath = streamConfig.v[channelId];
+        stAttr.nMaxWidth = streamConfig.nMaxGrpW;
+        stAttr.nMaxHeight = streamConfig.nMaxGrpH;
+        stAttr.nCookie = (AX_S32)channelId;
+        stAttr.bLoop = AX_TRUE;
+        stAttr.bSyncObs = AX_TRUE;
+
+        m_arrStreamer[channelId] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
+        if (!m_arrStreamer[channelId]) {
+            return AX_FALSE;
+        }
+
+        if (!m_arrStreamer[channelId]->Init(stAttr)) {
+            return AX_FALSE;
+        }
+
+        m_arrStreamer[channelId]->RegObserver(m_vdec.get());
+
+        m_arrStreamer[channelId]->RegObserver(m_transHelper.get());
+
+        thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[channelId].get());
+        t.join();
+
+        LOG_MM_W(AICARD, "---");
+
+        return AX_TRUE;
+    }
+
+    return AX_FALSE;
+}
+
+AX_BOOL CAiCardMstBuilder::StopStream(AX_S32 channelId) {
+    LOG_MM_W(AICARD, "+++");
+
+    auto &&stream = m_arrStreamer[channelId];
+    
+    STREAMER_STAT_T stStat;
+    if (stream && stream->QueryStatus(stStat) && stStat.bStarted) {
+        stream->UnRegObserver(m_vdec.get());
+
+        stream->UnRegObserver(m_transHelper.get());
+
+        thread t([](IStreamHandler *p) { p->Stop(); }, stream.get());
+        t.join();
+
+        stream->DeInit();
+
+        stream = nullptr;
+    }
+
+    LOG_MM_W(AICARD, "---");
+
+    return AX_TRUE;
 }

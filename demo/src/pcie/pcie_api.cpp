@@ -367,7 +367,7 @@ static AX_S32 MasterSendData(AX_S32 nDevice, AX_U32 nChannel,
     do {
         nReadSize = AX_PCIe_WaitReadDoneMsg(g_arrDeviceNo[nDevice], nPort, nTimeOut);
         if (nReadSize < 0) {
-            LOG_M_E(TAG, "Wait read done msg failed, port = %d, %s", nPort, (nReadSize == -2?"time out":""));
+            LOG_M_E(TAG, "Wait read done msg failed, port = %d, %s", nPort, (nReadSize == -2 ? "time out" : ""));
             nRet = nReadSize;
         } else if (nReadSize == 0) {
             LOG_M_W(TAG, "Peer data CheckSum error, port = %d, nSize = %d", nPort, nSize);
@@ -619,7 +619,7 @@ AX_S32 PCIe_Send(PCIE_CMD_TYPE_E nCmdType, AX_S16 nDevice, AX_S16 nChannel,
             if (nRetryCount < g_nRetryCount) {
                 LogData(nDevice, nChannel, " ---> ", pPortInfo->mm_info.PhyBaseAddr, pStData->stMsgHead.nDataLen, NULL, "Retry");
                 nRetryCount++;
-                LOG_M_W(TAG, "%s: Retry send dma, port = %d, %d", nDevice, pStData->stMsgHead.nDataLen);
+                LOG_M_W(TAG, "Retry send dma, port = %d, %d", nDevice, pStData->stMsgHead.nDataLen);
                 continue;
             } else {
                 LogData(nDevice, nChannel, " ---> ", pPortInfo->mm_info.PhyBaseAddr, pStData->stMsgHead.nDataLen, NULL, "Retry fail");

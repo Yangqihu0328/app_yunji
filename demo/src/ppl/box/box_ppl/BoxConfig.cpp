@@ -142,6 +142,20 @@ DETECT_CONFIG_T CBoxConfig::GetDetectConfig(AX_VOID) {
     return conf; /* RVO: optimized by compiler */
 }
 
+MQTT_CONFIG_T CBoxConfig::GetMqttConfig(AX_VOID) {
+    MQTT_CONFIG_T conf;
+    const AX_CHAR *SECT = "MQTT";
+
+    conf.topic = m_Ini.GetStringValue(SECT, "topic", "mqtt_msg");
+    conf.hostname = m_Ini.GetStringValue(SECT, "hostname", "127.0.0.1");
+    conf.name = m_Ini.GetStringValue(SECT, "name", "yunji");
+    conf.passwd = m_Ini.GetStringValue(SECT, "passwd", "yunji123456");
+    conf.version = m_Ini.GetIntValue(SECT, "version", 3);
+    conf.port = m_Ini.GetIntValue(SECT, "port", 1883);
+
+    return conf;
+}
+
 DISPVO_CONFIG_T CBoxConfig::GetDispVoConfig(const std::string &SECT) {
     DISPVO_CONFIG_T conf;
     // const AX_CHAR *SECT = "DISPC";

@@ -1,4 +1,4 @@
-SUBDIRS =  src/ppl/aicard
+SUBDIRS =  src/ppl/box
 SUBDIRS += src/ppl/nvr/hal/ut/ivps
 
 ################################################################################

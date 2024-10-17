@@ -24,6 +24,7 @@ public:
     AX_BOOL SetIntValue(const std::string& strAppName, const std::string& strKeyName, AX_S32 nValue);
     AX_F64 GetDoubleValue(const std::string& strAppName, const std::string& strKeyName, AX_F64 dDefault);
     std::string GetStringValue(const std::string& strAppName, const std::string& strKeyName, const std::string& strDefault);
+    AX_BOOL SetStringValue(const std::string& strAppName, const std::string& strKeyName, const std::string& strValue);
 
     /* get all key=value of specified section */
     AX_VOID GetAllKeys(const std::string& strAppName, std::map<std::string, std::string> &mapKeys);

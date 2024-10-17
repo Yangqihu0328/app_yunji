@@ -27,15 +27,16 @@ typedef struct {
     AX_U32 nInputMode;
     AX_U32 nMaxStreamBufSize;
     AX_U32 nDecodeGrps;
+    std::vector<AX_BOOL> enable;
     std::vector<std::string> v;
 } STREAM_CONFIG_T;
 
 
 typedef struct {
     std::string topic;
-    std::string sub_topic;
     std::string hostname;
     std::string client_name;
+    std::string client_passwd;
     AX_U8 version;
     AX_U32 port;
 } MQTT_CONFIG_T;
@@ -75,6 +76,8 @@ public:
     STREAM_CONFIG_T GetStreamConfig(AX_VOID);
     DISPVO_CONFIG_T GetDispVoConfig(AX_VOID);
     PCIE_CONFIG_T   GetPCIECofnig(AX_VOID);
+
+    AX_BOOL SetStreamUrl(AX_S32 channelId, std::string& channelUrl);
 
 private:
     CAiCardMstConfig(AX_VOID) = default;

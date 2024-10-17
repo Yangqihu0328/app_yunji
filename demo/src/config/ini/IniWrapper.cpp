@@ -21,10 +21,15 @@ AX_S32 CIniWrapper::GetIntValue(const std::string& strAppName, const std::string
 }
 
 AX_BOOL CIniWrapper::SetIntValue(const std::string& strAppName, const std::string& strKeyName, AX_S32 nValue) {
-
     if (RET_OK != m_ini.SetIntValue(strAppName, strKeyName, nValue)) {
         return AX_FALSE;
     }
+
+    // write to file
+    if (RET_OK != m_ini.Save()) {
+        return AX_FALSE;
+    }
+
     return AX_TRUE;
 }
 
@@ -39,6 +44,19 @@ std::string CIniWrapper::GetStringValue(const std::string& strAppName, const std
     std::string strValue;
     m_ini.GetStringValueOrDefault(strAppName, strKeyName, &strValue, strDefault);
     return strValue;
+}
+
+AX_BOOL CIniWrapper::SetStringValue(const std::string& strAppName, const std::string& strKeyName, const std::string& strValue) {
+    if (RET_OK != m_ini.SetStringValue(strAppName, strKeyName, strValue)) {
+        return AX_FALSE;
+    }
+
+    // write to file
+    if (RET_OK != m_ini.Save()) {
+        return AX_FALSE;
+    }
+
+    return AX_TRUE;
 }
 
 AX_VOID CIniWrapper::GetAllKeys(const std::string& strAppName, std::map<std::string, std::string>& mapKeys) {

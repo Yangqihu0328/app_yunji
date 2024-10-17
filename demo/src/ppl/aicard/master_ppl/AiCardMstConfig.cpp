@@ -67,6 +67,13 @@ STREAM_CONFIG_T CAiCardMstConfig::GetStreamConfig(AX_VOID) {
             sprintf(szKey, "stream%02d", i);
             conf.v[i - 1] = m_Ini.GetStringValue(SECT, szKey, "");
         }
+
+        // conf.enable.resize(nCount);
+        // for (AX_U32 i = 1; i <= nCount; ++i) {
+        //     AX_CHAR szKey[32];
+        //     sprintf(szKey, "enable%02d", i);
+        //     conf.enable[i - 1] = (AX_BOOL)m_Ini.GetIntValue(SECT, szKey, 1);
+        // }
     }
 
     conf.nDecodeGrps = m_Ini.GetIntValue(SECT, "vdec count", 0);
@@ -108,3 +115,22 @@ PCIE_CONFIG_T CAiCardMstConfig::GetPCIECofnig(AX_VOID) {
     return conf; /* RVO: optimized by compiler */
 }
 
+AX_BOOL CAiCardMstConfig::SetStreamUrl(AX_S32 channelId, std::string& channelUrl) {
+    printf("CAiCardMstConfig::SetStreamUrl ++++\n");
+    AX_BOOL bRet = AX_FALSE;
+    const AX_CHAR *SECT = "STREAM";
+
+    do {
+        AX_CHAR szKey[32];
+        sprintf(szKey, "stream%02d", channelId);
+
+        printf("update stream id: %s to %s\n", szKey, channelUrl.c_str());
+        m_Ini.SetStringValue(SECT, szKey, channelUrl);
+
+        bRet = AX_TRUE;
+
+    } while (0);
+    printf("CAiCardMstConfig::SetStreamUrl ----\n");
+
+    return bRet;
+}

@@ -57,7 +57,7 @@ int main(int argc, char const *argv[]) {
     mallopt(M_TRIM_THRESHOLD, 1024*128);
 
     try {
-        std::unique_ptr<CAiCardMstBuilder> pApp = std::make_unique<CAiCardMstBuilder>();
+        CAiCardMstBuilder *pApp = CAiCardMstBuilder::GetInstance();
         if (!pApp) {
             perror("create aicard mst build fail");
             return 1;

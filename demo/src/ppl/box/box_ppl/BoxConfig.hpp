@@ -53,6 +53,15 @@ typedef struct {
 } DETECT_CONFIG_T;
 
 typedef struct {
+    std::string topic;
+    std::string hostname;
+    std::string name;
+    std::string passwd;
+    AX_S32 version;
+    AX_S32 port;
+} MQTT_CONFIG_T;
+
+typedef struct {
     AX_S32 nDevId;
     AX_U32 nHDMI;
     AX_U32 nChnDepth;
@@ -104,6 +113,7 @@ class CBoxConfig : public CAXSingleton<CBoxConfig> {
 public:
     AX_BOOL Init(AX_VOID);
 
+    MQTT_CONFIG_T GetMqttConfig(AX_VOID);
     STREAM_CONFIG_T GetStreamConfig(AX_VOID);
     DETECT_CONFIG_T GetDetectConfig(AX_VOID);
     DISPVO_CONFIG_T GetDispVoConfig(const std::string &SECT);

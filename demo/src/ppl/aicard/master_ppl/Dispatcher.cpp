@@ -24,7 +24,7 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
 
     CAXFrame axFrame;
     DETECT_RESULT_T fhvp;
-    static int count = 0;
+    // static int count = 0;
     while (m_DispatchThread.IsRunning()) {
         if (m_qFrame.Pop(axFrame, -1)) {
             if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
@@ -34,13 +34,13 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
                 }
     
                 //TODO:测试，每10s保存一张图片,进行结果分析，然后进行告警。
-                if (count == (30*10)) {
-                    for (auto& m : s_lstObs) {
-                        m->ProcessFrame(&axFrame);
-                    }
-                    count = 0; 
-                }
-                count++;
+                // if (count == (30*10)) {
+                //     for (auto& m : s_lstObs) {
+                //         m->ProcessFrame(&axFrame);
+                //     }
+                //     count = 0; 
+                // }
+                // count++;
 
                 DrawBox(axFrame, fhvp);
             }
@@ -273,6 +273,7 @@ AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhv
         switch (fhvp.item[i].eType) {
             case DETECT_TYPE_FACE:
             case DETECT_TYPE_BODY:
+            case DETECT_TYPE_FIRE:
             case DETECT_TYPE_VEHICLE:
             case DETECT_TYPE_CYCLE:
                 if (fhvp.item[i].nTrackId == 0) {

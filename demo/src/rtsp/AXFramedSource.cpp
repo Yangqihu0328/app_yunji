@@ -88,7 +88,7 @@ void AXFramedSource::_deliverFrame() {
     }
     fPresentationTimeSpecified.tv_sec = element->nPts / 1000000;
     fPresentationTimeSpecified.tv_usec = element->nPts % 1000000;
-    //gettimeofday(&fPresentationTime, NULL);  // If you have a more accurate time - e.g., from an encoder - then use that instead.
+    gettimeofday(&fPresentationTime, NULL);  // If you have a more accurate time - e.g., from an encoder - then use that instead.
     // If the device is *not* a 'live source' (e.g., it comes instead from a file or buffer), then set "fDurationInMicroseconds" here.
     memmove(fTo, pNewFrameDataStart, fFrameSize);
 

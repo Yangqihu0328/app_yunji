@@ -18,6 +18,7 @@ DEMO_BIN_PATH       := $(HOME_PATH)/app/demo/bin/boxdemo
 THIRD_PARTY_PATH    := $(HOME_PATH)/third-party
 3RD_PATH        	:= $(DEMO_SRC_PATH)/3rd
 
+
 # output
 MOD_NAME            := boxdemo
 OUTPUT              := $(TARGET_OUT_PATH)/obj
@@ -68,6 +69,9 @@ CINCLUDE            := -I$(SRC_PATH) \
                        -I$(THIRD_PARTY_PATH)/mp4/include \
                        -I$(3RD_PATH)/inc/live/BasicUsageEnvironment \
                        -I$(3RD_PATH)/inc/live/groupsock \
+                       -I$(3RD_PATH)/inc/mqtt \
+                       -I$(3RD_PATH)/inc/http \
+                       -I$(3RD_PATH)/inc/json \
                        -I$(3RD_PATH)/inc/live/liveMedia \
                        -I$(3RD_PATH)/inc/live/UsageEnvironment
 
@@ -81,7 +85,7 @@ CINCLUDE            := -I$(SRC_PATH) \
 TARGET              := $(TARGET_OUT_PATH)/$(MOD_NAME)
 
 # build flags
-CPPFLAGS            := --std=c++11
+CPPFLAGS            := --std=c++14
 CFLAGS              := $(CPPFLAGS) -Wall -Wl,-rpath-link=$(LIB_PATH):$(THIRD_PARTY_PATH)/ffmpeg/lib:-L$(THIRD_PARTY_PATH)/openssl/lib:-L$(THIRD_PARTY_PATH)/mp4/lib
 CFLAGS              += -DAPP_BUILD_VERSION=\"$(SDK_VERSION)\"
 
@@ -122,6 +126,7 @@ CLIB                += -L$(THIRD_PARTY_PATH)/drm/lib -ldrm
 CLIB                += -L$(THIRD_PARTY_PATH)/ffmpeg/lib -lavcodec -lavutil -lavformat
 CLIB                += -L$(THIRD_PARTY_PATH)/openssl/lib -lssl -lcrypto
 CLIB                += -L$(THIRD_PARTY_PATH)/mp4/lib -l:libmp4.a
+CLIB                += -L$(3RD_PATH)/lib/mqtt -lMQTTPacketClient
 ifeq ($(debug),yes)
 CLIB                += -L$(3RD_PATH)/lib/dbg -lliveMedia -lgroupsock -lBasicUsageEnvironment -lUsageEnvironment
 else

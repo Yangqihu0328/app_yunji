@@ -45,6 +45,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
     DISPVO_CONFIG_T dispVoConfig = pConfig->GetDispVoConfig("DISPC");
     DISPVO_CONFIG_T dispVoConfig_1 = pConfig->GetDispVoConfig("DISPC1");
 
+    // need shared memory for record and vo
     if (dispVoConfig.bRecord && dispVoConfig.bOnlineMode) {
         dispVoConfig.bOnlineMode = AX_FALSE;
         LOG_M_C(BOX, ">>>>>>>>>>>>> recorder must set vo to offline mode <<<<<<<<<<<<<<");
@@ -132,7 +133,12 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         }
     }
 
-    /* [6]: Init dispatchers */
+    /* [6]: Init Mqtt client */
+    if (!InitMqtt()) {
+        return AX_FALSE;
+    }
+
+    /* [7]: Init dispatchers */
     AX_U32 nDispType = 2;
     if (dispVoConfig_1.nDevId != -1) {
         nDispType = dispVoConfig_1.nDispType;
@@ -147,7 +153,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         m_arrDispatchObserver.clear();
     }
 
-    /* [7]: Init video decoder */
+    /* [8]: Init video decoder */
     streamConfig.nChnW[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Width;
     streamConfig.nChnH[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Height;
     streamConfig.nChnW[DETECT_CHN] = detectConfig.nW;
@@ -178,7 +184,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         }
     }
 
-    /* [8]: vo link vdec */
+    /* [9]: vo link vdec */
     if (streamConfig.nLinkMode) {
         if (dispVoConfig_1.nDevId != -1) {
             if (dispVoConfig_1.nDispType == 1) {
@@ -417,6 +423,22 @@ AX_BOOL CBoxBuilder::InitDispatcher(const string &strFontPath, AX_U32 nDispType)
             return AX_FALSE;
         }
     }
+
+    return AX_TRUE;
+}
+
+AX_BOOL CBoxBuilder::InitMqtt() {
+
+    mqtt_client = std::make_unique<MqttClient>();
+    if (!mqtt_client) {
+        LOG_MM_E(BOX, "Create MqttClient instance failed.");
+        return AX_FALSE;
+    }
+
+    MQTT_CONFIG_T mqttConfig = CBoxConfig::GetInstance()->GetMqttConfig();
+    mqtt_client->Init(mqttConfig);
+
+    // mqtt_client->BindTransfer(m_transHelper.get());
 
     return AX_TRUE;
 }

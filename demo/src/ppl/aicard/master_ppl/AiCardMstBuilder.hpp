@@ -34,7 +34,9 @@
 
 using namespace aicard_mst;
 
-class CAiCardMstBuilder final {
+class CAiCardMstBuilder : public CAXSingleton<CAiCardMstBuilder> {
+    friend class CAXSingleton<CAiCardMstBuilder>;
+
 public:
     CAiCardMstBuilder(AX_VOID) noexcept = default;
 
@@ -42,6 +44,9 @@ public:
     AX_BOOL Stop(AX_VOID);
 
     AX_BOOL QueryStreamsAllEof(AX_VOID);
+
+    AX_BOOL StartStream(AX_S32 channelId);
+    AX_BOOL StopStream(AX_S32 channelId);
 
 protected:
     AX_BOOL Init(AX_VOID);
