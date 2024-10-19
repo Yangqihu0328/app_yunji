@@ -23,13 +23,17 @@ namespace boxconf {
 using namespace std;
 using json = nlohmann::json;
 
+//需要转为类成员变量，提高代码简洁性
 static std::shared_ptr<IPStack> ipstack_ = nullptr;
 static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
-std::mutex mtx;
-static json board_info = {0};
+static std::mutex mtx;
+static json board_info;
+static int arrivedcount = 0;
+static std::vector<MediaChanel> media_channel;
+static std::vector<AlgoTask> algo_task;
 
 // #if 0
-static int arrivedcount = 0;
+
 // CTransferHelper* m_pTransferHelper = nullptr;
 
 
@@ -124,7 +128,6 @@ int GetIP(const std::string interfaceName, std::string &ip_addr, std::string &ne
     freeifaddrs(ifaddr);
     return -1;
 }
-
 
 static int GetNPUInfo(std::vector<int> &npu_utilization) {
     static int read_flag = 0;
@@ -243,10 +246,8 @@ static bool SendMsg(const char *topic, const char *msg, size_t len) {
     return true;
 }
 
-
-
 static void OnRebootAiBox() {
-    printf("OnRebootAiBox ++++\n");
+    LOG_M_D(MQTT_CLIENT, "OnRebootAiBox ++++.");
 
     json child;
     child["type"] = "rebootAiBox";
@@ -261,7 +262,181 @@ static void OnRebootAiBox() {
     SendMsg("web-message", payload.c_str(), payload.size());
     system("reboot");
 
-    printf("OnRebootAiBox ----\n");
+    LOG_M_D(MQTT_CLIENT, "OnRebootAiBox ----.");
+}
+
+
+static bool IsMediaChannelRegistered(int id) {
+    return std::any_of(mediaChannels.begin(), mediaChannels.end(),
+                       [id](const MediaChanel& channel) {
+                           return channel.id == id;
+                       });
+}
+
+static bool IsAlgoTaskRegistered(int id) {
+    return std::any_of(algo_task.begin(), algo_task.end(),
+                       [id](const AlgoTask& task) {
+                           return task.id == id;
+                       });
+}
+
+//应该不考虑顺序也没关系
+static void OnAddMediaChanel(int id, std::string url) {
+    json child;
+    child["type"] = "AddMediaChanel";
+    json root;
+    root["result"] = 0;
+
+    if (media_channel.size() > 16) {
+         root["msg"] = "failure";
+    } else {
+        //判断是否注册过
+        if (IsMediaChannelRegistered) {
+            root["msg"] = "failure";
+        } else {
+            MediaChanel newchannel;
+            newchannel.id = id;
+            newchannel.url = url;
+            newchannel.channel_status = "ready";
+
+            media_channel.push_back(newchannel);
+            
+            //TODO: add realy media channel; meanwhile confirm rtsp stream is ok? add channel_status attribute
+
+            root["msg"] = "success";
+        }
+    }
+
+    root["data"] = child;
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+}
+
+//TODO:后面要增加算法其他信息，例如越线检测的线的位置或者客流统计的人员数量阈值设置
+static void OnAddAlgoTask(int task_id, std::string url, std::vector<std::string> algo_vec) {
+    json child, root;
+    child["type"] = "AddAlgoTask";
+    root["result"] = 0;
+
+    if (algo_task.size() > 16) {
+         root["msg"] = "failure";
+    } else {
+        if (IsAlgoTaskRegistered) {
+            root["msg"] = "failure";
+        } else {
+            AlgoTask temp_algo_task;
+            temp_algo_task.id = id;
+            temp_algo_task.url = url;
+            temp_algo_task.channel_status = "ready";
+            temp_algo_task.algo_index0 = algo_vec[0];
+            temp_algo_task.algo_index1 = algo_vec[1];
+            temp_algo_task.algo_index2 = algo_vec[2];
+
+            algo_task.push_back(temp_algo_task);
+            //TODO: add realy media channel; meanwhile confirm rtsp stream is ok? add channel_status attribute
+
+            root["msg"] = "success";
+        }
+        
+    }
+
+    root["data"] = child;
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+}
+
+static void OnRemoveMediaChanel(int id) {
+    json child;
+    child["type"] = "RemoveMediaChanel";
+
+    json root;
+    root["result"] = 0;
+
+    auto it = std::find_if(mediaChannels.begin(), mediaChannels.end(),
+        [id](const MediaChanel& channel) { return channel.id == id; });
+
+    if (it != mediaChannels.end()) {
+        mediaChannels.erase(it);
+
+        root["msg"] = "success";
+    } else {
+        root["msg"] = "failure";
+    }
+    //TODO: remove realy media channel;
+
+    root["data"] = child;
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+}
+
+static void OnRemoveAlgoTask(int id) {
+    json child;
+    child["type"] = "RemoveMediaChanel";
+
+    json root;
+    root["result"] = 0;
+
+    auto it = std::find_if(algo_task.begin(), algo_task.end(),
+        [id](const MediaChanel& channel) { return channel.id == id; });
+
+    if (it != algo_task.end()) {
+        algo_task.erase(it);
+
+        root["msg"] = "success";
+    } else {
+        root["msg"] = "failure";
+    }
+    //TODO: remove realy algo task;
+
+    root["data"] = child;
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+}
+
+//查询媒体通道的目的就是为了确定是否取流成功。
+static void OnQueryMediaChanel() {
+    LOG_M_D(MQTT_CLIENT, "OnQueryMediaChanel ++++.");
+
+
+    json root, child;
+    child["type"] = "QueryMediaChanel";
+
+    // 媒体通道包括:媒体通道的id，媒体的视频源,视频协议，以及配置了什么算法。
+    // media_channel 是vector,需要转为json格式发送出去。
+    for (const auto channel : media_channel) {
+        child["id"] = channel.id;
+        child["url"] = channel.url;
+        child["channel_status"] = channel.channel_status;
+    }
+    root["msg"] = "success";
+    root["data"] = child;
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+    LOG_M_D(MQTT_CLIENT, "OnQueryMediaChanel ----.");
+}
+
+static void OnQueryAlgoTask() {
+    LOG_M_D(MQTT_CLIENT, "OnQueryAlgoTask ++++.");
+
+
+    json root, child;
+    child["type"] = "QueryMediaChanel";
+
+    // 媒体通道包括:媒体通道的id，媒体的视频源,视频协议，以及配置了什么算法。
+    // media_channel 是vector,需要转为json格式发送出去。
+    for (const auto task : algo_task) {
+        child["id"] = task.id;
+        child["url"] = task.url;
+        child["algo1"] = task.algo_index0;
+        child["algo2"] = task.algo_index1;
+        child["algo3"] = task.algo_index2;
+        child["channel_status"] = channel.channel_status;
+    }
+    root["msg"] = "success";
+    root["data"] = child;
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+    LOG_M_D(MQTT_CLIENT, "OnQueryAlgoTask ----.");
 }
 
 // static void OnRestartMasterApp() {
@@ -767,7 +942,29 @@ static void messageArrived(MQTT::MessageData& md) {
         OnRebootAiBox();
     } else if (type == "getBoardInfo") {
         OnGetBoardInfo();
-    } 
+    } else if (type == "AddMediaChanel") {
+        int id  = jsonRes["channelId"];
+        std::string url  = jsonRes["url"];
+        OnAddMediaChanel(id, url);
+    } else if (type == "RemoveMediaChanel") {
+        int id  = jsonRes["channelId"];
+        OnRemoveMediaChanel(id);
+    } else if (type == "QueryMediaChanel") {
+        OnQueryMediaChanel();
+    } else if (type == "AddAlgoTask") {
+        int TaskId  = jsonRes["TaskId"];
+        std::string url  = jsonRes["url"];
+        std::vector<std::string> algo_vec;
+        algo_vec.push_back(jsonRes["algo1"]);
+        algo_vec.push_back(jsonRes["algo2"]);
+        algo_vec.push_back(jsonRes["algo3"]);
+        OnAddAlgoTask(id, url, algo_vec);
+    } else if (type == "RemoveAlgoTask") {
+        int id  = jsonRes["channelId"];
+        OnRemoveAlgoTask(id);
+    } else if (type == "QueryAlgoTask") {
+        OnQueryAlgoTask();
+    }
     // #if 0
     // else if (type == "getMediaChannelInfo") {
     //     OnGetMediaChannelInfo();

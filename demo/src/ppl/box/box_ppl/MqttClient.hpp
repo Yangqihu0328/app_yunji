@@ -36,7 +36,7 @@
 #include "MQTTClient.h"
 
 namespace boxconf {
-struct MemoryInfo {
+struct MemoryInfo{
     long totalMem;
     long freeMem;
     long usedMem;
@@ -45,17 +45,47 @@ struct MemoryInfo {
     long cached;
 };
 
-struct FlashInfo {
+struct FlashInfo{
     long total;
     long used;
     long free;
 };
 
-struct TpuInfo {
+struct TpuInfo{
     long total;
     long used;
     long free;
 };
+
+struct AlgoInfo{
+    std::string name;
+    int index;
+};
+
+struct MediaChanel{
+    int id;
+    std::string url;
+    std::string channel_status;
+};
+
+
+struct AlgoTask{
+    int task_id;
+    std::string url;
+    std::string channel_status;
+    int algo_index0;
+    int algo_index1;
+    int algo_index2;
+};
+
+//算法map，算法枚举临时放在这里，后面有真正的算法再创建。
+enum AlgoList{
+    YJ_ALGO_FIRE,
+    YJ_ALGO_PEOPLE,
+    YJ_ALGO_FACE,
+    YJ_ALGO_MAX
+};
+
 
 class IPStack
 {
