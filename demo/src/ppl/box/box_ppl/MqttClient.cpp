@@ -25,9 +25,11 @@ using json = nlohmann::json;
 
 static std::shared_ptr<IPStack> ipstack_ = nullptr;
 static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
+std::mutex mtx;
+static json board_info = {0};
 
 // #if 0
-// static int arrivedcount = 0;
+static int arrivedcount = 0;
 // CTransferHelper* m_pTransferHelper = nullptr;
 
 
@@ -37,202 +39,230 @@ static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
 // std::vector<AX_BOOL> stream_status_;
 
 
-// static int MqttGetTemperature(int &temp) {
+static int GetTemperature(int &temp) {
 
-//     std::ifstream temp_file("/sys/class/thermal/thermal_zone0/temp");
-//     if (!temp_file) {
-//         std::cerr << "Cannot open temperature file" << std::endl;
-//         temp = -1;
-//         return -1;
-//     }
+    std::ifstream temp_file("/sys/class/thermal/thermal_zone0/temp");
+    if (!temp_file) {
+        std::cerr << "Cannot open temperature file" << std::endl;
+        temp = -1;
+        return -1;
+    }
 
-//     std::string temp_line;
-//     if (!std::getline(temp_file, temp_line)) {
-//         std::cerr << "Cannot read temperature" << std::endl;
-//         temp = -1;
-//         return -1;
-//     }
+    std::string temp_line;
+    if (!std::getline(temp_file, temp_line)) {
+        std::cerr << "Cannot read temperature" << std::endl;
+        temp = -1;
+        return -1;
+    }
 
-//     long tempMicroCelsius = std::stol(temp_line);
-//     temp = static_cast<int>(tempMicroCelsius / 1000.0);
-//     return 0;
-// }
+    long tempMicroCelsius = std::stol(temp_line);
+    temp = static_cast<int>(tempMicroCelsius / 1000.0);
+    return 0;
+}
 
-// static int MqttGetVersion(std::string& version) {
+static int GetVersion(std::string& version) {
 
-//     std::ifstream temp_file("/proc/ax_proc/version");
-//     if (!temp_file) {
-//         std::cerr << "Cannot open temperature file" << std::endl;
-//         return -1;
-//     }
+    std::ifstream temp_file("/proc/ax_proc/version");
+    if (!temp_file) {
+        std::cerr << "Cannot open temperature file" << std::endl;
+        return -1;
+    }
 
-//     std::string temp_line;
-//     if (!std::getline(temp_file, temp_line)) {
-//         std::cerr << "Cannot read temperature" << std::endl;
-//         return -1;
-//     }
+    std::string temp_line;
+    if (!std::getline(temp_file, temp_line)) {
+        std::cerr << "Cannot read temperature" << std::endl;
+        return -1;
+    }
 
-//     version = std::move(temp_line);
-//     return 0;
-// }
+    version = std::move(temp_line);
+    return 0;
+}
 
-// static int MqttGetSystime(std::string& timeString) {
-//     auto now = std::chrono::system_clock::now();
-//     std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
-//     std::tm* localTime = std::localtime(&currentTime);
+static int GetSystime(std::string& timeString) {
+    auto now = std::chrono::system_clock::now();
+    std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
+    std::tm* localTime = std::localtime(&currentTime);
 
-//     std::ostringstream oss;
-//     oss << std::put_time(localTime, "%Y-%m-%d %H:%M:%S");
-//     timeString = oss.str();
-//     return 0;
-// }
+    std::ostringstream oss;
+    oss << std::put_time(localTime, "%Y-%m-%d %H:%M:%S");
+    timeString = oss.str();
+    return 0;
+}
 
-// int MqttGetIP(const std::string interfaceName, std::string &ip_addr) {
-//     struct ifaddrs *ifaddr, *ifa;
-//     int family, s;
-//     char host[NI_MAXHOST];
+int GetIP(const std::string interfaceName, std::string &ip_addr, std::string &net_type) {
+    struct ifaddrs *ifaddr, *ifa;
+    int family, s;
+    char host[NI_MAXHOST];
 
-//     if (getifaddrs(&ifaddr) == -1) {
-//         perror("getifaddrs");
-//         return -1;
-//     }
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return -1;
+    }
 
-//     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-//         if (!ifa->ifa_addr) 
-//             continue;
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr) 
+            continue;
 
-//         family = ifa->ifa_addr->sa_family;
+        family = ifa->ifa_addr->sa_family;
 
-//         // Check if interface is valid and IPv4
-//         if ((family == AF_INET) && (strcmp(ifa->ifa_name, interfaceName.c_str()) == 0)) {
-//             s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
-//             if (s != 0) {
-//                 printf("getnameinfo() failed: %s\n", gai_strerror(s));
-//                 continue;
-//             }
+        // Check if interface is valid and IPv4
+        if ((family == AF_INET) && (strcmp(ifa->ifa_name, interfaceName.c_str()) == 0)) {
+            s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+            if (s != 0) {
+                printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                continue;
+            }
             
-//             LOG_M_D(MQTT_CLIENT, "Interface %s has IP address: %s", interfaceName.c_str(), host);
-//             ip_addr = std::string(host);
-//             freeifaddrs(ifaddr);
-//             return 0;
-//         }
-//     }
+            LOG_M_D(MQTT_CLIENT, "Interface %s has IP address: %s", interfaceName.c_str(), host);
+            ip_addr = std::string(host);
+            net_type = "WAN";
+            freeifaddrs(ifaddr);
+            return 0;
+        }
+    }
 
-//     freeifaddrs(ifaddr);
-//     return -1;
-// }
+    freeifaddrs(ifaddr);
+    return -1;
+}
 
-// static int MqttMemoryInfo(MemoryInfo &memInfo) {
-//     std::ifstream meminfoFile("/proc/meminfo");
-//     if (!meminfoFile.is_open()) {
-//         std::cerr << "Unable to open /proc/meminfo" << std::endl;
-//         return -1;
-//     }
 
-//     std::string line;
-//     while (std::getline(meminfoFile, line)) {
-//         std::istringstream iss(line);
-//         std::string key;
-//         long value;
-//         std::string unit;
-//         iss >> key >> value >> unit;
+static int GetNPUInfo(std::vector<int> &npu_utilization) {
+    static int read_flag = 0;
+    if (read_flag == 0) {
+        std::ofstream enable_file("/proc/ax_proc/npu/enable");
+        if (!enable_file) {
+            LOG_M_D(MQTT_CLIENT, "Cannot open the file.");
+            return -1;
+        }
 
-//         if (key == "MemTotal:") {
-//             memInfo.totalMem = value;
-//         } else if (key == "MemFree:") {
-//             memInfo.freeMem = value;
-//         } else if (key == "MemAvailable:") {
-//             memInfo.availableMem = value;
-//         } else if (key == "Buffers:") {
-//             memInfo.buffers = value;
-//         } else if (key == "Cached:") {
-//             memInfo.cached = value;
-//         }
-//     }
-//     meminfoFile.close();
-//     return 0;
-// }
+        enable_file << "1";
+        enable_file.close();
+        read_flag = 1;
+    }
 
-// static int getDiskUsage(const std::string& path, FlashInfo &falsh_info) {
-//     struct statvfs stat;
+    std::ifstream temp_file("/proc/ax_proc/npu/top");
+    if (!temp_file) {
+        LOG_M_D(MQTT_CLIENT, "Cannot open temperature file.");
+        return -1;
+    }
 
-//     if (statvfs(path.c_str(), &stat) != 0) {
-//         // 错误处理
-//         perror("statvfs");
-//         return -1;
-//     }
+    std::string line;
 
-//     falsh_info.total = stat.f_blocks * stat.f_frsize;
-//     falsh_info.free = stat.f_bfree * stat.f_frsize;
-//     return 0;
-// }
+    // 读取文件内容
+    while (std::getline(temp_file, line)) {
+        if (line.find("core:vnpu_stdd_1") != std::string::npos) {
+            std::getline(temp_file, line); // 读取时间
+            std::getline(temp_file, line); // 读取周期
+            std::getline(temp_file, line); // 读取利用率
+            npu_utilization[0] = std::stoi(line.substr(line.find(':') + 1, line.find('%') - line.find(':') - 1));
+        } else if (line.find("core:vnpu_stdd_2") != std::string::npos) {
+            std::getline(temp_file, line);
+            std::getline(temp_file, line);
+            std::getline(temp_file, line);
+            npu_utilization[1] = std::stoi(line.substr(line.find(':') + 1, line.find('%') - line.find(':') - 1));
+        } else if (line.find("core:vnpu_stdd_3") != std::string::npos) {
+            std::getline(temp_file, line);
+            std::getline(temp_file, line);
+            std::getline(temp_file, line);
+            npu_utilization[2] = std::stoi(line.substr(line.find(':') + 1, line.find('%') - line.find(':') - 1));
+        }
+    }
 
-// static bool SendMsg(const char *topic, const char *msg, size_t len) {
-//     printf("SendMsg ++++\n");
+    temp_file.close();
+    return 0;
+}
 
-//     MQTT::Message message;
-//     message.qos = MQTT::QOS0;
-//     message.retained = false;
-//     message.dup = false;
-//     message.id = 0;
-//     message.payload = (void *)msg;
-//     message.payloadlen = len;
-//     if (client_) {
-//         int ret = client_->publish(topic, message);
-//         if (ret != 0) {
-//             printf("MQTT CLIENT publish [%s] message [%s] failed ...\n", topic, msg);
-//         }
-//     } else {
-//         printf("MQTT CLIENT can not get client to publish\n");
-//     }
+static int GetMemoryInfo(MemoryInfo &memInfo) {
+    std::ifstream meminfoFile("/proc/meminfo");
+    if (!meminfoFile.is_open()) {
+        std::cerr << "Unable to open /proc/meminfo" << std::endl;
+        return -1;
+    }
 
-//     printf("SendMsg ----\n");
+    std::string line;
+    while (std::getline(meminfoFile, line)) {
+        std::istringstream iss(line);
+        std::string key;
+        long value;
+        std::string unit;
+        iss >> key >> value >> unit;
 
-//     return true;
-// }
+        if (key == "MemTotal:") {
+            memInfo.totalMem = value;
+        } else if (key == "MemFree:") {
+            memInfo.freeMem = value;
+        } else if (key == "MemAvailable:") {
+            memInfo.availableMem = value;
+        } else if (key == "Buffers:") {
+            memInfo.buffers = value;
+        } else if (key == "Cached:") {
+            memInfo.cached = value;
+        }
+        memInfo.usedMem = memInfo.totalMem - memInfo.availableMem;
+    }
+    meminfoFile.close();
+    return 0;
+}
 
-// static void OnLogin(std::string& account, std::string& password) {
-//     printf("OnLogin ++++\n");
-//     json child;
-//     child["type"] = "login";
+static int GetDiskUsage(const std::string& path, FlashInfo &falsh_info) {
+    struct statvfs stat;
 
-//     json root;
-//     root["data"] = child;
-//     if (account == "admin" && password == "admin") {
-//         root["result"] = 0;
-//         root["msg"] = "success";
-//     } else {
-//         root["result"] = -1;
-//         root["msg"] = "The account or password is incorrect";
-//     }
+    if (statvfs(path.c_str(), &stat) != 0) {
+        // 错误处理
+        perror("statvfs");
+        return -1;
+    }
 
-//     std::string payload = root.dump();
+    falsh_info.total = stat.f_blocks * stat.f_frsize;
+    falsh_info.free = stat.f_bfree * stat.f_frsize;
+    falsh_info.used = falsh_info.total - falsh_info.free;
+    return 0;
+}
 
-//     SendMsg("web-message", payload.c_str(), payload.size());
+static bool SendMsg(const char *topic, const char *msg, size_t len) {
+    LOG_M_D(MQTT_CLIENT, "endMsg ++++.");
 
-//     printf("OnLogin ----\n");
-// }
+    MQTT::Message message;
+    message.qos = MQTT::QOS0;
+    message.retained = false;
+    message.dup = false;
+    message.id = 0;
+    message.payload = (void *)msg;
+    message.payloadlen = len;
+    if (client_) {
+        int ret = client_->publish(topic, message);
+        if (ret != 0) {
+            LOG_M_D(MQTT_CLIENT, "MQTT CLIENT publish [%s] message [%s] failed ...", topic, msg);
+        }
+    } else {
+        LOG_M_D(MQTT_CLIENT, "MQTT CLIENT can not get client to publis");
+    }
 
-// static void OnRebootAiBox() {
-//     printf("OnRebootAiBox ++++\n");
+    LOG_M_D(MQTT_CLIENT, "SendMsg ----.");
 
-//     json child;
-//     child["type"] = "rebootAiBox";
+    return true;
+}
 
-//     system("reboot");
 
-//     json root;
-//     root["result"] = 0;
-//     root["msg"] = "success";
-//     root["data"] = child;
 
-//     std::string payload = root.dump();
+static void OnRebootAiBox() {
+    printf("OnRebootAiBox ++++\n");
 
-//     SendMsg("web-message", payload.c_str(), payload.size());
-//     system("reboot");
+    json child;
+    child["type"] = "rebootAiBox";
 
-//     printf("OnRebootAiBox ----\n");
-// }
+    json root;
+    root["result"] = 0;
+    root["msg"] = "success";
+    root["data"] = child;
+
+    std::string payload = root.dump();
+
+    SendMsg("web-message", payload.c_str(), payload.size());
+    system("reboot");
+
+    printf("OnRebootAiBox ----\n");
+}
 
 // static void OnRestartMasterApp() {
 //     printf("OnRestartMaster ++++\n");
@@ -252,75 +282,87 @@ static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
 //     printf("OnRestartMaster ----\n");
 // }
 
-// static void OnGetDashBoardInfo() {
-//     printf("OnDashBoardInfo ++++\n");
 
-//     int temperature = -1;
-//     int ret = MqttGetTemperature(temperature);
-//     if (ret == -1) {
-//         LOG_MM_D(MQTT_CLIENT, "MqttGetTemperature fail.");
-//     }
+static void OnGetBoardInfo() {
+    std::lock_guard<std::mutex> lock(mtx);
+    json root;
+    root["result"] = 0;
+    root["msg"] = "success";
+    root["data"] = board_info;
     
-//     const std::string interfaceName = "eth0";
-//     std::string ipAddress;
-//     ret = MqttGetIP(interfaceName, ipAddress);
-//     if (ret == -1) {
-//         LOG_MM_D(MQTT_CLIENT, "MqttGetIP fail.");
-//     }
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+}
 
-//     MemoryInfo memInfo = {0};
-//     ret = MqttMemoryInfo(memInfo);
-//     if (ret == -1) {
-//         LOG_MM_D(MQTT_CLIENT, "MqttMemoryInfo fail.");
-//     }
+/*循环中获取板子信息，减少回调耗时*/
+static void GetBoardInfo() {
+    LOG_MM_D(MQTT_CLIENT, "OnGetBoardInfo ++++");
 
-//     FlashInfo falsh_info = {0};
-//     ret = getDiskUsage("/", falsh_info);
+    int temperature = -1;
+    int ret = GetTemperature(temperature);
+    if (ret == -1) {
+        LOG_MM_D(MQTT_CLIENT, "GetTemperature fail.");
+    }
+    
+    const std::string interfaceName = "eth0";
+    std::string ipAddress = "127.0.0.1";
+    std::string NetType = "LAN";
+    ret = GetIP(interfaceName, ipAddress, NetType);
+    if (ret == -1) {
+        LOG_MM_D(MQTT_CLIENT, "GetIP fail.");
+    }
 
-//     std::string currentTimeStr;
-//     MqttGetSystime(currentTimeStr);
+    MemoryInfo memInfo = {0};
+    ret = GetMemoryInfo(memInfo);
+    if (ret == -1) {
+        LOG_MM_D(MQTT_CLIENT, "MqttMemoryInfo fail.");
+    }
 
-//     std::string version;
-//     MqttGetVersion(version);
+    FlashInfo falsh_info = {0};
+    ret = GetDiskUsage("/", falsh_info);
 
-//     json child = {
-//         {"type", "getDashBoardInfo"}, 
-//         {"BoardId", "YJ-AIBOX-001"}, 
-//         {"BoardIp", ipAddress},
-//         {"BoardPlatform", "AX650"},
-//         {"BoardTemp", temperature},
-//         {"BoardType", "LAN"},
-//         {"BoardAuthorized", "已授权"},
-//         {"Time", currentTimeStr},
-//         {"Version", version},
-//         {"HostDisk", { // 当前设备硬盘情况 kB
-//             {"Total", falsh_info.total}, // 总量
-//             {"Available", falsh_info.free} // 已用
-//         }},
-//         {"HostMemory", { // 当前设备内存使用情况
-//             {"Total", memInfo.totalMem}, // 总量
-//             {"Available", memInfo.availableMem}, // 总量
-//         }},
-//         {"Tpu", { // 当前设备的算力资源使用情况（0.0.46+引入）
-//             { 
-//                 {"mem_total", 2048}, // 内存总量
-//                 {"mem_usage", 1 + rand()%(2048)}, // 内存使用情况
-//                 {"tpu_usage", 1 + rand()%(100)} // TPU 使用情况
-//             }
-//         }},
-//     };
 
-//     json root;
-//     root["result"] = 0;
-//     root["msg"] = "success";
-//     root["data"] = child;
+    std::string currentTimeStr;
+    GetSystime(currentTimeStr);
 
-//     std::string payload = root.dump();
+    std::string version;
+    GetVersion(version);
 
-//     SendMsg("web-message", payload.c_str(), payload.size());
+    std::vector<int> npu_utilization(3, 0); // 初始化三个 NPU 的利用率为 0
+    GetNPUInfo(npu_utilization);
 
-//     printf("OnDashBoardInfo ----\n");
-// }
+    std::lock_guard<std::mutex> lock(mtx);
+    board_info = {
+        {"type", "GetBoardInfo"}, 
+        {"BoardId", "YJ-AIBOX-001"}, 
+        {"BoardIp", ipAddress},
+        {"BoardPlatform", "AX650"},
+        {"BoardTemp", temperature},
+        {"BoardType", NetType},
+        {"BoardAuthorized", "Authorized"},
+        {"Time", currentTimeStr},
+        {"Version", version},
+        {"HostDisk", { // 当前设备硬盘情况 kB
+            {"Available", falsh_info.free}, // 可用
+            {"Total", falsh_info.total}, // 总量
+            {"Used", falsh_info.used}, // 已量
+        }},
+        {"HostMemory", { // 当前设备内存使用情况
+            {"Available", memInfo.availableMem}, // 可用
+            {"Total", memInfo.totalMem}, // 总量
+            {"Used", memInfo.usedMem}, // 已用
+        }},
+        {"Tpu", { // 当前设备的算力资源使用情况
+            { 
+                {"vpu0_usage", npu_utilization[0]},
+                {"vpu1_usage", npu_utilization[1]},
+                {"vpu2_usage", npu_utilization[2]}
+            }
+        }},
+    };
+
+    LOG_MM_D(MQTT_CLIENT, "OnGetBoardInfo ----");
+}
 
 
 // static void OnGetMediaChannelInfo() {
@@ -694,20 +736,23 @@ static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
 // #endif
 
 
+/*保证回调执行的程序要简单，如果比较复杂，需要考虑要用状态机处理回调*/
 static void messageArrived(MQTT::MessageData& md) {
     printf("messageArrived ++++\n");
 
-    // MQTT::Message &message = md.message;
-    // LOG_MM_D(MQTT_CLIENT, "Message %d arrived: qos %d, retained %d, dup %d, packetid %d.",
-    //         ++arrivedcount, message.qos, message.retained, message.dup, message.id);
-    // LOG_MM_D(MQTT_CLIENT, "Payload %.*s.", (int)message.payloadlen, (char*)message.payload);
+    MQTT::Message &message = md.message;
+    LOG_MM_D(MQTT_CLIENT, "Message %d arrived: qos %d, retained %d, dup %d, packetid %d.",
+            ++arrivedcount, message.qos, message.retained, message.dup, message.id);
+    LOG_MM_D(MQTT_CLIENT, "Payload %.*s.", (int)message.payloadlen, (char*)message.payload);
 
-    // std::string recv_msg((char *)message.payload, message.payloadlen);
-    // printf("recv msg %s\n", recv_msg.c_str());
+    std::string recv_msg((char *)message.payload, message.payloadlen);
+    printf("recv msg %s\n", recv_msg.c_str());
 
-    // auto jsonRes = nlohmann::json::parse(recv_msg);
-    // std::string type = jsonRes["type"];
-    // printf("msg type %s\n", type.c_str());
+    auto jsonRes = nlohmann::json::parse(recv_msg);
+    std::string type = jsonRes["type"];
+    printf("msg type %s\n", type.c_str());
+
+
 
     // if (type == "login") {
     //     std::string account  = jsonRes["account"];
@@ -717,9 +762,12 @@ static void messageArrived(MQTT::MessageData& md) {
     //     OnRebootAiBox();
     // } else if (type == "restartMasterApp") {
     //     OnRestartMasterApp();
-    // } else if (type == "getDashBoardInfo") {
-    //     OnGetDashBoardInfo();
-    // } 
+
+    if (type == "rebootAiBox") {
+        OnRebootAiBox();
+    } else if (type == "getBoardInfo") {
+        OnGetBoardInfo();
+    } 
     // #if 0
     // else if (type == "getMediaChannelInfo") {
     //     OnGetMediaChannelInfo();
@@ -807,6 +855,7 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
     int rc = ipstack_->connect(mqtt_config.hostname.c_str(), mqtt_config.port);
 	if (rc != 0) {
         LOG_M_E(MQTT_CLIENT, "rc from TCP connect fail, rc = %d", rc);
+        return AX_FALSE;
     } else {
         MQTTPacket_connectData data = MQTTPacket_connectData_initializer;       
         data.MQTTVersion = mqtt_config.version;
@@ -816,11 +865,14 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
         rc = client_->connect(data);
         if (rc != 0) {
             LOG_M_E(MQTT_CLIENT, "rc from MQTT connect fail, rc is %d\n", rc);
+            return AX_FALSE;
         } else {
             LOG_M_D(MQTT_CLIENT, "MQTT connected sucess");
             rc = client_->subscribe(topic.c_str(), MQTT::QOS0, messageArrived);
-            if (rc != 0)
+            if (rc != 0) {
                 LOG_M_E(MQTT_CLIENT, "rc from MQTT subscribe is %d\n", rc);
+                return AX_FALSE;
+            }      
         }
     }
 
@@ -865,15 +917,18 @@ AX_BOOL MqttClient::Stop(AX_VOID) {
     return AX_TRUE;
 }
 
+
+
+
 AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
     LOG_MM_I(MQTT_CLIENT, "+++");
 
     while (m_threadWork.IsRunning()) {
-        //process alarm message
+        GetBoardInfo();
+        // process alarm message
         // MQTT::Message alarm_message;
         // SendAlarmMsg(alarm_message);
-
-        // client_->yield(20 * 1000UL); // sleep 1 seconds
+        client_->yield(5 * 1000UL); // sleep 5 seconds
     }
 
     LOG_MM_I(MQTT_CLIENT, "---");

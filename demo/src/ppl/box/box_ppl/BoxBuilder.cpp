@@ -428,7 +428,6 @@ AX_BOOL CBoxBuilder::InitDispatcher(const string &strFontPath, AX_U32 nDispType)
 }
 
 AX_BOOL CBoxBuilder::InitMqtt() {
-
     mqtt_client = std::make_unique<MqttClient>();
     if (!mqtt_client) {
         LOG_MM_E(BOX, "Create MqttClient instance failed.");
@@ -436,8 +435,12 @@ AX_BOOL CBoxBuilder::InitMqtt() {
     }
 
     MQTT_CONFIG_T mqttConfig = CBoxConfig::GetInstance()->GetMqttConfig();
-    mqtt_client->Init(mqttConfig);
 
+    if (!mqtt_client->Init(mqttConfig)) {
+        LOG_MM_E(BOX, "MqttClient Init failed.");
+        return AX_FALSE;
+    }
+    
     // mqtt_client->BindTransfer(m_transHelper.get());
 
     return AX_TRUE;
@@ -685,6 +688,7 @@ AX_BOOL CBoxBuilder::DeInit(AX_VOID) {
     DESTORY_INSTANCE(m_disp);
     DESTORY_INSTANCE(m_dispSecondary);
     DESTORY_INSTANCE(m_detect);
+    DESTORY_INSTANCE(mqtt_client);
     DESTORY_INSTANCE(m_vdec);
 
 #undef DESTORY_INSTANCE
@@ -729,6 +733,14 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             if (!m_detect->Start()) {
                 return AX_FALSE;
             }
+        }
+
+        if (mqtt_client) {
+            if (!mqtt_client->Start()) {
+                return AX_FALSE;
+            }
+        } else {
+            LOG_MM_C(BOX, ">>>>>>>>>>>>>>>> MQTT module is disabled <<<<<<<<<<<<<<<<<<<<<");
         }
 
         for (auto &m : m_arrDispatcher) {
@@ -782,6 +794,10 @@ AX_BOOL CBoxBuilder::WaitDone(AX_VOID) {
 
     if (m_detect) {
         m_detect->Stop();
+    }
+
+    if (mqtt_client) {
+        mqtt_client->Stop();
     }
 
     if (m_dispRecorder) {

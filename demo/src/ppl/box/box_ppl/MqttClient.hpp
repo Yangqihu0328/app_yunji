@@ -36,19 +36,26 @@
 #include "MQTTClient.h"
 
 namespace boxconf {
-// struct MemoryInfo {
-//     long totalMem;
-//     long freeMem;
-//     long availableMem;
-//     long buffers;
-//     long cached;
-// };
+struct MemoryInfo {
+    long totalMem;
+    long freeMem;
+    long usedMem;
+    long availableMem;
+    long buffers;
+    long cached;
+};
 
-// struct FlashInfo {
-//     long total;
-//     long used;
-//     long free;
-// };
+struct FlashInfo {
+    long total;
+    long used;
+    long free;
+};
+
+struct TpuInfo {
+    long total;
+    long used;
+    long free;
+};
 
 class IPStack
 {
