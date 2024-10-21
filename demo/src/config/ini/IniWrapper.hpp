@@ -20,6 +20,7 @@ public:
     ~CIniWrapper(AX_VOID) = default;
 
     AX_BOOL Load(const std::string& strIniPath);
+    AX_BOOL DeleteValue(const std::string& strAppName, const std::string& strKeyName);
     AX_S32 GetIntValue(const std::string& strAppName, const std::string& strKeyName, AX_S32 nDefault);
     AX_BOOL SetIntValue(const std::string& strAppName, const std::string& strKeyName, AX_S32 nValue);
     AX_F64 GetDoubleValue(const std::string& strAppName, const std::string& strKeyName, AX_F64 dDefault);

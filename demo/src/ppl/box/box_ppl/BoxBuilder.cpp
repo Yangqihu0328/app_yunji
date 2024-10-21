@@ -915,6 +915,68 @@ AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
     return AX_TRUE;
 }
 
+
+AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
+    LOG_MM_W(BOX, "+++");
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    if (channelId < (int)streamConfig.v.size()) {
+        STREAMER_ATTR_T stAttr;
+        stAttr.strPath = streamConfig.v[channelId];
+        stAttr.nMaxWidth = streamConfig.nMaxGrpW;
+        stAttr.nMaxHeight = streamConfig.nMaxGrpH;
+        stAttr.nCookie = (AX_S32)channelId;
+        stAttr.bLoop = AX_TRUE;
+        stAttr.bSyncObs = AX_TRUE;
+
+        m_arrStreamer[channelId] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
+        if (!m_arrStreamer[channelId]) {
+            return AX_FALSE;
+        }
+
+        if (!m_arrStreamer[channelId]->Init(stAttr)) {
+            return AX_FALSE;
+        }
+
+        m_arrStreamer[channelId]->RegObserver(m_vdec.get());
+
+        // m_arrStreamer[channelId]->RegObserver(m_transHelper.get());
+
+        thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[channelId].get());
+        t.join();
+
+        LOG_MM_W(BOX, "---");
+
+        return AX_TRUE;
+    }
+
+    return AX_FALSE;
+}
+
+AX_BOOL CBoxBuilder::StopStream(AX_S32 channelId) {
+    LOG_MM_W(BOX, "+++");
+
+    auto &&stream = m_arrStreamer[channelId];
+    
+    STREAMER_STAT_T stStat;
+    if (stream && stream->QueryStatus(stStat) && stStat.bStarted) {
+        stream->UnRegObserver(m_vdec.get());
+
+        // stream->UnRegObserver(m_transHelper.get());
+
+        thread t([](IStreamHandler *p) { p->Stop(); }, stream.get());
+        t.join();
+
+        stream->DeInit();
+
+        stream = nullptr;
+    }
+
+    LOG_MM_W(BOX, "---");
+
+    return AX_TRUE;
+}
+
+
 #if defined(__RECORD_VB_TIMESTAMP__)
 AX_VOID CBoxBuilder::AllocTimestampBufs(AX_VOID) {
     m_arrTimestampMods.clear();

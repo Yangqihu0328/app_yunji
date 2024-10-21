@@ -59,6 +59,18 @@ AX_BOOL CIniWrapper::SetStringValue(const std::string& strAppName, const std::st
     return AX_TRUE;
 }
 
+AX_BOOL CIniWrapper::DeleteValue(const std::string& strAppName, const std::string& strKeyName) {
+    // 删除指定的键值
+    m_ini.DeleteKey(strAppName, strKeyName);
+
+    // 更新文件以反映删除操作
+    if (RET_OK != m_ini.Save()) {
+        return AX_FALSE;
+    }
+
+    return AX_TRUE;
+}
+
 AX_VOID CIniWrapper::GetAllKeys(const std::string& strAppName, std::map<std::string, std::string>& mapKeys) {
     mapKeys.clear();
     inifile::IniSection* pKeys = m_ini.getSection(strAppName);

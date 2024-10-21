@@ -1,4 +1,4 @@
-/**************************************************************************************************
+ /**************************************************************************************************
  *
  * Copyright (c) 2019-2023 Axera Semiconductor (Shanghai) Co., Ltd. All Rights Reserved.
  *
@@ -32,13 +32,16 @@ enum class AX_DISPDEV_TYPE {
     PRIMARY = 0,
     SECONDARY = 1,
 };
+class CBoxBuilder : public CAXSingleton<CBoxBuilder> {
+    friend class CAXSingleton<CBoxBuilder>;
 
-class CBoxBuilder final {
 public:
     CBoxBuilder(AX_VOID) noexcept = default;
 
     AX_BOOL Start(AX_VOID);
     AX_BOOL StopAllStreams(AX_VOID);
+    AX_BOOL StartStream(AX_S32 channelId);
+    AX_BOOL StopStream(AX_S32 channelId);
     AX_BOOL WaitDone(AX_VOID);
 
     AX_BOOL QueryStreamsAllEof(AX_VOID);

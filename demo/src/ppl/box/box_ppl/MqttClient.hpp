@@ -35,6 +35,9 @@
 #include "AXThread.hpp"
 #include "MQTTClient.h"
 
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+
 namespace boxconf {
 struct MemoryInfo{
     long totalMem;
@@ -70,7 +73,7 @@ struct MediaChanel{
 
 
 struct AlgoTask{
-    int task_id;
+    int id;
     std::string url;
     std::string channel_status;
     int algo_index0;
@@ -349,5 +352,6 @@ protected:
 
     CAXThread m_threadWork;
 	std::string topic;
+	
 };
 };

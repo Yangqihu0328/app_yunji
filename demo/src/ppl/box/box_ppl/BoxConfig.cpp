@@ -254,3 +254,40 @@ UT_CONFIG_T CBoxConfig::GetUTConfig(AX_VOID) {
 
     return conf;
 }
+
+AX_BOOL CBoxConfig::AddStreamUrl(AX_S32 channelId, std::string& channelUrl) {
+    AX_BOOL bRet = AX_FALSE;
+    const AX_CHAR *SECT = "STREAM";
+
+    do {
+        AX_CHAR szKey[32];
+        sprintf(szKey, "stream%02d", channelId);
+        printf("update stream id: %s to %s\n", szKey, channelUrl.c_str());
+        m_Ini.SetStringValue(SECT, szKey, channelUrl);
+    } while (0);
+
+    return bRet;
+}
+
+
+AX_BOOL CBoxConfig::removeStreamUrl(AX_S32 channelId) {
+    AX_BOOL bRet = AX_FALSE;
+    const AX_CHAR *SECT = "STREAM";
+
+    do {
+        AX_CHAR szKey[32];
+        sprintf(szKey, "stream%02d", channelId);
+        m_Ini.DeleteValue(SECT, szKey);
+    } while (0);
+
+    return AX_TRUE;
+}
+
+AX_BOOL CBoxConfig::GetStreamCount(AX_S32 &count) {
+    AX_BOOL bRet = AX_FALSE;
+    const AX_CHAR *SECT = "STREAM";
+
+    count = m_Ini.GetIntValue(SECT, "count", 0);
+
+    return AX_TRUE;
+}

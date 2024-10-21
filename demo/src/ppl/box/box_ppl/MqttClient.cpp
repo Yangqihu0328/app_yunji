@@ -5,6 +5,7 @@
 // #include "AiSwitchConfig.hpp"
 #include "DiskHelper.hpp"
 #include "ElapsedTimer.hpp"
+#include "BoxBuilder.hpp"
 // #include "AiCardMstBuilder.hpp"
 
 #include "httplib.h"
@@ -26,11 +27,14 @@ using json = nlohmann::json;
 //需要转为类成员变量，提高代码简洁性
 static std::shared_ptr<IPStack> ipstack_ = nullptr;
 static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
-static std::mutex mtx;
 static json board_info;
 static int arrivedcount = 0;
 static std::vector<MediaChanel> media_channel;
 static std::vector<AlgoTask> algo_task;
+static std::map<int, int> id_channel_map;
+static std::queue<int> addIdQueue;
+static std::queue<int> RemoveIdQueue;
+static std::mutex mtx;
 
 // #if 0
 
@@ -267,7 +271,7 @@ static void OnRebootAiBox() {
 
 
 static bool IsMediaChannelRegistered(int id) {
-    return std::any_of(mediaChannels.begin(), mediaChannels.end(),
+    return std::any_of(media_channel.begin(), media_channel.end(),
                        [id](const MediaChanel& channel) {
                            return channel.id == id;
                        });
@@ -280,31 +284,65 @@ static bool IsAlgoTaskRegistered(int id) {
                        });
 }
 
-//应该不考虑顺序也没关系
+//这个函数可能会有耗时问题
+bool check_RTSP_stream(const std::string& rtspUrl) {
+    AVFormatContext* formatContext = avformat_alloc_context();
+    if (!formatContext) {
+        LOG_M_D(MQTT_CLIENT, "avformat_alloc_context(stream %d) failed!");
+        return false;
+    }
+
+    if (avformat_open_input(&formatContext, rtspUrl.c_str(), nullptr, nullptr) < 0) {
+        LOG_M_D(MQTT_CLIENT, "Failed to open RTSP stream: ", rtspUrl);
+        return false;
+    }
+
+    if (avformat_find_stream_info(formatContext, nullptr) < 0) {
+        LOG_M_D(MQTT_CLIENT, "Failed to retrieve stream info.");
+        avformat_close_input(&formatContext);
+        return false;
+    }
+
+    avformat_close_input(&formatContext);
+    return true;
+}
+
+//有个问题，应该再这里回调里面去开始和停止码流吗？
+//正常来说应该是mqtt的线程做这个事情。那么我们应该给主线程发消息。
 static void OnAddMediaChanel(int id, std::string url) {
     json child;
     child["type"] = "AddMediaChanel";
     json root;
     root["result"] = 0;
 
+    //允许注册相同的视频流，但是id需要由前端管理，id可以任意数值。
     if (media_channel.size() > 16) {
          root["msg"] = "failure";
+         LOG_M_D(MQTT_CLIENT, "media channel only smaller than 16");
     } else {
-        //判断是否注册过
-        if (IsMediaChannelRegistered) {
-            root["msg"] = "failure";
+        //这里应该只是判断一下流能否正常取图，而不会开启功能。
+        MediaChanel newchannel;
+        if (check_RTSP_stream(url)) {
+            newchannel.channel_status = "accessible";
         } else {
-            MediaChanel newchannel;
-            newchannel.id = id;
-            newchannel.url = url;
-            newchannel.channel_status = "ready";
-
-            media_channel.push_back(newchannel);
-            
-            //TODO: add realy media channel; meanwhile confirm rtsp stream is ok? add channel_status attribute
-
-            root["msg"] = "success";
+            newchannel.channel_status = "fail";
         }
+        newchannel.id = id;
+        newchannel.url = url;
+        media_channel.push_back(newchannel);
+
+        //这么麻烦的目的是，让id为随机，但是流地址是要按照顺序的。
+        int tmp_count = 0;
+        CBoxConfig::GetInstance()->GetStreamCount(tmp_count);
+        //通道索引增加
+        int stream_count = tmp_count+1;
+        id_channel_map[id] = stream_count;
+
+        CBoxConfig::GetInstance()->AddStreamUrl(stream_count, url);
+        //通知mqtt线程
+        std::lock_guard<std::mutex> lock(mtx);
+        addIdQueue.push(stream_count);
+        root["msg"] = "success";
     }
 
     root["data"] = child;
@@ -313,7 +351,7 @@ static void OnAddMediaChanel(int id, std::string url) {
 }
 
 //TODO:后面要增加算法其他信息，例如越线检测的线的位置或者客流统计的人员数量阈值设置
-static void OnAddAlgoTask(int task_id, std::string url, std::vector<std::string> algo_vec) {
+static void OnAddAlgoTask(int id, std::string url, std::vector<int> algo_vec) {
     json child, root;
     child["type"] = "AddAlgoTask";
     root["result"] = 0;
@@ -321,23 +359,18 @@ static void OnAddAlgoTask(int task_id, std::string url, std::vector<std::string>
     if (algo_task.size() > 16) {
          root["msg"] = "failure";
     } else {
-        if (IsAlgoTaskRegistered) {
-            root["msg"] = "failure";
-        } else {
-            AlgoTask temp_algo_task;
-            temp_algo_task.id = id;
-            temp_algo_task.url = url;
-            temp_algo_task.channel_status = "ready";
-            temp_algo_task.algo_index0 = algo_vec[0];
-            temp_algo_task.algo_index1 = algo_vec[1];
-            temp_algo_task.algo_index2 = algo_vec[2];
+        AlgoTask temp_algo_task;
+        temp_algo_task.id = id;
+        temp_algo_task.url = url;
+        temp_algo_task.channel_status = "ready";
+        temp_algo_task.algo_index0 = algo_vec[0];
+        temp_algo_task.algo_index1 = algo_vec[1];
+        temp_algo_task.algo_index2 = algo_vec[2];
 
-            algo_task.push_back(temp_algo_task);
-            //TODO: add realy media channel; meanwhile confirm rtsp stream is ok? add channel_status attribute
+        algo_task.push_back(temp_algo_task);
+        //TODO: add realy media channel; meanwhile confirm rtsp stream is ok? add channel_status attribute
 
-            root["msg"] = "success";
-        }
-        
+        root["msg"] = "success";
     }
 
     root["data"] = child;
@@ -352,11 +385,18 @@ static void OnRemoveMediaChanel(int id) {
     json root;
     root["result"] = 0;
 
-    auto it = std::find_if(mediaChannels.begin(), mediaChannels.end(),
+    auto it = std::find_if(media_channel.begin(), media_channel.end(),
         [id](const MediaChanel& channel) { return channel.id == id; });
 
-    if (it != mediaChannels.end()) {
-        mediaChannels.erase(it);
+    if (it != media_channel.end()) {
+        media_channel.erase(it);
+
+        int channel_id = id_channel_map.at(id);
+        id_channel_map.erase(id);
+
+        CBoxConfig::GetInstance()->removeStreamUrl(channel_id);
+        std::lock_guard<std::mutex> lock(mtx);
+        RemoveIdQueue.push(channel_id);
 
         root["msg"] = "success";
     } else {
@@ -377,7 +417,7 @@ static void OnRemoveAlgoTask(int id) {
     root["result"] = 0;
 
     auto it = std::find_if(algo_task.begin(), algo_task.end(),
-        [id](const MediaChanel& channel) { return channel.id == id; });
+        [id](const AlgoTask& channel) { return channel.id == id; });
 
     if (it != algo_task.end()) {
         algo_task.erase(it);
@@ -401,8 +441,6 @@ static void OnQueryMediaChanel() {
     json root, child;
     child["type"] = "QueryMediaChanel";
 
-    // 媒体通道包括:媒体通道的id，媒体的视频源,视频协议，以及配置了什么算法。
-    // media_channel 是vector,需要转为json格式发送出去。
     for (const auto channel : media_channel) {
         child["id"] = channel.id;
         child["url"] = channel.url;
@@ -430,7 +468,7 @@ static void OnQueryAlgoTask() {
         child["algo1"] = task.algo_index0;
         child["algo2"] = task.algo_index1;
         child["algo3"] = task.algo_index2;
-        child["channel_status"] = channel.channel_status;
+        child["channel_status"] = task.channel_status;
     }
     root["msg"] = "success";
     root["data"] = child;
@@ -595,80 +633,6 @@ static void GetBoardInfo() {
 //     printf("OnMediaChannelInfo ----\n");
 // }
 
-// static void OnSetMediaChannelInfo(int channelId, std::string& streamUrl) {
-//     printf("OnSetMediaChannelInfo ++++\n");
-//     STREAM_CONFIG_T streamConfig = CAiCardMstConfig::GetInstance()->GetStreamConfig();
-
-//     json child;
-//     child["type"] = "setMediaChannelInfo";
-
-//     json root;
-//     root["data"] = child;
-//     if (channelId < (int)streamConfig.v.size()) {
-//         streamConfig.v[channelId] = streamUrl;
-
-//         // update ai card mst config stream url
-//         if (CAiCardMstConfig::GetInstance()->SetStreamUrl(channelId + 1, streamUrl)) {
-//             if (CAiCardMstBuilder::GetInstance()->StopStream(channelId)) {
-//                 if (CAiCardMstBuilder::GetInstance()->StartStream(channelId)) {
-//                     stream_status_[channelId] = AX_TRUE;
-
-//                     root["result"] = 0;
-//                     root["msg"] = "success";
-//                 } else {
-//                     root["result"] = -1;
-//                     root["msg"] = "start stream failed!";
-//                 }
-//             } else {
-//                 root["result"] = -1;
-//                 root["msg"] = "stop stream failed!";
-//             }
-//         } else {
-//             root["result"] = -1;
-//             root["msg"] = "set stream url failed!";
-//         }
-//     } else {
-//         root["result"] = -1;
-//         root["msg"] = "invalid channel id";
-//     }
-
-//     std::string payload = root.dump();
-
-//     SendMsg("web-message", payload.c_str(), payload.size());
-
-//     printf("OnSetMediaChannelInfo ----\n");
-// }
-
-// static void OnDelMediaChannelInfo(int channelId) {
-//     printf("OnDelMediaChannelInfo ++++\n");
-//     STREAM_CONFIG_T streamConfig = CAiCardMstConfig::GetInstance()->GetStreamConfig();
-
-//     json child;
-//     child["type"] = "delMediaChannelInfo";
-
-//     json root;
-//     root["data"] = child;
-//     if (channelId < (int)streamConfig.v.size()) {
-//         if (CAiCardMstBuilder::GetInstance()->StopStream(channelId)) {
-//             stream_status_[channelId] = AX_FALSE;
-
-//             root["result"] = 0;
-//             root["msg"] = "success";
-//         } else {
-//             root["result"] = -1;
-//             root["msg"] = "stop stream failed!";
-//         }
-//     } else {
-//         root["result"] = -1;
-//         root["msg"] = "invalid channel id";
-//     }
-
-//     std::string payload = root.dump();
-
-//     SendMsg("web-message", payload.c_str(), payload.size());
-
-//     printf("OnDelMediaChannelInfo ----\n");
-// }
 
 
 // static void OnGetMediaChannelTaskInfo() {
@@ -952,9 +916,9 @@ static void messageArrived(MQTT::MessageData& md) {
     } else if (type == "QueryMediaChanel") {
         OnQueryMediaChanel();
     } else if (type == "AddAlgoTask") {
-        int TaskId  = jsonRes["TaskId"];
+        int id  = jsonRes["TaskId"];
         std::string url  = jsonRes["url"];
-        std::vector<std::string> algo_vec;
+        std::vector<int> algo_vec;
         algo_vec.push_back(jsonRes["algo1"]);
         algo_vec.push_back(jsonRes["algo2"]);
         algo_vec.push_back(jsonRes["algo3"]);
@@ -1120,12 +1084,35 @@ AX_BOOL MqttClient::Stop(AX_VOID) {
 AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
     LOG_MM_I(MQTT_CLIENT, "+++");
 
+    int get_info_count = 0;
+
     while (m_threadWork.IsRunning()) {
-        GetBoardInfo();
+        //不限制5s，会影响性能。
+        if (get_info_count == 5) {
+            GetBoardInfo();
+        }
+        get_info_count++;
+        
         // process alarm message
         // MQTT::Message alarm_message;
         // SendAlarmMsg(alarm_message);
-        client_->yield(5 * 1000UL); // sleep 5 seconds
+
+        //不加队列可能会错过
+        std::lock_guard<std::mutex> lock(mtx);
+        int id = 0;
+        auto p_builder = CBoxBuilder::GetInstance();
+        if (!addIdQueue.empty()) {
+            id = addIdQueue.front();
+            p_builder->StopStream(id);
+            p_builder->StartStream(id);
+        } else if (!RemoveIdQueue.empty()) {
+            id = RemoveIdQueue.front();
+            p_builder->StopStream(id);
+            p_builder->StartStream(id);
+        }
+        
+
+        client_->yield(1 * 1000UL); // sleep 5 seconds
     }
 
     LOG_MM_I(MQTT_CLIENT, "---");
