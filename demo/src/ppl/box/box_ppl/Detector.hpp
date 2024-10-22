@@ -55,6 +55,7 @@ typedef struct {
     AX_S32 nGrpId;
     AX_S32 nChnId;
     AX_U32 nSkelChn;
+    AX_U32 nAlgoId;
 } SKEL_FRAME_PRIVATE_DATA_T;
 
 /**

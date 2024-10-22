@@ -31,7 +31,10 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
     while (m_DispatchThread.IsRunning()) {
         if (m_qFrame.Pop(axFrame, -1)) {
             if (0 == fbc.nMode) { /* if no compress, draw box because AX_IVPS_DrawRect not support FBC */
-                //每一路视频只能绑定一种算法，现在假设有10个算法。
+                //每一路视频只能绑定一种算法，现在假设有2-3个算法。每个算法有多个结果
+                //现在只能绑定每个通道只能绑定一个结果。其实现在的结果是对不上的。
+                //也就是现在推理的结果frame id与真实显示的frame不是同一个
+                //并且没有清除，可能没有检测结果但是还是会出现这个框
                 if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
                     /* CPU draw rectange, needs virtual address */
                     if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
@@ -272,6 +275,20 @@ AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhv
                 ++arrCount[fhvp.item[i].eType];
 #endif
                 break;
+            case DETECT_TYPE_FIRE:
+                //确定火的框颜色
+                gdi.nColor = 0XAABBCC;
+#ifdef DRAW_FHVP_LABEL
+                //确定类型的数量，后面预览
+                ++arrCount[fhvp.item[i].eType];
+#endif
+                break;
+            case DETECT_TYPE_CAT:
+                gdi.nColor = 0X112233; /* YYUUVV purple */
+#ifdef DRAW_FHVP_LABEL
+                ++arrCount[fhvp.item[i].eType];
+#endif
+                break;
             default:
                 break;
         }
@@ -291,9 +308,10 @@ AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhv
     }
 
 #ifdef DRAW_FHVP_LABEL
+    //这里只是统计最终数量
     AX_CHAR szLabel[64]{0};
-    snprintf(szLabel, sizeof(szLabel), "H:%02d V:%02d C:%02d P:%02d", arrCount[DETECT_TYPE_BODY], arrCount[DETECT_TYPE_VEHICLE],
-             arrCount[DETECT_TYPE_CYCLE], arrCount[DETECT_TYPE_PLATE]);
+    snprintf(szLabel, sizeof(szLabel), "H:%02d V:%02d C:%02d P:%02d F:%02d CAT:%2d", arrCount[DETECT_TYPE_BODY], arrCount[DETECT_TYPE_VEHICLE],
+             arrCount[DETECT_TYPE_CYCLE], arrCount[DETECT_TYPE_PLATE], arrCount[DETECT_TYPE_FIRE], arrCount[DETECT_TYPE_CAT]);
     m_font.FillString(szLabel, 8, canvas.nH - 12, &yuv, canvas.nW, canvas.nH);
 #endif
 }

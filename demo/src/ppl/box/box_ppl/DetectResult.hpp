@@ -17,6 +17,7 @@
 
 #define MAX_DETECT_RESULT_COUNT (64)
 
+//临时写一个算法列表，火焰，动物，手势，抽烟
 typedef enum {
     DETECT_TYPE_UNKNOWN = 0,
     DETECT_TYPE_FACE = 1,
@@ -24,6 +25,12 @@ typedef enum {
     DETECT_TYPE_VEHICLE = 3,
     DETECT_TYPE_PLATE = 4,
     DETECT_TYPE_CYCLE = 5,
+    DETECT_TYPE_FIRE = 6,
+    DETECT_TYPE_CAT = 7,
+    DETECT_TYPE_DOG = 8,
+    DETECT_TYPE_HAND_OK = 9,
+    DETECT_TYPE_HAND_NO = 10,
+    DETECT_TYPE_HAND_SMOKING = 11,
     DETECT_TYPE_BUTT
 } DETECT_TYPE_E;
 
@@ -39,6 +46,7 @@ typedef struct DETECT_RESULT_S {
     AX_U32 nH;
     AX_U32 nCount;
     AX_S32 nGrpId;
+    AX_U32 nAlgoId;
     DETECT_RESULT_ITEM_T item[MAX_DETECT_RESULT_COUNT];
 
     DETECT_RESULT_S(AX_VOID) {
@@ -55,24 +63,50 @@ class CDetectResult : public CAXSingleton<CDetectResult> {
     friend class CAXSingleton<CDetectResult>;
 
 public:
-    AX_BOOL Set(AX_S32 nGrp, const DETECT_RESULT_T& fhvp) {
+    //需要在这里进行组合
+    AX_BOOL Set(AX_S32 nGrp, const DETECT_RESULT_T& cur_result) {
         std::lock_guard<std::mutex> lck(m_mtx);
-        m_mapRlts[nGrp] = fhvp;
 
-        for (AX_U32 i = 0; i < fhvp.nCount; ++i) {
-            ++m_arrCount[fhvp.item[i].eType];
+        auto &last_result = m_mapRlts[nGrp];
+        DETECT_RESULT_T new_result, old_result;
+        //说明是推理当前帧的多个算法
+        if (last_result.nSeqNum == cur_result.nSeqNum && last_result.nAlgoId != cur_result.nAlgoId) {
+            //先判断差异，找到最多的，从最多的增加。
+            if (cur_result.nCount >= last_result.nCount) {
+                new_result = cur_result;
+                old_result = last_result;
+            } else {
+                new_result = last_result;
+                old_result = new_result;
+            }
+            // auto& new_result = (cur_result.nCount >= last_result.nCount) ? const_cast<DETECT_RESULT_T&>(cur_result) : last_result;
+            // const auto& old_result = (cur_result.nCount >= last_result.nCount) ? last_result : cur_result;
+
+            int index = 0;
+            for (AX_U32 i = new_result.nCount; i < last_result.nCount && i < MAX_DETECT_RESULT_COUNT; ++i) {
+                new_result.item[i].eType = old_result.item[index].eType;
+                new_result.item[i].nTrackId  = old_result.item[index].nTrackId;
+                new_result.item[i].tBox  = old_result.item[index].tBox;
+                index++;
+            }
+        }
+        m_mapRlts[nGrp] = new_result;
+
+        for (AX_U32 i = 0; i < new_result.nCount; ++i) {
+            ++m_arrCount[new_result.item[i].eType];
         }
 
         return AX_TRUE;
     }
 
-    AX_BOOL Get(AX_S32 nGrp, DETECT_RESULT_T& fhvp) {
+
+    AX_BOOL Get(AX_S32 nGrp, DETECT_RESULT_T& cur_result) {
         std::lock_guard<std::mutex> lck(m_mtx);
         if (m_mapRlts.end() == m_mapRlts.find(nGrp)) {
             return AX_FALSE;
         }
 
-        fhvp = m_mapRlts[nGrp];
+        cur_result = m_mapRlts[nGrp];
         return AX_TRUE;
     }
 

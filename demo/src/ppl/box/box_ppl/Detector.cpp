@@ -22,6 +22,9 @@
 using namespace std;
 #define DETECTOR "SKEL"
 
+//主要是从这里入手。
+//相当于同一帧可能会被多个算法进行推理。会不会遇到性能不够，算法推理不够送过来帧速度快呢？
+//同一帧被多个算法推理是正常情况。那么推理的结果应该都是存在同一个结果里面。
 static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstResult, AX_VOID *pUserData) {
     CDetector *pThis = (CDetector *)pUserData;
     if (!pThis) {
@@ -33,12 +36,13 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
         THROW_AX_EXCEPTION("skel handle %p frame private data is nil", pHandle);
     }
 
+    //不对喔，每次fhvp会重新更新。而且你也会遇到路的算法推理结果
     DETECT_RESULT_T fhvp;
-    // fhvp.nSeqNum = pstResult->nFrameId;
     fhvp.nW = pstResult->nOriginalWidth;
     fhvp.nH = pstResult->nOriginalHeight;
     fhvp.nSeqNum = pPrivData->nSeqNum;
     fhvp.nGrpId = pPrivData->nGrpId;
+    fhvp.nAlgoId = pPrivData->nAlgoId;
     fhvp.nCount = pstResult->nObjectSize;
 
     AX_U32 index = 0;
@@ -48,6 +52,7 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
             continue;
         }
 
+        //相当于用item去保存数据，那么就对item进行维护即可，直接再item后面增加即可。
         if (0 == strcmp(pstResult->pstObjectItems[i].pstrObjectCategory, "body")) {
             fhvp.item[index].eType = DETECT_TYPE_BODY;
         } else if (0 == strcmp(pstResult->pstObjectItems[i].pstrObjectCategory, "vehicle")) {
@@ -58,6 +63,10 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
             fhvp.item[index].eType = DETECT_TYPE_FACE;
         } else if (0 == strcmp(pstResult->pstObjectItems[i].pstrObjectCategory, "plate")) {
             fhvp.item[index].eType = DETECT_TYPE_PLATE;
+        } else if (0 == strcmp(pstResult->pstObjectItems[i].pstrObjectCategory, "fire")) {
+            fhvp.item[index].eType = DETECT_TYPE_FIRE;
+        } else if (0 == strcmp(pstResult->pstObjectItems[i].pstrObjectCategory, "cat")) {
+            fhvp.item[index].eType = DETECT_TYPE_CAT;
         } else {
             LOG_M_W(DETECTOR, "unknown detect result %s of vdGrp %d frame %lld (skel %lld)",
                     pstResult->pstObjectItems[i].pstrObjectCategory, fhvp.nGrpId, fhvp.nSeqNum, pstResult->nFrameId);
@@ -122,6 +131,9 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
             pPrivData->nSeqNum = axFrame.stFrame.stVFrame.stVFrame.u64SeqNum;
             pPrivData->nGrpId = axFrame.nGrp;
             pPrivData->nSkelChn = axFrame.nGrp % m_stAttr.nChannelNum;
+            //临时定义算法类型
+            int algo_id = 10;
+            pPrivData->nAlgoId = algo_id;
         }
 
         AX_SKEL_FRAME_T skelFrame;
@@ -144,6 +156,8 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
         usleep(3000);
         m_skelData.giveback(pPrivData);
 #else
+        //m_hSkel实际上注册时候是绑定哪个算法。那么后面就是有很多算法的话，对应的id都是不一样。
+        //现在每一个通道对应着一个算法，后面的话
         AX_S32 ret = AX_SKEL_SendFrame(m_hSkel[pPrivData->nSkelChn], &skelFrame, -1);
 #endif
 
@@ -246,6 +260,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
             }
         }
 
+        //这里只是确定某一路有一个算法
         for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
             /* [5]: create SEKL handle */
             AX_SKEL_HANDLE_PARAM_T stHandleParam;
