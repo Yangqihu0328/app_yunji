@@ -27,9 +27,11 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
     CAXFrame axFrame;
     DETECT_RESULT_T fhvp;
     const boxconf::COMPRESS_CONFIG_T fbc = boxconf::CBoxConfig::GetInstance()->GetCompressConfig();
+    //每一路视频都有一个显示线程。
     while (m_DispatchThread.IsRunning()) {
         if (m_qFrame.Pop(axFrame, -1)) {
             if (0 == fbc.nMode) { /* if no compress, draw box because AX_IVPS_DrawRect not support FBC */
+                //每一路视频只能绑定一种算法，现在假设有10个算法。
                 if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
                     /* CPU draw rectange, needs virtual address */
                     if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {

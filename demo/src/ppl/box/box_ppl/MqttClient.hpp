@@ -35,8 +35,10 @@
 #include "AXThread.hpp"
 #include "MQTTClient.h"
 
+extern "C" {
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
+}
 
 namespace boxconf {
 struct MemoryInfo{
