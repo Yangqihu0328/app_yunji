@@ -189,6 +189,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
 
     m_stAttr = stAttr;
 
+
     if (m_stAttr.nSkipRate <= 0) {
         m_stAttr.nSkipRate = 1;
     }
@@ -261,6 +262,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         }
 
         //这里只是确定某一路有一个算法
+        //10.23 TODO修改一路支持多个算法。
         for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
             /* [5]: create SEKL handle */
             AX_SKEL_HANDLE_PARAM_T stHandleParam;

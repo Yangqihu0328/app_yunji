@@ -35,7 +35,7 @@ typedef struct {
 } STREAM_CONFIG_T;
 
 typedef struct {
-    AX_U32 nPPL;
+    AX_U32 nPPL[3];
     AX_U32 nVNPU;
     AX_BOOL bTrackEnable;
 } DETECT_CHN_PARAM_T;

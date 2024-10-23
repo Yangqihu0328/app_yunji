@@ -122,16 +122,20 @@ DETECT_CONFIG_T CBoxConfig::GetDetectConfig(AX_VOID) {
         vector<AX_S32> vec;
         m_Ini.GetIntValue(SECT, str, vec);
 
-        if (vec.size() == 3) {
-            conf.tChnParam[i].nPPL = vec[0];
-            conf.tChnParam[i].bTrackEnable = (AX_BOOL)vec[1];
+        if (vec.size() == 5) {
+            for (AX_S32 j=0; j<3; j++) {
+                conf.tChnParam[i].nPPL[j] = vec[j];
+            }
+            conf.tChnParam[i].bTrackEnable = (AX_BOOL)vec[3];
             if (conf.nVnpuMode == 0) {
                 conf.tChnParam[i].nVNPU = 0;
             } else {
-                conf.tChnParam[i].nVNPU = vec[2];
+                conf.tChnParam[i].nVNPU = vec[4];
             }
         } else {
-            conf.tChnParam[i].nPPL = 4;
+            for (AX_S32 j=0; j<3; j++) {
+                conf.tChnParam[i].nPPL[j] = 4;
+            }
             conf.tChnParam[i].bTrackEnable = AX_FALSE;
             conf.tChnParam[i].nVNPU = 0;
         }

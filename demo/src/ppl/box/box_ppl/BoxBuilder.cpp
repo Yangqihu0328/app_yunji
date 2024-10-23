@@ -462,7 +462,9 @@ AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
     tDetectAttr.strModelPath = detectConfig.strModelPath;
     tDetectAttr.nChannelNum = AX_MIN(detectConfig.nChannelNum, DETECTOR_MAX_CHN_NUM);
     for (AX_U32 i = 0; i < tDetectAttr.nChannelNum; ++i) {
-        tDetectAttr.tChnAttr[i].nPPL = detectConfig.tChnParam[i].nPPL;
+        for (AX_U32 j=0; j<3; j++) {
+            tDetectAttr.tChnAttr[i].nPPL[j] = detectConfig.tChnParam[i].nPPL[j];
+        }
         tDetectAttr.tChnAttr[i].nVNPU = detectConfig.tChnParam[i].nVNPU;
         tDetectAttr.tChnAttr[i].bTrackEnable = detectConfig.tChnParam[i].bTrackEnable;
     }

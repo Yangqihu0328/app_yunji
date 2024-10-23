@@ -19,7 +19,7 @@
 #define DETECTOR_MAX_CHN_NUM 32
 
 typedef struct DETECTOR_CHN_ATTR_S {
-    AX_U32 nPPL;
+    AX_U32 nPPL[3];
     AX_U32 nVNPU;
     AX_BOOL bTrackEnable;
 
