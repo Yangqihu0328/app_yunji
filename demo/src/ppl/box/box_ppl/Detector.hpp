@@ -25,7 +25,9 @@ typedef struct DETECTOR_CHN_ATTR_S {
     AX_BOOL bTrackEnable;
 
     DETECTOR_CHN_ATTR_S(AX_VOID) {
-        nPPL = AX_SKEL_PPL_HVCFP;
+        nPPL[0] = AX_SKEL_PPL_HVCFP;
+        nPPL[1] = AX_SKEL_PPL_HVCFP;
+        nPPL[2] = AX_SKEL_PPL_HVCFP;
         nVNPU = AX_SKEL_NPU_DEFAULT;
         bTrackEnable = AX_FALSE;
     }

@@ -339,7 +339,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         //也就是所有通道都初始化失败
         if (all_init_fail == true) {
             delete[] m_arrFrameQ;
-            m_arrFrameQ = nullptr;.
+            m_arrFrameQ = nullptr;
             return AX_FALSE;
         }
 
