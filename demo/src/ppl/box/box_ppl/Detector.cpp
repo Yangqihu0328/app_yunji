@@ -189,12 +189,12 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
 
     m_stAttr = stAttr;
 
-
     if (m_stAttr.nSkipRate <= 0) {
         m_stAttr.nSkipRate = 1;
     }
 
     /* define how many frames can skel to handle in parallel */
+    //推理的帧数量是不变的。保存帧结果的数量也是可以不变的。
     constexpr AX_U32 PARALLEL_FRAME_COUNT = 2;
     m_skelData.reserve(stAttr.nGrpCount * PARALLEL_FRAME_COUNT);
 
@@ -208,119 +208,139 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         }
     }
 
-    /* [2]: SKEL init */
-    AX_SKEL_INIT_PARAM_T stInit;
-    memset(&stInit, 0, sizeof(stInit));
-    stInit.pStrModelDeploymentPath = m_stAttr.strModelPath.c_str();
-    AX_S32 ret = AX_SKEL_Init(&stInit);
-    if (0 != ret) {
-        LOG_M_E(DETECTOR, "%s: AX_SKEL_Init fail, ret = 0x%x", __func__, ret);
-
-        delete[] m_arrFrameQ;
-        m_arrFrameQ = nullptr;
-        return AX_FALSE;
-    }
-
     do {
-        /* [3]: print SKEL version */
-        const AX_SKEL_VERSION_INFO_T *pstVersion = NULL;
-        ret = AX_SKEL_GetVersion(&pstVersion);
-        if (0 != ret) {
-            LOG_M_E(DETECTOR, "%s: AX_SKEL_GetVersion() fail, ret = 0x%x", __func__, ret);
-        } else {
-            if (pstVersion && pstVersion->pstrVersion) {
-                LOG_M_I(DETECTOR, "SKEL version: %s", pstVersion->pstrVersion);
-            }
+        //制作一个标记位，表明现在当前路数的算法配置成功与否。
+        d_vec.resize(m_stAttr.nChannelNum);
+        int all_init_fail = false;
+        for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
+            /* [5]: create SEKL handle */
+            for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+                //1.先确定是否适配过
+                AX_SKEL_INIT_PARAM_T stInit;
+                memset(&stInit, 0, sizeof(stInit));
+                stInit.pStrModelDeploymentPath = m_stAttr.strModelPath.c_str();
+                //先确定路径是否ok，再建立map,绑定代码注册好的ppl
+                AX_S32 ret = AX_SKEL_Init(&stInit);
+                if (0 != ret) {
+                    LOG_M_E(DETECTOR, "%s: AX_SKEL_Init fail, ret = 0x%x", __func__, ret);
+                    d_vec[nChn][algo_id] = false;
+                    break;
+                }
 
-            AX_SKEL_Release((AX_VOID *)pstVersion);
-        }
+                //打印npu sdk版本
+                const AX_SKEL_VERSION_INFO_T *pstVersion = NULL;
+                ret = AX_SKEL_GetVersion(&pstVersion);
+                if (0 != ret) {
+                    LOG_M_E(DETECTOR, "%s: AX_SKEL_GetVersion() fail, ret = 0x%x", __func__, ret);
+                } else {
+                    if (pstVersion && pstVersion->pstrVersion) {
+                        LOG_M_I(DETECTOR, "SKEL version: %s", pstVersion->pstrVersion);
+                    }
 
-        /* [4]: check whether has FHVP model or not */
-        const AX_SKEL_CAPABILITY_T *pstCapability = NULL;
-        ret = AX_SKEL_GetCapability(&pstCapability);
-        if (0 != ret) {
-            LOG_M_E(DETECTOR, "%s: AX_SKEL_GetCapability() fail, ret = 0x%x", __func__, ret);
-            break;
-        } else {
-            AX_BOOL bFHVP{AX_FALSE};
-            if (pstCapability && 0 == pstCapability->nPPLConfigSize) {
-                LOG_M_E(DETECTOR, "%s: SKEL model has 0 PPL", __func__);
-            } else {
-                for (AX_U32 i = 0; i < pstCapability->nPPLConfigSize; ++i) {
-                    if (AX_SKEL_PPL_HVCFP == pstCapability->pstPPLConfig[i].ePPL) {
-                        bFHVP = AX_TRUE;
+                    AX_SKEL_Release((AX_VOID *)pstVersion);
+                }
+
+                /* [4]: check whether has FHVP model or not */
+                //没有找到相应的模型，就退出，这一路视频就可能缺少某个算法，或者没有算法、
+                //这个应该要标记一下。
+                const AX_SKEL_CAPABILITY_T *pstCapability = NULL;
+                ret = AX_SKEL_GetCapability(&pstCapability);
+                if (0 != ret) {
+                    LOG_M_E(DETECTOR, "%s: AX_SKEL_GetCapability() fail, ret = 0x%x", __func__, ret);
+                    break;
+                } else {
+                    AX_BOOL bFHVP{AX_FALSE};
+                    if (pstCapability && 0 == pstCapability->nPPLConfigSize) {
+                        LOG_M_E(DETECTOR, "%s: SKEL model has 0 PPL", __func__);
+                    } else {
+                        for (AX_U32 i = 0; i < pstCapability->nPPLConfigSize; ++i) {
+                            if (AX_SKEL_PPL_HVCFP == pstCapability->pstPPLConfig[i].ePPL) {
+                                bFHVP = AX_TRUE;
+                                break;
+                            }
+                        }
+                    }
+
+                    AX_SKEL_Release((AX_VOID *)pstCapability);
+                    if (!bFHVP) {
+                        LOG_M_E(DETECTOR, "%s: SKEL not found FHVP model", __func__);
+                        d_vec[nChn][algo_id] = false;
                         break;
                     }
                 }
-            }
 
-            AX_SKEL_Release((AX_VOID *)pstCapability);
-            if (!bFHVP) {
-                LOG_M_E(DETECTOR, "%s: SKEL not found FHVP model", __func__);
-                break;
+                //配置算法参数
+                AX_SKEL_HANDLE_PARAM_T stHandleParam;
+                memset(&stHandleParam, 0, sizeof(stHandleParam));
+                stHandleParam.ePPL = (AX_SKEL_PPL_E)m_stAttr.tChnAttr[nChn].nPPL[algo_id];
+                stHandleParam.nFrameDepth = m_stAttr.nDepth;
+                stHandleParam.nFrameCacheDepth = 0;
+                stHandleParam.nIoDepth = 0;
+                stHandleParam.nWidth = m_stAttr.nW;
+                stHandleParam.nHeight = m_stAttr.nH;
+                if (m_stAttr.tChnAttr[nChn].nVNPU == AX_SKEL_NPU_DEFAULT) {
+                    stHandleParam.nNpuType = AX_SKEL_NPU_DEFAULT;
+                } else {
+                    stHandleParam.nNpuType = (AX_U32)(1 << (m_stAttr.tChnAttr[nChn].nVNPU - 1));
+                }
+
+                AX_SKEL_CONFIG_T stConfig = {0};
+                AX_SKEL_CONFIG_ITEM_T stItems[16] = {0};
+                AX_U8 itemIndex = 0;
+                stConfig.nSize = 0;
+                stConfig.pstItems = &stItems[0];
+
+                if (!m_stAttr.tChnAttr[nChn].bTrackEnable) {
+                    // track_disable
+                    stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"track_disable";
+                    AX_SKEL_COMMON_THRESHOLD_CONFIG_T stTrackDisableThreshold = {0};
+                    stTrackDisableThreshold.fValue = 1;
+                    stConfig.pstItems[itemIndex].pstrValue = (AX_VOID *)&stTrackDisableThreshold;
+                    stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_COMMON_THRESHOLD_CONFIG_T);
+                    itemIndex++;
+                }
+
+                // push_disable
+                stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"push_disable";
+                AX_SKEL_COMMON_THRESHOLD_CONFIG_T stPushDisableThreshold = {0};
+                stPushDisableThreshold.fValue = 1;
+                stConfig.pstItems[itemIndex].pstrValue = (AX_VOID *)&stPushDisableThreshold;
+                stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_COMMON_THRESHOLD_CONFIG_T);
+                itemIndex++;
+
+                stConfig.nSize = itemIndex;
+                stHandleParam.stConfig = stConfig;
+
+                //创建算法通道
+                LOG_M_C(DETECTOR, "ppl %d, depth %d, cache depth %d, %dx%d", stHandleParam.ePPL, stHandleParam.nFrameDepth,
+                        stHandleParam.nFrameCacheDepth, stHandleParam.nWidth, stHandleParam.nHeight);
+                ret = AX_SKEL_Create(&stHandleParam, &m_hSkel[nChn][algo_id]);
+
+                if (0 != ret || NULL == m_hSkel[nChn]) {
+                    LOG_M_E(DETECTOR, "%s: AX_SKEL_Create() fail, ret = 0x%x", __func__, ret);
+                    d_vec[nChn][algo_id] = false;
+                    break;
+                }
+
+                //注册回调
+                /* [6]: register result callback */
+                ret = AX_SKEL_RegisterResultCallback(m_hSkel[nChn][algo_id], SkelResultCallback, this);
+                if (0 != ret) {
+                    d_vec[nChn][algo_id] = false;
+                    LOG_M_E(DETECTOR, "%s: AX_SKEL_RegisterResultCallback() fail, ret = 0x%x", __func__, ret);
+                    break;
+                }
+
+                d_vec[nChn][algo_id] = true;
+                all_init_fail = false;
             }
         }
 
-        //这里只是确定某一路有一个算法
-        //10.23 TODO修改一路支持多个算法。
-        for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
-            /* [5]: create SEKL handle */
-            AX_SKEL_HANDLE_PARAM_T stHandleParam;
-            memset(&stHandleParam, 0, sizeof(stHandleParam));
-            stHandleParam.ePPL = (AX_SKEL_PPL_E)m_stAttr.tChnAttr[nChn].nPPL;
-            stHandleParam.nFrameDepth = m_stAttr.nDepth;
-            stHandleParam.nFrameCacheDepth = 0;
-            stHandleParam.nIoDepth = 0;
-            stHandleParam.nWidth = m_stAttr.nW;
-            stHandleParam.nHeight = m_stAttr.nH;
-            if (m_stAttr.tChnAttr[nChn].nVNPU == AX_SKEL_NPU_DEFAULT) {
-                stHandleParam.nNpuType = AX_SKEL_NPU_DEFAULT;
-            } else {
-                stHandleParam.nNpuType = (AX_U32)(1 << (m_stAttr.tChnAttr[nChn].nVNPU - 1));
-            }
-
-            AX_SKEL_CONFIG_T stConfig = {0};
-            AX_SKEL_CONFIG_ITEM_T stItems[16] = {0};
-            AX_U8 itemIndex = 0;
-            stConfig.nSize = 0;
-            stConfig.pstItems = &stItems[0];
-
-            if (!m_stAttr.tChnAttr[nChn].bTrackEnable) {
-                // track_disable
-                stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"track_disable";
-                AX_SKEL_COMMON_THRESHOLD_CONFIG_T stTrackDisableThreshold = {0};
-                stTrackDisableThreshold.fValue = 1;
-                stConfig.pstItems[itemIndex].pstrValue = (AX_VOID *)&stTrackDisableThreshold;
-                stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_COMMON_THRESHOLD_CONFIG_T);
-                itemIndex++;
-            }
-
-            // push_disable
-            stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"push_disable";
-            AX_SKEL_COMMON_THRESHOLD_CONFIG_T stPushDisableThreshold = {0};
-            stPushDisableThreshold.fValue = 1;
-            stConfig.pstItems[itemIndex].pstrValue = (AX_VOID *)&stPushDisableThreshold;
-            stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_COMMON_THRESHOLD_CONFIG_T);
-            itemIndex++;
-
-            stConfig.nSize = itemIndex;
-            stHandleParam.stConfig = stConfig;
-
-            LOG_M_C(DETECTOR, "ppl %d, depth %d, cache depth %d, %dx%d", stHandleParam.ePPL, stHandleParam.nFrameDepth,
-                    stHandleParam.nFrameCacheDepth, stHandleParam.nWidth, stHandleParam.nHeight);
-            ret = AX_SKEL_Create(&stHandleParam, &m_hSkel[nChn]);
-
-            if (0 != ret || NULL == m_hSkel[nChn]) {
-                LOG_M_E(DETECTOR, "%s: AX_SKEL_Create() fail, ret = 0x%x", __func__, ret);
-                break;
-            }
-
-            /* [6]: register result callback */
-            ret = AX_SKEL_RegisterResultCallback(m_hSkel[nChn], SkelResultCallback, this);
-            if (0 != ret) {
-                LOG_M_E(DETECTOR, "%s: AX_SKEL_RegisterResultCallback() fail, ret = 0x%x", __func__, ret);
-                break;
-            }
+        //也就是所有通道都初始化失败
+        if (all_init_fail == true) {
+            delete[] m_arrFrameQ;
+            m_arrFrameQ = nullptr;.
+            return AX_FALSE;
         }
 
         LOG_M_D(DETECTOR, "%s: ---", __func__);

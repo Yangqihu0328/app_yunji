@@ -17,6 +17,7 @@
 #include "ax_skel_api.h"
 
 #define DETECTOR_MAX_CHN_NUM 32
+#define ALGO_MAX_NUM 3
 
 typedef struct DETECTOR_CHN_ATTR_S {
     AX_U32 nPPL[3];
@@ -85,11 +86,13 @@ protected:
     AX_VOID RunDetect(AX_VOID* pArg);
     AX_VOID ClearQueue(AX_S32 nGrp);
 
+public:
+    std::vector<std::array<int, 3>> d_vec;
 protected:
     CAXLockQ<CAXFrame>* m_arrFrameQ{nullptr};
     DETECTOR_ATTR_T m_stAttr;
     CAXThread m_DetectThread;
-    AX_SKEL_HANDLE m_hSkel[DETECTOR_MAX_CHN_NUM]{NULL};
+    AX_SKEL_HANDLE m_hSkel[DETECTOR_MAX_CHN_NUM][ALGO_MAX_NUM]{NULL};
     std::mutex m_mtxSkel;
     CAXResource<SKEL_FRAME_PRIVATE_DATA_T> m_skelData;
 };
