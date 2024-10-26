@@ -148,7 +148,8 @@ AX_VOID CJpegEncoder::NotifyAll(AX_U32 nChannel, AX_VOID* pStream) {
     if (nullptr == pStream) {
         return;
     }
-    CPrintHelper::GetInstance()->Add(E_PH_MOD_JENC, nChannel);
+    //modify 10.26
+    // CPrintHelper::GetInstance()->Add(E_PH_MOD_JENC, nChannel);
 
     // To prevent lag in the web page, control the frame rate sent to the web page.
     if (AX_FALSE == m_pFramectrl->FramerateCtrl()) {

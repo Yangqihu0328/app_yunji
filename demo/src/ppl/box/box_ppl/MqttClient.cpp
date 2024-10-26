@@ -6,6 +6,7 @@
 #include "DiskHelper.hpp"
 #include "ElapsedTimer.hpp"
 #include "BoxBuilder.hpp"
+#include "EncoderOptionHelper.h"
 // #include "AiCardMstBuilder.hpp"
 
 #include "httplib.h"

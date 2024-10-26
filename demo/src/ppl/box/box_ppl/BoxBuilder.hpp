@@ -20,7 +20,12 @@
 #include "IObserver.h"
 #include "IStreamHandler.hpp"
 #include "StreamRecorder.hpp"
+#include "EncoderOptionHelper.h"
 #include "VideoDecoder.hpp"
+#include "VideoEncoder.h"
+#include "VencObserver.h"
+#include "AXRtspServer.h"
+#include "AXRtspObserver.h"
 #include "Vo.hpp"
 #include "linker.hpp"
 
@@ -56,7 +61,9 @@ protected:
     AX_BOOL InitDispRecorder(const std::string& strRecordPath, AX_S32 nMaxRecordSize, AX_BOOL bMP4);
 
     AX_BOOL InitDispatcher(const string& strFontPath, AX_U32 nDispType);
+    AX_BOOL InitEncoder(STREAM_CONFIG_T& streamConfig);
     AX_BOOL InitMqtt();
+    AX_BOOL InitJenc();
 
     AX_BOOL InitDetector(const DETECT_CONFIG_T& detectConfig);
     AX_BOOL InitDecoder(const STREAM_CONFIG_T& streamConfig);
@@ -80,6 +87,7 @@ protected:
     std::vector<std::unique_ptr<CDispatcher>> m_arrDispatcher;
     std::vector<IObserverUniquePtr> m_arrDispatchObserver;
     std::unique_ptr<MqttClient> mqtt_client;
+    std::unique_ptr<CJpegEncoder> m_jenc;
     std::vector<CVideoEncoder*> m_vecVencInstance;
     std::vector<std::unique_ptr<IObserver>> m_vencObservers;
     std::vector<std::unique_ptr<IObserver>> m_vecRtspObs;

@@ -26,13 +26,16 @@ OUTPUT              := $(TARGET_OUT_PATH)/obj
 # source
 SRCS                :=
 SRCCPPS             := $(wildcard $(SRC_PATH)/*.cpp) \
-                       $(wildcard $(DEMO_SRC_PATH)/rtsp/AXRTSPClient.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/rtsp/*.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/utils/FramerateCtrlHelper.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/config_parser/*.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/linkage/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/vdec/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/vdec/stream/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/log/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/stage/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/vo/*.cpp) \
-                       $(wildcard $(DEMO_SRC_PATH)/encoder/VideoEncoder.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/encoder/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/mp4enc/Mpeg4Encoder.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/pool/AXPoolManager.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/ElapsedTimer.cpp) \
@@ -40,6 +43,13 @@ SRCCPPS             := $(wildcard $(SRC_PATH)/*.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/yuv/YuvHandler.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/utils/SpsParser.cpp) \
                        $(wildcard $(DEMO_SRC_PATH)/config/ini/*.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/option_helper/AlgoOptionHelper.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/option_helper/AvsOptionHelper.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/option_helper/EncoderOptionHelper.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/option_helper/OptionHelper.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/option_helper/OsdOptionHelper.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/option_helper/AudioOptionHelper.cpp) \
+                       $(wildcard $(DEMO_SRC_PATH)/audio/*.cpp) \
                        $(DEMO_SRC_PATH)/ppl/nvr/hal/rtspdamon.cpp \
                        $(DEMO_SRC_PATH)/ppl/nvr/hal/linker.cpp \
                        $(DEMO_SRC_PATH)/utils/ping4.cpp \
@@ -50,8 +60,19 @@ CINCLUDE            := -I$(SRC_PATH) \
                        -I$(INC_PATH) \
                        -I$(DEMO_SRC_PATH)/header \
                        -I$(DEMO_SRC_PATH)/rtsp \
+                       -I$(DEMO_SRC_PATH)/utils \
+                       -I$(DEMO_SRC_PATH)/dsp \
+                       -I$(DEMO_SRC_PATH)/ivps \
+                       -I$(DEMO_SRC_PATH)/sensor \
+                       -I$(DEMO_SRC_PATH)/ivps/osd \
+                       -I$(DEMO_SRC_PATH)/linkage \
+                       -I$(DEMO_SRC_PATH)/webserver \
+                       -I$(DEMO_SRC_PATH)/header \
 					   -I$(DEMO_SRC_PATH)/vdec \
-                       -I$(DEMO_SRC_PATH)/encoder \
+                       -I$(DEMO_SRC_PATH)/option_helper \
+                       -I$(DEMO_SRC_PATH)/config/json \
+                       -I$(DEMO_SRC_PATH)/audio \
+                       -I$(DEMO_SRC_PATH)/config_parser \
                        -I$(DEMO_SRC_PATH)/vdec/stream \
                        -I$(DEMO_SRC_PATH)/vdec/drv \
                        -I$(DEMO_SRC_PATH)/utils \
@@ -127,6 +148,19 @@ CLIB                += -L$(THIRD_PARTY_PATH)/ffmpeg/lib -lavcodec -lavutil -lavf
 CLIB                += -L$(THIRD_PARTY_PATH)/openssl/lib -lssl -lcrypto
 CLIB                += -L$(THIRD_PARTY_PATH)/mp4/lib -l:libmp4.a
 CLIB                += -L$(3RD_PATH)/lib/mqtt -lMQTTPacketClient
+#add
+CLIB                += -lax_engine
+CLIB                += -lax_dmadim
+CLIB                += -lax_dsp -lax_dsp_cv
+CLIB			    += -lax_nt_ctrl -lax_proton -lax_mipi -lax_3a -lax_audio -lax_audio_3a
+CLIB			    += -L$(HOME_PATH)/third-party/tinyalsa/lib
+CLIB			    += -ltinyalsa
+CLIB			    += -L$(HOME_PATH)/third-party/fdk-aac/lib
+CLIB			    += -lfdk-aac
+CLIB			    += -L$(HOME_PATH)/third-party/libsamplerate/lib
+CLIB			    += -lsamplerate
+CLIB			    += -L$(HOME_PATH)/third-party/opus/lib
+CLIB			    += -lopus
 ifeq ($(debug),yes)
 CLIB                += -L$(3RD_PATH)/lib/dbg -lliveMedia -lgroupsock -lBasicUsageEnvironment -lUsageEnvironment
 else

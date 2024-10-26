@@ -14,6 +14,7 @@
 #include "AXFrame.hpp"
 #include "AXLockQ.hpp"
 #include "AXThread.hpp"
+#include "AXStage.hpp"
 #include "BmpOSD.hpp"
 #include "DetectResult.hpp"
 #include "IObserver.h"
@@ -53,6 +54,8 @@ public:
 
     AX_BOOL RegObserver(IObserver* pObs);
     AX_BOOL UnRegObserver(IObserver* pObs);
+    AX_BOOL RegObserver(CAXStage* pObs);
+    AX_BOOL UnRegObserver(CAXStage* pObs);
 
 protected:
     AX_VOID DispatchThread(AX_VOID* pArg);
@@ -63,6 +66,7 @@ protected:
     CAXLockQ<CAXFrame> m_qFrame;
     CAXThread m_DispatchThread;
     std::list<IObserver*> m_lstObs;
+    std::list<CAXStage*> s_lstObs;
     std::mutex m_mtxObs;
     AX_S32 m_vdGrp{0};
     AX_DISP_TYPE m_enDispType{AX_DISP_TYPE::BUTT};

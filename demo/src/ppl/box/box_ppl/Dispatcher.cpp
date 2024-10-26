@@ -26,6 +26,7 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
 
     CAXFrame axFrame;
     DETECT_RESULT_T fhvp;
+    // static int count = 0;
     const boxconf::COMPRESS_CONFIG_T fbc = boxconf::CBoxConfig::GetInstance()->GetCompressConfig();
     //每一路视频都有一个显示线程。
     while (m_DispatchThread.IsRunning()) {
@@ -40,6 +41,15 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
                     if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
                         axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
                     }
+
+                    //TODO:测试，每10s保存一张图片,进行结果分析，然后进行告警。
+                    // if (count == (30*10)) {
+                    //     for (auto& m : s_lstObs) {
+                    //         m->ProcessFrame(&axFrame);
+                    //     }
+                    //     count = 0; 
+                    // }
+                    // count++;
 
                     DrawBox(axFrame, fhvp);
                 }
@@ -176,6 +186,43 @@ AX_BOOL CDispatcher::UnRegObserver(IObserver* pObs) {
     }
 
     LOG_M_E(DISPATCHER, "%s: observer %p is not registed", __func__, pObs);
+    return AX_FALSE;
+}
+
+AX_BOOL CDispatcher::RegObserver(CAXStage* pObs) {
+    if (!pObs) {
+        LOG_M_E(DISPATCHER, "%s observer is nil", __func__);
+        return AX_FALSE;
+    }
+
+    for (auto& m : s_lstObs) {
+        if (m == pObs) {
+            LOG_M_W(DISPATCHER, "%s: stage observer %p is already registed", __func__, pObs);
+            return AX_TRUE;
+        }
+    }
+
+    s_lstObs.push_back(pObs);
+    LOG_M_I(DISPATCHER, "stage regist observer %p ok", __func__, pObs);
+
+    return AX_TRUE;
+}
+
+AX_BOOL CDispatcher::UnRegObserver(CAXStage* pObs) {
+    if (!pObs) {
+        LOG_M_E(DISPATCHER, "%s observer is nil", __func__);
+        return AX_FALSE;
+    }
+
+    for (auto& m : s_lstObs) {
+        if (m == pObs) {
+            s_lstObs.remove(m);
+            LOG_M_I(DISPATCHER, "%s: stage unregist observer %p ok", __func__, pObs);
+            return AX_TRUE;
+        }
+    }
+
+    LOG_M_E(DISPATCHER, "%s: stage observer %p is not registed", __func__, pObs);
     return AX_FALSE;
 }
 

@@ -29,6 +29,7 @@ using namespace std;
 #define VDEC_CHN2 2
 #define DISPVO_CHN VDEC_CHN1
 #define DETECT_CHN VDEC_CHN2
+#define ENC_MAX_BUF_SIZE (3840 * 2160 * 3 / 2)
 
 AX_BOOL CBoxBuilder::Init(AX_VOID) {
     m_sys.InitAppLog("BoxDemo");
@@ -364,7 +365,7 @@ AX_BOOL CBoxBuilder::InitDisplay(AX_DISPDEV_TYPE enDispDev, const DISPVO_CONFIG_
     return AX_TRUE;
 }
 
-AX_BOOL CAiCardMstBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
+AX_BOOL CBoxBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
     int encoding_num = streamConfig.nDecodeGrps > MAX_VENC_CHANNEL_NUM ? MAX_VENC_CHANNEL_NUM : streamConfig.nDecodeGrps;
     m_vencObservers.resize(encoding_num);
     m_vecRtspObs.resize(encoding_num);
@@ -461,7 +462,7 @@ AX_BOOL CBoxBuilder::InitDispRecorder(const string &strRecordPath, AX_S32 nMaxRe
     return AX_TRUE;
 }
 
-AX_BOOL CAiCardMstBuilder::InitJenc() {
+AX_BOOL CBoxBuilder::InitJenc() {
     LOG_MM(BOX, "+++");
 
     JPEG_CONFIG_T tJencCfg;
@@ -513,6 +514,7 @@ AX_BOOL CBoxBuilder::InitDispatcher(const string &strFontPath, AX_U32 nDispType)
             if (m_dispObserverSecondary) {
                 m_arrDispatcher[i]->RegObserver(m_dispObserverSecondary.get());
             }
+
             if (m_dispObserver) {
                 m_arrDispatcher[i]->RegObserver(m_dispObserver.get());
             }
@@ -811,8 +813,7 @@ AX_BOOL CBoxBuilder::DeInit(AX_VOID) {
     }
 
     /* If private pool, destory consumer before producer */
-    //这里应该不会有问题。只是指针为空，但是还是存在实例化。
-    DESTORY_INSTANCE(CAXRtspServer::GetInstance());
+    CAXRtspServer::GetInstance()->DeInit();
     DESTORY_INSTANCE(m_jenc);
     DESTORY_INSTANCE(mqtt_client);
     DESTORY_INSTANCE(m_disp);
