@@ -216,6 +216,7 @@ AX_BOOL CAiCardMstBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
             
             m_vencObservers[i] = CObserverMaker::CreateObserver<CVencObserver>(pVencInstance);
             
+            //这里注册
             /* register rtsp  */
             m_vecRtspObs[i] = CObserverMaker::CreateObserver<CAXRtspObserver>(CAXRtspServer::GetInstance());
             
@@ -596,7 +597,6 @@ AX_BOOL CAiCardMstBuilder::Start(AX_VOID) {
             return AX_FALSE;
         }
 
-        
         /* Start video Encoder module */
         for (auto& pInstance : m_vecVencInstance) {
             STAGE_START_PARAM_T tStartParam;

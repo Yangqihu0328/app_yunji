@@ -138,7 +138,22 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         return AX_FALSE;
     }
 
-    /* [7]: Init dispatchers */
+    /* [7]: Initialize RTSP */
+    if (!CAXRtspServer::GetInstance()->Init()) {
+        return AX_FALSE;
+    }
+
+    /*[8]: jenc initialize */
+    if (!InitJenc()) {
+        return AX_FALSE;
+    }
+
+    /* [9]: Init video Encoder and observer */
+    if (!InitEncoder(streamConfig)) {
+        return AX_FALSE;
+    }
+
+    /* [10]: Init dispatchers */
     AX_U32 nDispType = 2;
     if (dispVoConfig_1.nDevId != -1) {
         nDispType = dispVoConfig_1.nDispType;
@@ -349,6 +364,61 @@ AX_BOOL CBoxBuilder::InitDisplay(AX_DISPDEV_TYPE enDispDev, const DISPVO_CONFIG_
     return AX_TRUE;
 }
 
+AX_BOOL CAiCardMstBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
+    int encoding_num = streamConfig.nDecodeGrps > MAX_VENC_CHANNEL_NUM ? MAX_VENC_CHANNEL_NUM : streamConfig.nDecodeGrps;
+    m_vencObservers.resize(encoding_num);
+    m_vecRtspObs.resize(encoding_num);
+    for (AX_U8 i = 0; i < encoding_num; i++) {    
+        VIDEO_CONFIG_T tConfig;
+        do {
+            tConfig.nChannel = i+1;
+            tConfig.ePayloadType = PT_H264;
+            tConfig.nGOP = 30;
+            tConfig.fFramerate = (AX_F32)30;
+            tConfig.nWidth = m_disp->GetVideoLayout()[0].u32Width;
+            tConfig.nHeight = m_disp->GetVideoLayout()[0].u32Height;
+            tConfig.nBufSize = ENC_MAX_BUF_SIZE;
+            tConfig.nBitrate =  8192;
+            tConfig.bFBC = AX_FALSE;
+            tConfig.nInFifoDepth = 1;
+            tConfig.nOutFifoDepth = 1;
+            tConfig.bLink = AX_FALSE;
+            tConfig.eRcType = AX_VENC_RC_MODE_H264CBR;
+            tConfig.eMemSource = AX_MEMORY_SOURCE_CMM;
+            tConfig.stEncodeCfg[0].ePayloadType = tConfig.ePayloadType;
+            tConfig.stEncodeCfg[0].stRCInfo[0].eRcType = AX_VENC_RC_MODE_H264CBR;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMinQp = 0;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMaxQp = 51;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMinIQp = 0;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIQp = 51;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMinIProp = 10;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nMaxIProp = 40;
+            tConfig.stEncodeCfg[0].stRCInfo[0].nIntraQpDelta = -2;
+            CVideoEncoder* pVencInstance = new CVideoEncoder(tConfig);
+
+            if (!pVencInstance->Init()) {
+                LOG_MM_E(BOX, "Init video Encoder fail!!!!");
+                break;
+            }
+
+            if (!pVencInstance->InitParams()) {
+                LOG_MM_E(BOX, "Init venc params %d failed.", tConfig.nChannel);
+                return AX_FALSE;
+            }
+
+            m_vencObservers[i] = CObserverMaker::CreateObserver<CVencObserver>(pVencInstance);
+
+            //这里注册
+            /* register rtsp  */
+            m_vecRtspObs[i] = CObserverMaker::CreateObserver<CAXRtspObserver>(CAXRtspServer::GetInstance());
+            pVencInstance->RegObserver(m_vecRtspObs[i].get()); // register each rtsp observer to each encoder instance 
+            m_vecVencInstance.emplace_back(pVencInstance);
+        } while (0);
+    }
+
+    return AX_TRUE;
+}
+
 AX_BOOL CBoxBuilder::InitDispRecorder(const string &strRecordPath, AX_S32 nMaxRecordSize, AX_BOOL bMP4) {
     m_dispRecorder = make_unique<CBoxRecorder>();
     if (!m_dispRecorder) {
@@ -391,6 +461,46 @@ AX_BOOL CBoxBuilder::InitDispRecorder(const string &strRecordPath, AX_S32 nMaxRe
     return AX_TRUE;
 }
 
+AX_BOOL CAiCardMstBuilder::InitJenc() {
+    LOG_MM(BOX, "+++");
+
+    JPEG_CONFIG_T tJencCfg;
+    do {
+        tJencCfg.nSrcFrameRate = 0;
+        tJencCfg.nWidth = 1920;
+        tJencCfg.nHeight = 1080;
+        tJencCfg.bLink = AX_FALSE;
+        tJencCfg.nChannel = 0;
+        tJencCfg.nPipeSrc = 0;
+        tJencCfg.nJpegType = 5;
+        tJencCfg.nInFifoDepth = 1;
+        tJencCfg.nOutFifoDepth = 1;
+        tJencCfg.eMemSource = (AX_MEMORY_SOURCE_E)1;
+        tJencCfg.nQpLevel = 70;
+        tJencCfg.nDstFrameRate = 1;
+        tJencCfg.nBufSize = 1920 * 1080 * 3 / 2;
+
+        m_jenc = std::make_unique<CJpegEncoder>(tJencCfg);
+        if (!m_jenc) {
+            LOG_MM_E(BOX, "Create m_jenc instance fail");
+            return AX_FALSE;
+        }
+
+        if (!m_jenc->Init()) {
+            break;
+        }
+
+        if (!m_jenc->InitParams()) {
+            return AX_FALSE;
+        }
+
+        m_jenc->RegObserver(mqtt_client.get());
+    } while (0);
+
+    LOG_MM(BOX, "---");
+    return AX_TRUE;
+}
+
 AX_BOOL CBoxBuilder::InitDispatcher(const string &strFontPath, AX_U32 nDispType) {
     m_arrDispatcher.resize(m_nDecodeGrpCount);
     m_arrDispatchObserver.resize(m_nDecodeGrpCount);
@@ -405,6 +515,15 @@ AX_BOOL CBoxBuilder::InitDispatcher(const string &strFontPath, AX_U32 nDispType)
             }
             if (m_dispObserver) {
                 m_arrDispatcher[i]->RegObserver(m_dispObserver.get());
+            }
+
+            //显示之后推流
+            if (m_vencObservers.size() && i < MAX_VENC_CHANNEL_NUM) {
+                m_arrDispatcher[i]->RegObserver(m_vencObservers[i].get());
+            }
+
+            if (m_jenc) {
+                m_arrDispatcher[i]->RegObserver(m_jenc.get());
             }
         }
 
@@ -681,12 +800,21 @@ AX_BOOL CBoxBuilder::DeInit(AX_VOID) {
         DESTORY_INSTANCE(m);
     }
 
-    for (auto &&m : m_arrDispatcher) {
+    for (auto &&m : m_vecVencInstance) {
         DESTORY_INSTANCE(m);
     }
-    m_arrDispatcher.clear();
+    m_vecVencInstance.clear();
+
+    //已经停止了编码和停流了，这个逆初始化顺序应该没影响
+    for (auto &&m : m_sataWritter) {
+        DESTORY_INSTANCE(m);
+    }
 
     /* If private pool, destory consumer before producer */
+    //这里应该不会有问题。只是指针为空，但是还是存在实例化。
+    DESTORY_INSTANCE(CAXRtspServer::GetInstance());
+    DESTORY_INSTANCE(m_jenc);
+    DESTORY_INSTANCE(mqtt_client);
     DESTORY_INSTANCE(m_disp);
     DESTORY_INSTANCE(m_dispSecondary);
     DESTORY_INSTANCE(m_detect);
@@ -729,6 +857,31 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             if (!m_dispSecondary->Start()) {
                 return AX_FALSE;
             }
+        }
+
+        /* Start video Encoder module */
+        for (auto& pInstance : m_vecVencInstance) {
+            STAGE_START_PARAM_T tStartParam;
+            tStartParam.bStartProcessingThread = AX_TRUE;
+            if (!pInstance->Start(&tStartParam)) {
+                LOG_MM_E(BOX, "Start venc failed.");
+                return AX_FALSE;
+            }
+        }
+
+        if (m_jenc) {
+            STAGE_START_PARAM_T tStartParam;
+            tStartParam.bStartProcessingThread = AX_FALSE;
+            if (!m_jenc->Start(&tStartParam)) {
+                LOG_MM_E(BOX, "Start jenc failed.");
+                return AX_FALSE;
+            }
+        }
+
+        /* Start Rtsp server */
+        if (!CAXRtspServer::GetInstance()->Start()) {
+            LOG_MM_E(BOX, "Start rtsp server failed.");
+            return AX_FALSE;
         }
 
         if (m_detect) {
@@ -800,6 +953,24 @@ AX_BOOL CBoxBuilder::WaitDone(AX_VOID) {
 
     if (mqtt_client) {
         mqtt_client->Stop();
+    }
+
+    //这里是先停流，再停编码
+    if (!CAXRtspServer::GetInstance()->Stop()) {
+        LOG_MM_E(BOX, "Stop rtsp server failed.");
+        return AX_FALSE;
+    }
+
+    /* Start video Encoder module */
+    for (auto& pInstance : m_vecVencInstance) {
+        if (!pInstance->Stop()) {
+            LOG_MM_E(BOX, "Stop venc failed.");
+            return AX_FALSE;
+        }
+    }
+
+    if (m_jenc) {
+        m_jenc->Stop();
     }
 
     if (m_dispRecorder) {
@@ -940,8 +1111,6 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
         }
 
         m_arrStreamer[channelId]->RegObserver(m_vdec.get());
-
-        // m_arrStreamer[channelId]->RegObserver(m_transHelper.get());
 
         thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[channelId].get());
         t.join();

@@ -80,6 +80,9 @@ protected:
     std::vector<std::unique_ptr<CDispatcher>> m_arrDispatcher;
     std::vector<IObserverUniquePtr> m_arrDispatchObserver;
     std::unique_ptr<MqttClient> mqtt_client;
+    std::vector<CVideoEncoder*> m_vecVencInstance;
+    std::vector<std::unique_ptr<IObserver>> m_vencObservers;
+    std::vector<std::unique_ptr<IObserver>> m_vecRtspObs;
 
     // primary
     std::unique_ptr<CVo> m_disp;
