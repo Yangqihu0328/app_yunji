@@ -147,33 +147,37 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
                 axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
 
+        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+            if (d_vec[nCurrGrp][algo_id] == true) {
 #if defined(__RECORD_VB_TIMESTAMP__)
-        CTimestampHelper::RecordTimestamp(axFrame.stFrame.stVFrame.stVFrame, axFrame.nGrp, axFrame.nChn, TIMESTAMP_SKEL_PRE_SEND);
+                CTimestampHelper::RecordTimestamp(axFrame.stFrame.stVFrame.stVFrame, axFrame.nGrp, axFrame.nChn, TIMESTAMP_SKEL_PRE_SEND);
 #endif
 
 #ifdef __BOX_DEBUG__
-        AX_S32 ret = 0;
-        usleep(3000);
-        m_skelData.giveback(pPrivData);
+                AX_S32 ret = 0;
+                usleep(3000);
+                m_skelData.giveback(pPrivData);
 #else
-        //m_hSkel实际上注册时候是绑定哪个算法。那么后面就是有很多算法的话，对应的id都是不一样。
-        //现在每一个通道对应着一个算法，后面的话
-        AX_S32 ret = AX_SKEL_SendFrame(m_hSkel[pPrivData->nSkelChn], &skelFrame, -1);
+                //m_hSkel实际上注册时候是绑定哪个算法。那么后面就是有很多算法的话，对应的id都是不一样。
+                //现在每一个通道对应着一个算法，后面的话
+                AX_S32 ret = AX_SKEL_SendFrame(m_hSkel[pPrivData->nSkelChn][algo_id], &skelFrame, -1);
+                if (0 != ret) {
+                    LOG_M_E(DETECTOR, "%s: AX_SKEL_SendFrame(vdGrp %d, seq %lld, frame %lld) fail, ret = 0x%x", __func__, axFrame.nGrp,
+                            axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, skelFrame.nFrameId, ret);
+
+                    m_skelData.giveback(pPrivData);
+                    break;
+                }
 #endif
 
 #if defined(__RECORD_VB_TIMESTAMP__)
-        CTimestampHelper::RecordTimestamp(axFrame.stFrame.stVFrame.stVFrame, axFrame.nGrp, axFrame.nChn, TIMESTAMP_SKEL_POS_SEND);
+                CTimestampHelper::RecordTimestamp(axFrame.stFrame.stVFrame.stVFrame, axFrame.nGrp, axFrame.nChn, TIMESTAMP_SKEL_POS_SEND);
 #endif
+            }
+        }
 
         /* release frame after done */
         axFrame.DecRef();
-
-        if (0 != ret) {
-            LOG_M_E(DETECTOR, "%s: AX_SKEL_SendFrame(vdGrp %d, seq %lld, frame %lld) fail, ret = 0x%x", __func__, axFrame.nGrp,
-                    axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, skelFrame.nFrameId, ret);
-
-            m_skelData.giveback(pPrivData);
-        }
     }
 
     LOG_M_D(DETECTOR, "%s: ---", __func__);
@@ -209,6 +213,19 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
     }
 
     do {
+        /* [3]: print SKEL version */
+        const AX_SKEL_VERSION_INFO_T *pstVersion = NULL;
+        AX_S32 ret = AX_SKEL_GetVersion(&pstVersion);
+        if (0 != ret) {
+            LOG_M_E(DETECTOR, "%s: AX_SKEL_GetVersion() fail, ret = 0x%x", __func__, ret);
+        } else {
+            if (pstVersion && pstVersion->pstrVersion) {
+                LOG_M_I(DETECTOR, "SKEL version: %s", pstVersion->pstrVersion);
+            }
+
+            AX_SKEL_Release((AX_VOID *)pstVersion);
+        }
+
         //制作一个标记位，表明现在当前路数的算法配置成功与否。
         d_vec.resize(m_stAttr.nChannelNum);
         int all_init_fail = false;
@@ -223,21 +240,8 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
                 AX_S32 ret = AX_SKEL_Init(&stInit);
                 if (0 != ret) {
                     LOG_M_E(DETECTOR, "%s: AX_SKEL_Init fail, ret = 0x%x", __func__, ret);
-                    d_vec[nChn][algo_id] = false;
+                    // d_vec[nChn][algo_id] = false;
                     break;
-                }
-
-                //打印npu sdk版本
-                const AX_SKEL_VERSION_INFO_T *pstVersion = NULL;
-                ret = AX_SKEL_GetVersion(&pstVersion);
-                if (0 != ret) {
-                    LOG_M_E(DETECTOR, "%s: AX_SKEL_GetVersion() fail, ret = 0x%x", __func__, ret);
-                } else {
-                    if (pstVersion && pstVersion->pstrVersion) {
-                        LOG_M_I(DETECTOR, "SKEL version: %s", pstVersion->pstrVersion);
-                    }
-
-                    AX_SKEL_Release((AX_VOID *)pstVersion);
                 }
 
                 /* [4]: check whether has FHVP model or not */
@@ -376,10 +380,14 @@ AX_BOOL CDetector::DeInit(AX_VOID) {
 
     for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
         if (m_hSkel[nChn]) {
-            ret = AX_SKEL_Destroy(m_hSkel[nChn]);
-            if (0 != ret) {
-                LOG_M_E(DETECTOR, "%s: AX_SKEL_Destroy() fail, ret = 0x%x", __func__, ret);
-                return AX_FALSE;
+            for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+                if (d_vec[nChn][algo_id] == true) {
+                    ret = AX_SKEL_Destroy(m_hSkel[nChn][algo_id]);
+                    if (0 != ret) {
+                        LOG_M_E(DETECTOR, "%s: AX_SKEL_Destroy() fail, ret = 0x%x", __func__, ret);
+                        return AX_FALSE;
+                    }
+                }
             }
         }
     }
