@@ -149,7 +149,7 @@ AX_S32 CBoxAppSys::APP_VDEC_Init(AX_VOID) {
 AX_S32 CBoxAppSys::APP_VENC_Init(AX_VOID) {
     AX_VENC_MOD_ATTR_T stModAttr;
     memset(&stModAttr, 0, sizeof(stModAttr));
-    stModAttr.enVencType = AX_VENC_VIDEO_ENCODER;
+    stModAttr.enVencType = AX_VENC_MULTI_ENCODER;
     stModAttr.stModThdAttr.bExplicitSched = AX_FALSE;
     stModAttr.stModThdAttr.u32TotalThreadNum = 1;
     AX_S32 ret = AX_VENC_Init(&stModAttr);

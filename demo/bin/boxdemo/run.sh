@@ -25,7 +25,7 @@ else
 fi
 
 # mount video
-mount_video=1
+mount_video=0
 
 # set vdec log to error
 export VDEC_LOG_LEVEL=3
