@@ -844,7 +844,7 @@ AX_VOID MqttClient::SendAlarmMsg(MQTT::Message &message) {
             SaveJpgFile(jpg_info.jpg_buf, jpg_info.buf_length, &(jpg_info.tJpegInfo));
 
             std::string currentTimeStr;
-            MqttGetSystime(currentTimeStr);
+            GetSystime(currentTimeStr);
 
             AX_CHAR szDateBuf[16] = {0};
             CElapsedTimer::GetLocalDate(szDateBuf, 16, '-');
