@@ -804,75 +804,75 @@ static void GetBoardInfo() {
 
 
 // /* TODO: need web support file copy, then show in web*/
-// AX_BOOL MqttClient::SaveJpgFile(AX_VOID* data, AX_U32 size, JPEG_DATA_INFO_T* pJpegInfo) {
-//     std::lock_guard<std::mutex> guard(m_mtxConnStatus);
+AX_BOOL MqttClient::SaveJpgFile(AX_VOID* data, AX_U32 size, JPEG_DATA_INFO_T* pJpegInfo) {
+    std::lock_guard<std::mutex> guard(m_mtxConnStatus);
 
-//     /* Data file parent directory format: </XXX/DEV_XX/YYYY-MM-DD> */
-//     AX_CHAR szDateBuf[16] = {0};
-//     CElapsedTimer::GetLocalDate(szDateBuf, 16, '-');
+    /* Data file parent directory format: </XXX/DEV_XX/YYYY-MM-DD> */
+    AX_CHAR szDateBuf[16] = {0};
+    CElapsedTimer::GetLocalDate(szDateBuf, 16, '-');
 
-//     AX_CHAR szDateDir[128] = {0};
-//     sprintf(szDateDir, "%s/DEV_%02d/%s", ALARM_IMG_PATH, pJpegInfo->tCaptureInfo.tHeaderInfo.nSnsSrc + 1, szDateBuf);
+    AX_CHAR szDateDir[128] = {0};
+    sprintf(szDateDir, "%s/DEV_%02d/%s", ALARM_IMG_PATH, pJpegInfo->tCaptureInfo.tHeaderInfo.nSnsSrc + 1, szDateBuf);
 
-//     if (CDiskHelper::CreateDir(szDateDir, AX_FALSE)) {
-//         sprintf(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, "%s/%s.jpg", szDateDir, pJpegInfo->tCaptureInfo.tHeaderInfo.szTimestamp);
+    if (CDiskHelper::CreateDir(szDateDir, AX_FALSE)) {
+        sprintf(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, "%s/%s.jpg", szDateDir, pJpegInfo->tCaptureInfo.tHeaderInfo.szTimestamp);
 
-//         // Open file to write
-//         std::ofstream outFile(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, std::ios::binary);
-//         if (!outFile) {
-//             std::cerr << "Failed to open file for writing: " << pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath << std::endl;
-//             return AX_FALSE;
-//         }
+        // Open file to write
+        std::ofstream outFile(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, std::ios::binary);
+        if (!outFile) {
+            std::cerr << "Failed to open file for writing: " << pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath << std::endl;
+            return AX_FALSE;
+        }
 
-//         // Write the actual data to the file
-//         outFile.write(reinterpret_cast<const char*>(data), size);
-//         outFile.close();
+        // Write the actual data to the file
+        outFile.write(reinterpret_cast<const char*>(data), size);
+        outFile.close();
 
-//         LOG_MM_C(MQTT_CLIENT, ">>>> Save jpg file: %s <<<<", pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath);
-//     } else {
-//         LOG_MM_E(MQTT_CLIENT, "[%d][%d] Create date(%s) directory failed.", pJpegInfo->tCaptureInfo.tHeaderInfo.nSnsSrc, pJpegInfo->tCaptureInfo.tHeaderInfo.nChannel, szDateDir);
-//     }
+        LOG_MM_C(MQTT_CLIENT, ">>>> Save jpg file: %s <<<<", pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath);
+    } else {
+        LOG_MM_E(MQTT_CLIENT, "[%d][%d] Create date(%s) directory failed.", pJpegInfo->tCaptureInfo.tHeaderInfo.nSnsSrc, pJpegInfo->tCaptureInfo.tHeaderInfo.nChannel, szDateDir);
+    }
 
-//     return AX_TRUE;
-// }
+    return AX_TRUE;
+}
 
-// AX_VOID MqttClient::SendAlarmMsg(MQTT::Message &message) {
-//     AX_U32 nCount = arrjpegQ->GetCount();
-//     if (nCount > 0) {
-//         QUEUE_T jpg_info;
-//         if (arrjpegQ->Pop(jpg_info, 0)) {
-//             SaveJpgFile(jpg_info.jpg_buf, jpg_info.buf_length, &(jpg_info.tJpegInfo));
+AX_VOID MqttClient::SendAlarmMsg(MQTT::Message &message) {
+    AX_U32 nCount = arrjpegQ->GetCount();
+    if (nCount > 0) {
+        QUEUE_T jpg_info;
+        if (arrjpegQ->Pop(jpg_info, 0)) {
+            SaveJpgFile(jpg_info.jpg_buf, jpg_info.buf_length, &(jpg_info.tJpegInfo));
 
-//             std::string currentTimeStr;
-//             MqttGetSystime(currentTimeStr);
+            std::string currentTimeStr;
+            MqttGetSystime(currentTimeStr);
 
-//             AX_CHAR szDateBuf[16] = {0};
-//             CElapsedTimer::GetLocalDate(szDateBuf, 16, '-');
+            AX_CHAR szDateBuf[16] = {0};
+            CElapsedTimer::GetLocalDate(szDateBuf, 16, '-');
 
-//             AX_CHAR szDateDir[128] = {0};
-//             sprintf(szDateDir, "%s/DEV_%02d/%s", ALARM_IMG_PATH, jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc + 1, szDateBuf);
+            AX_CHAR szDateDir[128] = {0};
+            sprintf(szDateDir, "%s/DEV_%02d/%s", ALARM_IMG_PATH, jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc + 1, szDateBuf);
 
-//             AX_CHAR szImgPath[256] = {0};
-//             sprintf(szImgPath, "%s/%s.jpg", szDateDir, jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp);
+            AX_CHAR szImgPath[256] = {0};
+            sprintf(szImgPath, "%s/%s.jpg", szDateDir, jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp);
 
-//             json child = {
-//                 {"type", "alarmMsg"},    {"BoardId", "YJ-AIBOX-001"}, {"Time", currentTimeStr},
-//                 {"AlarmType", "people"}, {"AlarmStatus", "success"},  {"AlarmContent", "alarm test test ..."},
-//                 {"Path", szImgPath},  // jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath},
-//                 {"channleId", 1},     // jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel},
-//             };
+            json child = {
+                {"type", "alarmMsg"},    {"BoardId", "YJ-AIBOX-001"}, {"Time", currentTimeStr},
+                {"AlarmType", "people"}, {"AlarmStatus", "success"},  {"AlarmContent", "alarm test test ..."},
+                {"Path", szImgPath},  // jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath},
+                {"channleId", 1},     // jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel},
+            };
 
-//             json root;
-//             root["result"] = 0;
-//             root["msg"] = "success";
-//             root["data"] = child;
+            json root;
+            root["result"] = 0;
+            root["msg"] = "success";
+            root["data"] = child;
 
-//             std::string payload = root.dump();
+            std::string payload = root.dump();
 
-//             SendMsg("web-message", payload.c_str(), payload.size());
-//         }
-//     }
-// }
+            SendMsg("web-message", payload.c_str(), payload.size());
+        }
+    }
+}
 // #endif
 
 
@@ -971,27 +971,27 @@ static void messageArrived(MQTT::MessageData& md) {
 
 //回调不能出现耗时过久
 AX_BOOL MqttClient::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nChn, AX_VOID* pData) {
-    // if (E_OBS_TARGET_TYPE_JENC == eTarget) {
-    //     AX_VENC_PACK_T* pVencPack = &((AX_VENC_STREAM_T*)pData)->stPack;
-    //     if (nullptr == pVencPack->pu8Addr || 0 == pVencPack->u32Len) {
-    //         LOG_M_E(MQTT_CLIENT, "Invalid Jpeg data(chn=%d, buff=0x%08X, len=%d).", nChn, pVencPack->pu8Addr, pVencPack->u32Len);
-    //         return AX_FALSE;
-    //     }
+    if (E_OBS_TARGET_TYPE_JENC == eTarget) {
+        AX_VENC_PACK_T* pVencPack = &((AX_VENC_STREAM_T*)pData)->stPack;
+        if (nullptr == pVencPack->pu8Addr || 0 == pVencPack->u32Len) {
+            LOG_M_E(MQTT_CLIENT, "Invalid Jpeg data(chn=%d, buff=0x%08X, len=%d).", nChn, pVencPack->pu8Addr, pVencPack->u32Len);
+            return AX_FALSE;
+        }
 
-    //     QUEUE_T jpg_info;
-    //     jpg_info.jpg_buf = new AX_U8[MAX_BUF_LENGTH];
-    //     jpg_info.buf_length = pVencPack->u32Len;
-    //     memcpy(jpg_info.jpg_buf, pVencPack->pu8Addr, jpg_info.buf_length);
+        QUEUE_T jpg_info;
+        jpg_info.jpg_buf = new AX_U8[MAX_BUF_LENGTH];
+        jpg_info.buf_length = pVencPack->u32Len;
+        memcpy(jpg_info.jpg_buf, pVencPack->pu8Addr, jpg_info.buf_length);
 
-    //     auto &tJpegInfo = jpg_info.tJpegInfo;
-    //     tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc = nGrp;
-    //     tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel = nChn;
-    //     tJpegInfo.tCaptureInfo.tHeaderInfo.nWidth = 1920;
-    //     tJpegInfo.tCaptureInfo.tHeaderInfo.nHeight = 1080;
-    //     CElapsedTimer::GetLocalTime(tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp, 16, '-', AX_FALSE);
+        auto &tJpegInfo = jpg_info.tJpegInfo;
+        tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc = nGrp;
+        tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel = nChn;
+        tJpegInfo.tCaptureInfo.tHeaderInfo.nWidth = 1920;
+        tJpegInfo.tCaptureInfo.tHeaderInfo.nHeight = 1080;
+        CElapsedTimer::GetLocalTime(tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp, 16, '-', AX_FALSE);
 
-    //     arrjpegQ->Push(jpg_info);
-    // }
+        arrjpegQ->Push(jpg_info);
+    }
 
     return AX_TRUE;
 }
@@ -1003,13 +1003,13 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
     topic = mqtt_config.topic;
 
     // //实现加锁队列，主要是多线程
-    // arrjpegQ = std::make_unique<CAXLockQ<QUEUE_T>>();
-    // if (!arrjpegQ) {
-    //     LOG_MM_E(MQTT_CLIENT, "alloc queue fail");
-    //     return AX_FALSE;
-    // } else {
-    //     arrjpegQ->SetCapacity(10);
-    // }
+    arrjpegQ = std::make_unique<CAXLockQ<QUEUE_T>>();
+    if (!arrjpegQ) {
+        LOG_MM_E(MQTT_CLIENT, "alloc queue fail");
+        return AX_FALSE;
+    } else {
+        arrjpegQ->SetCapacity(10);
+    }
 
     LOG_M_C(MQTT_CLIENT, "Mqtt Version is %d, topic is %s", mqtt_config.version, topic.c_str());
     LOG_M_C(MQTT_CLIENT, "Connecting to %s:%d", mqtt_config.hostname.c_str(), mqtt_config.port);
@@ -1095,8 +1095,8 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
         get_info_count++;
         
         // process alarm message
-        // MQTT::Message alarm_message;
-        // SendAlarmMsg(alarm_message);
+        MQTT::Message alarm_message;
+        SendAlarmMsg(alarm_message);
 
         //不加队列可能会错过
         std::lock_guard<std::mutex> lock(mtx);
