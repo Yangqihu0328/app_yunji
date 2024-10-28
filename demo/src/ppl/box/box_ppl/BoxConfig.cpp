@@ -275,7 +275,6 @@ AX_BOOL CBoxConfig::AddStreamUrl(AX_S32 channelId, std::string& channelUrl) {
 
 
 AX_BOOL CBoxConfig::removeStreamUrl(AX_S32 channelId) {
-    AX_BOOL bRet = AX_FALSE;
     const AX_CHAR *SECT = "STREAM";
 
     do {
@@ -288,7 +287,6 @@ AX_BOOL CBoxConfig::removeStreamUrl(AX_S32 channelId) {
 }
 
 AX_BOOL CBoxConfig::GetStreamCount(AX_S32 &count) {
-    AX_BOOL bRet = AX_FALSE;
     const AX_CHAR *SECT = "STREAM";
 
     count = m_Ini.GetIntValue(SECT, "count", 0);
