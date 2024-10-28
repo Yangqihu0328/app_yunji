@@ -1069,9 +1069,9 @@ AX_BOOL MqttClient::Start(AX_VOID) {
 }
 
 AX_BOOL MqttClient::Stop(AX_VOID) {
-    // if (arrjpegQ) {
-    //     arrjpegQ->Wakeup();
-    // }
+    if (arrjpegQ) {
+        arrjpegQ->Wakeup();
+    }
 
     m_threadWork.Stop();
     m_threadWork.Join();
