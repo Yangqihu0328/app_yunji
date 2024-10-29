@@ -89,10 +89,11 @@ public:
                 new_result.item[i].tBox  = old_result.item[j].tBox;
             }
             new_result.nCount = sum_count;
-            m_mapRlts[nGrp] = new_result;
         } else {
             new_result = cur_result;
         }
+
+        m_mapRlts[nGrp] = new_result;
 
         for (AX_U32 i = 0; i < new_result.nCount; ++i) {
             ++m_arrCount[new_result.item[i].eType];

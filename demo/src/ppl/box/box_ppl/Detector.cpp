@@ -131,9 +131,6 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
             pPrivData->nSeqNum = axFrame.stFrame.stVFrame.stVFrame.u64SeqNum;
             pPrivData->nGrpId = axFrame.nGrp;
             pPrivData->nSkelChn = axFrame.nGrp % m_stAttr.nChannelNum;
-            //临时定义算法类型
-            int algo_id = 10;
-            pPrivData->nAlgoId = algo_id;
         }
 
         AX_SKEL_FRAME_T skelFrame;
@@ -148,6 +145,8 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
 
         for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+            LOG_M_N(DETECTOR, "runskel SkelChn %d SkelType %d", pPrivData->nSkelChn, m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL[algo_id]);
+            pPrivData->nAlgoId = m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL[algo_id];
             if (d_vec[nCurrGrp][algo_id] == true) {
 #if defined(__RECORD_VB_TIMESTAMP__)
                 CTimestampHelper::RecordTimestamp(axFrame.stFrame.stVFrame.stVFrame, axFrame.nGrp, axFrame.nChn, TIMESTAMP_SKEL_PRE_SEND);
