@@ -77,20 +77,22 @@ public:
                 old_result = last_result;
             } else {
                 new_result = last_result;
-                old_result = new_result;
+                old_result = cur_result;
             }
-            // auto& new_result = (cur_result.nCount >= last_result.nCount) ? const_cast<DETECT_RESULT_T&>(cur_result) : last_result;
-            // const auto& old_result = (cur_result.nCount >= last_result.nCount) ? last_result : cur_result;
 
-            int index = 0;
-            for (AX_U32 i = new_result.nCount; i < last_result.nCount && i < MAX_DETECT_RESULT_COUNT; ++i) {
-                new_result.item[i].eType = old_result.item[index].eType;
-                new_result.item[i].nTrackId  = old_result.item[index].nTrackId;
-                new_result.item[i].tBox  = old_result.item[index].tBox;
-                index++;
+            int i = new_result.nCount, j = 0;
+            int temp_count = new_result.nCount + last_result.nCount;
+            int sum_count = temp_count < MAX_DETECT_RESULT_COUNT ? temp_count : MAX_DETECT_RESULT_COUNT;
+            for (; i < sum_count; i++ && j++) {
+                new_result.item[i].eType = old_result.item[j].eType;
+                new_result.item[i].nTrackId  = old_result.item[j].nTrackId;
+                new_result.item[i].tBox  = old_result.item[j].tBox;
             }
+            new_result.nCount = sum_count;
+            m_mapRlts[nGrp] = new_result;
+        } else {
+            new_result = cur_result;
         }
-        m_mapRlts[nGrp] = new_result;
 
         for (AX_U32 i = 0; i < new_result.nCount; ++i) {
             ++m_arrCount[new_result.item[i].eType];
@@ -100,13 +102,13 @@ public:
     }
 
 
-    AX_BOOL Get(AX_S32 nGrp, DETECT_RESULT_T& cur_result) {
+    AX_BOOL Get(AX_S32 nGrp, DETECT_RESULT_T& result) {
         std::lock_guard<std::mutex> lck(m_mtx);
         if (m_mapRlts.end() == m_mapRlts.find(nGrp)) {
             return AX_FALSE;
         }
 
-        cur_result = m_mapRlts[nGrp];
+        result = m_mapRlts[nGrp];
         return AX_TRUE;
     }
 

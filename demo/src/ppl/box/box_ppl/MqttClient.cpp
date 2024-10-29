@@ -369,7 +369,6 @@ static void OnAddAlgoTask(int id, std::string url, std::vector<int> algo_vec) {
         temp_algo_task.algo_index2 = algo_vec[2];
 
         algo_task.push_back(temp_algo_task);
-        //TODO: add realy media channel; meanwhile confirm rtsp stream is ok? add channel_status attribute
 
         root["msg"] = "success";
     }
@@ -437,7 +436,6 @@ static void OnRemoveAlgoTask(int id) {
 //查询媒体通道的目的就是为了确定是否取流成功。
 static void OnQueryMediaChanel() {
     LOG_M_D(MQTT_CLIENT, "OnQueryMediaChanel ++++.");
-
 
     json root, child;
     child["type"] = "QueryMediaChanel";
