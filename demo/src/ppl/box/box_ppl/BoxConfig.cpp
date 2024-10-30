@@ -10,6 +10,7 @@
 
 #include "BoxConfig.hpp"
 #include <unistd.h>
+#include <sstream>
 #include "GlobalDef.h"
 #include "ax_global_type.h"
 #include "ax_venc_rc.h"
@@ -113,17 +114,19 @@ DETECT_CONFIG_T CBoxConfig::GetDetectConfig(AX_VOID) {
     conf.nSkipRate = m_Ini.GetIntValue(SECT, "skip rate", 1);
     conf.nDepth = m_Ini.GetIntValue(SECT, "fifo depth", 1);
     conf.nVnpuMode = m_Ini.GetIntValue(SECT, "npu mode", 3);
-    conf.nChannelNum = m_Ini.GetIntValue(SECT, "channel num", 1);
-    conf.nChannelNum = AX_MIN(conf.nChannelNum, 32);
 
-    for (AX_S32 i = 0; i < conf.nChannelNum; ++i) {
-        std::string str = "channel" + std::to_string(i) + " attr";
+    //使用的是stream的通道数量。
+    int channel_num = AX_MIN(m_Ini.GetIntValue("STREAM", "count", 0), 32);
 
+    for (AX_S32 i = 0; i < channel_num; ++i) {
+
+        AX_CHAR str[32];
+        sprintf(str, "channe_%02d", i);
         vector<AX_S32> vec;
         m_Ini.GetIntValue(SECT, str, vec);
 
         if (vec.size() == 5) {
-            for (AX_S32 j=0; j<3; j++) {
+            for(int j=0; j<3; j++) {
                 conf.tChnParam[i].nPPL[j] = vec[j];
             }
             conf.tChnParam[i].bTrackEnable = (AX_BOOL)vec[3];
@@ -133,7 +136,7 @@ DETECT_CONFIG_T CBoxConfig::GetDetectConfig(AX_VOID) {
                 conf.tChnParam[i].nVNPU = vec[4];
             }
         } else {
-            for (AX_S32 j=0; j<3; j++) {
+            for(int j=0; j<3; j++) {
                 conf.tChnParam[i].nPPL[j] = 4;
             }
             conf.tChnParam[i].bTrackEnable = AX_FALSE;
@@ -273,13 +276,52 @@ AX_BOOL CBoxConfig::AddStreamUrl(AX_S32 channelId, std::string& channelUrl) {
     return bRet;
 }
 
-
-AX_BOOL CBoxConfig::removeStreamUrl(AX_S32 channelId) {
+AX_BOOL CBoxConfig::RemoveStreamUrl(AX_S32 channelId) {
     const AX_CHAR *SECT = "STREAM";
 
     do {
         AX_CHAR szKey[32];
         sprintf(szKey, "stream%02d", channelId);
+        m_Ini.DeleteValue(SECT, szKey);
+    } while (0);
+
+    return AX_TRUE;
+}
+
+AX_BOOL CBoxConfig::AddAlgoTask(AX_S32 channelId, std::vector<int> &task_vec) {
+    AX_BOOL bRet = AX_FALSE;
+    const AX_CHAR *SECT = "DETECT";
+
+    do {
+        AX_CHAR szKey[32];
+        sprintf(szKey, "channel%02d", channelId);
+
+        std::ostringstream oss; // 用于构建字符串
+        oss << "["; // 开始方括号
+
+        // 将 vector 中的数字添加到字符串流
+        for (size_t i = 0; i < task_vec.size(); ++i) {
+            oss << task_vec[i];
+            if (i < task_vec.size() - 1) {
+                oss << ", "; // 添加逗号和空格
+            }
+        }
+
+        // 默认为带跟踪算法和使用STD的NPU
+        oss << ", 1, 0]"; // 结束方括号
+        printf("update channel: %s to %s\n", szKey, oss.str().c_str());
+        m_Ini.SetStringValue(SECT, szKey, oss.str());
+    } while (0);
+
+    return bRet;
+}
+
+AX_BOOL CBoxConfig::RemoveAlgoTask(AX_S32 channelId) {
+    const AX_CHAR *SECT = "DETECT";
+
+    do {
+        AX_CHAR szKey[32];
+        sprintf(szKey, "channel%02d", channelId);
         m_Ini.DeleteValue(SECT, szKey);
     } while (0);
 

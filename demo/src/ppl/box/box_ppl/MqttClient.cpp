@@ -32,7 +32,7 @@ static json board_info;
 static int arrivedcount = 0;
 static std::vector<MediaChanel> media_channel;
 static std::vector<AlgoTask> algo_task;
-static std::map<int, int> id_channel_map;
+// static std::map<int, int> id_channel_map;
 static std::queue<int> addIdQueue;
 static std::queue<int> RemoveIdQueue;
 static std::mutex mtx;
@@ -316,7 +316,6 @@ static void OnAddMediaChanel(int id, std::string url) {
     json root;
     root["result"] = 0;
 
-    //允许注册相同的视频流，但是id需要由前端管理，id可以任意数值。
     if (media_channel.size() > 16) {
          root["msg"] = "failure";
          LOG_M_D(MQTT_CLIENT, "media channel only smaller than 16");
@@ -332,18 +331,17 @@ static void OnAddMediaChanel(int id, std::string url) {
         newchannel.url = url;
         media_channel.push_back(newchannel);
 
-        //这么麻烦的目的是，让id为随机，但是流地址是要按照顺序的。
+        //前端传下来的id为0开始
+        //获取当前流的数量。
         int tmp_count = 0;
         CBoxConfig::GetInstance()->GetStreamCount(tmp_count);
-        //通道索引增加
-        int stream_count = tmp_count+1;
-        id_channel_map[id] = stream_count;
-
-        CBoxConfig::GetInstance()->AddStreamUrl(stream_count, url);
-        //通知mqtt线程
-        std::lock_guard<std::mutex> lock(mtx);
-        addIdQueue.push(stream_count);
-        root["msg"] = "success";
+        //二次确认前端传下来的id要为当前流数量+1
+        if (tmp_count+1 != id) {
+            root["msg"] = "failure";
+        } else {
+            CBoxConfig::GetInstance()->AddStreamUrl(id, url);
+            root["msg"] = "success";
+        }
     }
 
     root["data"] = child;
@@ -351,8 +349,56 @@ static void OnAddMediaChanel(int id, std::string url) {
     SendMsg("web-message", payload.c_str(), payload.size());
 }
 
+
+static void OnRemoveMediaChanel(int id) {
+    json child;
+    child["type"] = "RemoveMediaChanel";
+
+    json root;
+    root["result"] = 0;
+
+    auto it = std::find_if(media_channel.begin(), media_channel.end(),
+        [id](const MediaChanel& channel) { return channel.id == id; });
+
+    if (it != media_channel.end()) {
+        media_channel.erase(it);
+
+        CBoxConfig::GetInstance()->RemoveStreamUrl(id);
+        root["msg"] = "success";
+    } else {
+        root["msg"] = "failure";
+    }
+
+    root["data"] = child;
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+}
+
+//查询媒体通道的目的就是为了确定是否取流成功
+static void OnQueryMediaChanel() {
+    LOG_M_D(MQTT_CLIENT, "OnQueryMediaChanel ++++.");
+
+    json root, child;
+    child["type"] = "QueryMediaChanel";
+
+    json channels_array = json::array();
+    for (const auto& channel : media_channel) {
+        json child;
+        child["id"] = channel.id;
+        child["url"] = channel.url;
+        child["channel_status"] = channel.channel_status;
+        channels_array.push_back(child); // 将当前通道的信息添加到数组中
+    }
+
+    root["msg"] = "success";
+    root["data"] = channels_array;
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+    LOG_M_D(MQTT_CLIENT, "OnQueryMediaChanel ----.");
+}
+
 //TODO:后面要增加算法其他信息，例如越线检测的线的位置或者客流统计的人员数量阈值设置
-static void OnAddAlgoTask(int id, std::string url, std::vector<int> algo_vec) {
+static void OnAddAlgoTask(int id, std::string url, std::vector<int> &algo_vec) {
     json child, root;
     child["type"] = "AddAlgoTask";
     root["result"] = 0;
@@ -369,40 +415,14 @@ static void OnAddAlgoTask(int id, std::string url, std::vector<int> algo_vec) {
         temp_algo_task.algo_index2 = algo_vec[2];
 
         algo_task.push_back(temp_algo_task);
-
-        root["msg"] = "success";
-    }
-
-    root["data"] = child;
-    std::string payload = root.dump();
-    SendMsg("web-message", payload.c_str(), payload.size());
-}
-
-static void OnRemoveMediaChanel(int id) {
-    json child;
-    child["type"] = "RemoveMediaChanel";
-
-    json root;
-    root["result"] = 0;
-
-    auto it = std::find_if(media_channel.begin(), media_channel.end(),
-        [id](const MediaChanel& channel) { return channel.id == id; });
-
-    if (it != media_channel.end()) {
-        media_channel.erase(it);
-
-        int channel_id = id_channel_map.at(id);
-        id_channel_map.erase(id);
-
-        CBoxConfig::GetInstance()->removeStreamUrl(channel_id);
+        //应该算法任务的id也是跟媒体通道用同一个id才对，这样子才是合理。
+        CBoxConfig::GetInstance()->AddAlgoTask(id, algo_vec);
+        //没有配置算法任务的时候，不应该开始媒体通道。
         std::lock_guard<std::mutex> lock(mtx);
-        RemoveIdQueue.push(channel_id);
+        addIdQueue.push(id);
 
         root["msg"] = "success";
-    } else {
-        root["msg"] = "failure";
     }
-    //TODO: remove realy media channel;
 
     root["data"] = child;
     std::string payload = root.dump();
@@ -421,35 +441,18 @@ static void OnRemoveAlgoTask(int id) {
 
     if (it != algo_task.end()) {
         algo_task.erase(it);
+        std::lock_guard<std::mutex> lock(mtx);
+        RemoveIdQueue.push(id);
+        CBoxConfig::GetInstance()->RemoveAlgoTask(id);
 
         root["msg"] = "success";
     } else {
         root["msg"] = "failure";
     }
-    //TODO: remove realy algo task;
 
     root["data"] = child;
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
-}
-
-//查询媒体通道的目的就是为了确定是否取流成功。
-static void OnQueryMediaChanel() {
-    LOG_M_D(MQTT_CLIENT, "OnQueryMediaChanel ++++.");
-
-    json root, child;
-    child["type"] = "QueryMediaChanel";
-
-    for (const auto channel : media_channel) {
-        child["id"] = channel.id;
-        child["url"] = channel.url;
-        child["channel_status"] = channel.channel_status;
-    }
-    root["msg"] = "success";
-    root["data"] = child;
-    std::string payload = root.dump();
-    SendMsg("web-message", payload.c_str(), payload.size());
-    LOG_M_D(MQTT_CLIENT, "OnQueryMediaChanel ----.");
 }
 
 static void OnQueryAlgoTask() {

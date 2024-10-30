@@ -69,10 +69,11 @@ struct AlgoInfo{
     int index;
 };
 
+//我希望前端限制传入的channel_id为顺序的，从0-15，而不是乱序的。
 struct MediaChanel{
-    int id;
-    std::string url;
-    std::string channel_status;
+    int id; //通道id是前端传下来的
+    std::string url; //流地址
+    std::string channel_status; //输出通道信息
 };
 
 
@@ -84,15 +85,6 @@ struct AlgoTask{
     int algo_index1;
     int algo_index2;
 };
-
-//算法map，算法枚举临时放在这里，后面有真正的算法再创建。
-enum AlgoList{
-    YJ_ALGO_FIRE,
-    YJ_ALGO_PEOPLE,
-    YJ_ALGO_FACE,
-    YJ_ALGO_MAX
-};
-
 
 class IPStack
 {
