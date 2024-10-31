@@ -308,37 +308,50 @@ bool check_RTSP_stream(const std::string& rtspUrl) {
     return true;
 }
 
-//有个问题，应该再这里回调里面去开始和停止码流吗？
-//正常来说应该是mqtt的线程做这个事情。那么我们应该给主线程发消息。
+// 查找下一个可用的 ID
+static int findNextAvailableId() {
+    std::set<int> existing_ids;
+
+    // 收集所有已存在的 ID
+    for (const auto& channel : media_channel) {
+        existing_ids.insert(channel.id);
+    }
+
+    // 从 0 开始查找第一个未被使用的 ID
+    int next_id = 0;
+    while (existing_ids.find(next_id) != existing_ids.end()) {
+        next_id++;
+    }
+    return next_id;
+}
+
 static void OnAddMediaChanel(int id, std::string url) {
     json child;
     child["type"] = "AddMediaChanel";
     json root;
     root["result"] = 0;
 
-    if (media_channel.size() > 16) {
+    //这里应该判断id数量限制为0-15
+    if (media_channel.size() > 16 || id<0 || id>16) {
          root["msg"] = "failure";
          LOG_M_D(MQTT_CLIENT, "media channel only smaller than 16");
     } else {
-        //这里应该只是判断一下流能否正常取图，而不会开启功能。
-        MediaChanel newchannel;
-        if (check_RTSP_stream(url)) {
-            newchannel.channel_status = "accessible";
-        } else {
-            newchannel.channel_status = "fail";
-        }
-        newchannel.id = id;
-        newchannel.url = url;
-        media_channel.push_back(newchannel);
-
-        //前端传下来的id为0开始
-        //获取当前流的数量。
-        int tmp_count = 0;
-        CBoxConfig::GetInstance()->GetStreamCount(tmp_count);
-        //二次确认前端传下来的id要为当前流数量+1
-        if (tmp_count+1 != id) {
+        //从media_channel中遍历找到最小的id进行赋值
+        int next_id = findNextAvailableId();
+        if (id != next_id) {
             root["msg"] = "failure";
         } else {
+            //这里应该只是判断一下流能否正常取图，而不会开启功能。
+            MediaChanel newchannel;
+            if (check_RTSP_stream(url)) {
+                newchannel.channel_status = "accessible";
+            } else {
+                newchannel.channel_status = "fail";
+            }
+            newchannel.id = id;
+            newchannel.url = url;
+            media_channel.push_back(newchannel);
+
             CBoxConfig::GetInstance()->AddStreamUrl(id, url);
             root["msg"] = "success";
         }
@@ -383,15 +396,16 @@ static void OnQueryMediaChanel() {
 
     json channels_array = json::array();
     for (const auto& channel : media_channel) {
-        json child;
-        child["id"] = channel.id;
-        child["url"] = channel.url;
-        child["channel_status"] = channel.channel_status;
-        channels_array.push_back(child); // 将当前通道的信息添加到数组中
+        json channel_info;
+        channel_info["id"] = channel.id;
+        channel_info["url"] = channel.url;
+        channel_info["channel_status"] = channel.channel_status;
+        channels_array.push_back(channel_info); // 将当前通道的信息添加到数组中
     }
+    child["arry"] = channels_array;
 
     root["msg"] = "success";
-    root["data"] = channels_array;
+    root["data"] = child;
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
     LOG_M_D(MQTT_CLIENT, "OnQueryMediaChanel ----.");
@@ -406,6 +420,7 @@ static void OnAddAlgoTask(int id, std::string url, std::vector<int> &algo_vec) {
     if (algo_task.size() > 16) {
          root["msg"] = "failure";
     } else {
+        //任务这里是不管id的，因为任务是与url相绑定的
         AlgoTask temp_algo_task;
         temp_algo_task.id = id;
         temp_algo_task.url = url;
@@ -458,20 +473,21 @@ static void OnRemoveAlgoTask(int id) {
 static void OnQueryAlgoTask() {
     LOG_M_D(MQTT_CLIENT, "OnQueryAlgoTask ++++.");
 
-
-    json root, child;
-    child["type"] = "QueryMediaChanel";
-
     // 媒体通道包括:媒体通道的id，媒体的视频源,视频协议，以及配置了什么算法。
     // media_channel 是vector,需要转为json格式发送出去。
-    for (const auto task : algo_task) {
-        child["id"] = task.id;
-        child["url"] = task.url;
-        child["algo1"] = task.algo_index0;
-        child["algo2"] = task.algo_index1;
-        child["algo3"] = task.algo_index2;
-        child["channel_status"] = task.channel_status;
+    json channels_array = json::array();
+    for (const auto& channel : media_channel) {
+        json channel_info;
+        channel_info["id"] = task.id;
+        channel_info["url"] = task.url;
+        channel_info["algo1"] = task.algo_index0;
+        channel_info["algo2"] = task.algo_index1;
+        channel_info["algo3"] = task.algo_index2;
+        channel_info["channel_status"] = task.channel_status;
+        channels_array.push_back(channel_info); // 将当前通道的信息添加到数组中
     }
+    child["arry"] = channels_array;
+
     root["msg"] = "success";
     root["data"] = child;
     std::string payload = root.dump();
@@ -1079,9 +1095,6 @@ AX_BOOL MqttClient::Stop(AX_VOID) {
 
     return AX_TRUE;
 }
-
-
-
 
 AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
     LOG_MM_I(MQTT_CLIENT, "+++");

@@ -1124,6 +1124,7 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
     return AX_FALSE;
 }
 
+//停止流就是什么都没有，相当于stream停了，vdec停了，det也停了。
 AX_BOOL CBoxBuilder::StopStream(AX_S32 channelId) {
     LOG_MM_W(BOX, "+++");
 
@@ -1132,8 +1133,6 @@ AX_BOOL CBoxBuilder::StopStream(AX_S32 channelId) {
     STREAMER_STAT_T stStat;
     if (stream && stream->QueryStatus(stStat) && stStat.bStarted) {
         stream->UnRegObserver(m_vdec.get());
-
-        // stream->UnRegObserver(m_transHelper.get());
 
         thread t([](IStreamHandler *p) { p->Stop(); }, stream.get());
         t.join();
