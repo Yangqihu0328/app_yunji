@@ -115,6 +115,37 @@ else
   debug=""
 fi
 
+if ! command -v emqx &> /dev/null; then
+    echo "emqx 程序未安装，正在安装..."
+
+    # 执行安装脚本并检查是否成功
+    if ! curl -s https://assets.emqx.com/scripts/install-emqx-deb.sh | sudo bash; then
+        echo "下载或执行安装脚本失败，退出。"
+        exit 1
+    fi
+
+    # 安装 emqx 并检查是否成功
+    if ! sudo apt-get install -y emqx; then
+        echo "emqx 安装失败，退出。"
+        exit 1
+    fi
+
+    # 启动 emqx 服务并检查是否成功
+    if ! sudo systemctl start emqx; then
+        echo "启动 emqx 服务失败，退出。"
+        exit 1
+    fi
+
+    echo "emqx 已成功安装并启动。"
+else
+    # 启动 emqx 服务并检查是否成功
+    if ! sudo systemctl start emqx; then
+        echo "启动 emqx 服务失败，退出。"
+        exit 1
+    fi
+fi
+
+export LD_LIBRARY_PATH=$PWD:/soc/lib:/usr/local/lib:/usr/lib:/opt/lib:$LD_LIBRARY_PATH
 md5=`md5sum ${process} | awk '{ print $1 }'`
 echo "launching ${process}, md5: ${md5} ..."
 $debug ./${process} $*

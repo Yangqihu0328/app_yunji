@@ -473,18 +473,21 @@ static void OnRemoveAlgoTask(int id) {
 static void OnQueryAlgoTask() {
     LOG_M_D(MQTT_CLIENT, "OnQueryAlgoTask ++++.");
 
+    json root, child;
+    child["type"] = "QueryAlgoTask";
+
     // 媒体通道包括:媒体通道的id，媒体的视频源,视频协议，以及配置了什么算法。
     // media_channel 是vector,需要转为json格式发送出去。
     json channels_array = json::array();
-    for (const auto& channel : media_channel) {
-        json channel_info;
-        channel_info["id"] = task.id;
-        channel_info["url"] = task.url;
-        channel_info["algo1"] = task.algo_index0;
-        channel_info["algo2"] = task.algo_index1;
-        channel_info["algo3"] = task.algo_index2;
-        channel_info["channel_status"] = task.channel_status;
-        channels_array.push_back(channel_info); // 将当前通道的信息添加到数组中
+    for (const auto& task : algo_task) {
+        json task_info;
+        task_info["id"] = task.id;
+        task_info["url"] = task.url;
+        task_info["algo1"] = task.algo_index0;
+        task_info["algo2"] = task.algo_index1;
+        task_info["algo3"] = task.algo_index2;
+        task_info["channel_status"] = task.channel_status;
+        channels_array.push_back(task_info); // 将当前通道的信息添加到数组中
     }
     child["arry"] = channels_array;
 
