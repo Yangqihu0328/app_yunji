@@ -824,7 +824,8 @@ static void GetBoardInfo() {
 
 
 // /* TODO: need web support file copy, then show in web*/
-AX_BOOL MqttClient::SaveJpgFile(AX_VOID* data, AX_U32 size, JPEG_DATA_INFO_T* pJpegInfo) {
+AX_BOOL MqttClient::SaveJpgFile(QUEUE_T *jpg_info) {
+    JPEG_DATA_INFO_T *pJpegInfo = &jpg_info->tJpegInfo;
     std::lock_guard<std::mutex> guard(m_mtxConnStatus);
 
     /* Data file parent directory format: </XXX/DEV_XX/YYYY-MM-DD> */
@@ -835,7 +836,7 @@ AX_BOOL MqttClient::SaveJpgFile(AX_VOID* data, AX_U32 size, JPEG_DATA_INFO_T* pJ
     sprintf(szDateDir, "%s/DEV_%02d/%s", ALARM_IMG_PATH, pJpegInfo->tCaptureInfo.tHeaderInfo.nSnsSrc + 1, szDateBuf);
 
     if (CDiskHelper::CreateDir(szDateDir, AX_FALSE)) {
-        sprintf(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, "%s/%s.jpg", szDateDir, pJpegInfo->tCaptureInfo.tHeaderInfo.szTimestamp);
+        sprintf(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, "%s/%s_%lld.jpg", szDateDir, pJpegInfo->tCaptureInfo.tHeaderInfo.szTimestamp, jpg_info->u64UserData);
 
         // Open file to write
         std::ofstream outFile(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, std::ios::binary);
@@ -845,7 +846,7 @@ AX_BOOL MqttClient::SaveJpgFile(AX_VOID* data, AX_U32 size, JPEG_DATA_INFO_T* pJ
         }
 
         // Write the actual data to the file
-        outFile.write(reinterpret_cast<const char*>(data), size);
+        outFile.write(reinterpret_cast<const char*>(jpg_info->jpg_buf), jpg_info->buf_length);
         outFile.close();
 
         LOG_MM_C(MQTT_CLIENT, ">>>> Save jpg file: %s <<<<", pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath);
@@ -861,7 +862,7 @@ AX_VOID MqttClient::SendAlarmMsg(MQTT::Message &message) {
     if (nCount > 0) {
         QUEUE_T jpg_info;
         if (arrjpegQ->Pop(jpg_info, 0)) {
-            SaveJpgFile(jpg_info.jpg_buf, jpg_info.buf_length, &(jpg_info.tJpegInfo));
+            SaveJpgFile(&jpg_info);
 
             std::string currentTimeStr;
             GetSystime(currentTimeStr);
@@ -1002,6 +1003,7 @@ AX_BOOL MqttClient::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nC
         jpg_info.jpg_buf = new AX_U8[MAX_BUF_LENGTH];
         jpg_info.buf_length = pVencPack->u32Len;
         memcpy(jpg_info.jpg_buf, pVencPack->pu8Addr, jpg_info.buf_length);
+        jpg_info.u64UserData = pVencPack->u64UserData;
 
         auto &tJpegInfo = jpg_info.tJpegInfo;
         tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc = nGrp;

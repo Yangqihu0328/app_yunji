@@ -54,6 +54,12 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
                     DrawBox(axFrame, fhvp);
                 }
             }
+
+            // 给编码器送帧
+            for (auto &m : s_lstObs) {
+                m->ProcessFrame(&axFrame);
+            }
+
             if (m_enDispType == AX_DISP_TYPE::SRC_DIFF) {
                 std::lock_guard<std::mutex> lck(m_mtxObs);
                 std::list<IObserver*>::iterator it = m_lstObs.begin();

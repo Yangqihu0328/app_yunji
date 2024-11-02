@@ -214,6 +214,9 @@ AX_BOOL CJpegEncoder::ResetQFactor(AX_U32 nQFactor) {
 AX_BOOL CJpegEncoder::ProcessFrame(CAXFrame* pFrame) {
     AX_S32 nRet = 0;
 
+    // 在帧的用户数据理添加通道号进行标识
+    LOG_MM_D(JENC, "AX_VENC_SendFrame : Grp = %d, Chn = %d", pFrame->nGrp, pFrame->nChn);
+    pFrame->stFrame.stVFrame.stVFrame.u64UserData = pFrame->nGrp;
     nRet = AX_VENC_SendFrame(m_tJpegConfig.nChannel, &pFrame->stFrame.stVFrame, -1);
     if (AX_SUCCESS != nRet) {
         LOG_M_E(JENC, "[%d] AX_VENC_SendFrame failed, nRet=0x%x", m_tJpegConfig.nChannel, nRet);
