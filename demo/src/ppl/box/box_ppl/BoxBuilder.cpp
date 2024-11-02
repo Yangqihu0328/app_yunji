@@ -720,14 +720,14 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
 
     // streamConfig.nStreamCount
     //实际上只绑定实际的流数量。
-    for (AX_U32 i = 0; i < streamConfig.nStreamCount; ++i) {
-        m_arrStreamer[i]->RegObserver(m_vdec.get());
-    }
+    // for (AX_U32 i = 0; i < streamConfig.nStreamCount; ++i) {
+    //     m_arrStreamer[i]->RegObserver(m_vdec.get());
+    // }
 
     for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
         //问题在于这里？
         /* register vdec to streamer */
-        // m_arrStreamer[i]->RegObserver(m_vdec.get());
+        m_arrStreamer[i]->RegObserver(m_vdec.get());
 
         AX_VDEC_GRP vdGrp = (AX_VDEC_GRP)i;
 
