@@ -317,6 +317,7 @@ typedef struct _QUEUE_T {
 	JPEG_DATA_INFO_T tJpegInfo;
 	AX_U8 *jpg_buf;
 	AX_U32 buf_length;
+	AX_U64 u64UserData; // 标识数据来源哪个通道
 } QUEUE_T;
 
 
@@ -339,7 +340,7 @@ public:
 
 private:
     AX_VOID WorkThread(AX_VOID* pArg);
-	AX_BOOL SaveJpgFile(AX_VOID* data, AX_U32 size, JPEG_DATA_INFO_T* pJpegInfo);
+	AX_BOOL SaveJpgFile(QUEUE_T* jpg_info);
 	AX_VOID SendAlarmMsg(MQTT::Message &message);
 
 protected:
