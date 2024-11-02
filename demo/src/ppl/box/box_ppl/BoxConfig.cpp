@@ -53,7 +53,7 @@ STREAM_CONFIG_T CBoxConfig::GetNewStream(AX_VOID) {
     conf.nMaxGrpW = m_Ini.GetIntValue(SECT, "max width", 1920);
     conf.nMaxGrpH = m_Ini.GetIntValue(SECT, "max height", 1080);
     conf.nStreamCount = m_Ini.GetIntValue(SECT, "stream count", 0);
-    auto nCount = conf.nStreamCount;
+    int nCount = conf.nStreamCount;
     if (nCount > 0) {
         conf.v.resize(nCount);
         for (int i = 0; i < nCount; ++i) {

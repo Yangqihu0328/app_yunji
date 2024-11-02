@@ -105,7 +105,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         return AX_FALSE;
     }
 
-#if 0
+#if 1
     if (dispVoConfig.bOnlineMode || (dispVoConfig_1.nDevId > -1 && dispVoConfig_1.bOnlineMode)) {
         /* fixme: VO online worst cast: keep VB by 2 dispc interrupts */
         if (streamConfig.nChnDepth[DISPVO_CHN] < 6) {
@@ -274,13 +274,13 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
         stAttr.nMaxSendNaluIntervalMilliseconds = CBoxConfig::GetInstance()->GetUTConfig().nMaxSendNaluIntervalMilliseconds;
 
         m_arrStreamer[i] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
-        // if (!m_arrStreamer[i]) {
-        //     return AX_FALSE;
-        // }
+        if (!m_arrStreamer[i]) {
+            return AX_FALSE;
+        }
 
-        // if (!m_arrStreamer[i]->Init(stAttr)) {
-        //     return AX_FALSE;
-        // }
+        if (!m_arrStreamer[i]->Init(stAttr)) {
+            return AX_FALSE;
+        }
 
         LOG_M_C(BOX, "stream %d: %s", i, stAttr.strPath.c_str());
     }
@@ -894,11 +894,11 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             return AX_FALSE;
         }
 
-        // if (m_detect) {
-        //     if (!m_detect->Start()) {
-        //         return AX_FALSE;
-        //     }
-        // }
+        if (m_detect) {
+            if (!m_detect->Start()) {
+                return AX_FALSE;
+            }
+        }
 
         if (mqtt_client) {
             if (!mqtt_client->Start()) {
@@ -931,12 +931,12 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             }
         }
 
-        // for (auto &&m : m_arrStreamer) {
-        //     if (m) {
-        //         thread t([](IStreamHandler *p) { p->Start(); }, m.get());
-        //         t.detach();
-        //     }
-        // }
+        for (auto &&m : m_arrStreamer) {
+            if (m) {
+                thread t([](IStreamHandler *p) { p->Start(); }, m.get());
+                t.detach();
+            }
+        }
         return AX_TRUE;
 
     } while (0);
@@ -1103,7 +1103,7 @@ AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
 AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
     LOG_MM_W(BOX, "+++");
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetNewStream();
-    printf("channelId = %d %d\n", channelId, streamConfig.v.size());
+    // printf("channelId = %d %d\n", channelId, streamConfig.v.size());
     // if (channelId < (int)streamConfig.v.size()) 
     {
         STREAMER_ATTR_T stAttr;
