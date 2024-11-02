@@ -46,6 +46,25 @@ AX_BOOL CBoxConfig::Init(AX_VOID) {
     return AX_TRUE;
 }
 
+STREAM_CONFIG_T CBoxConfig::GetNewStream(AX_VOID) {
+    STREAM_CONFIG_T conf;
+    const AX_CHAR *SECT = "STREAM";
+
+    conf.nMaxGrpW = m_Ini.GetIntValue(SECT, "max width", 1920);
+    conf.nMaxGrpH = m_Ini.GetIntValue(SECT, "max height", 1080);
+    conf.nStreamCount = m_Ini.GetIntValue(SECT, "stream count", 0);
+    int nCount = conf.nStreamCount;
+    if (nCount > 0) {
+        conf.v.resize(nCount);
+        for (int i = 0; i < nCount; ++i) {
+            AX_CHAR szKey[32];
+            sprintf(szKey, "stream%02d", i);
+            conf.v[i] = m_Ini.GetStringValue(SECT, szKey, "");
+        }
+    }
+    return conf; /* RVO: optimized by compiler */
+}
+
 STREAM_CONFIG_T CBoxConfig::GetStreamConfig(AX_VOID) {
     STREAM_CONFIG_T conf;
     const AX_CHAR *SECT = "STREAM";
@@ -59,7 +78,7 @@ STREAM_CONFIG_T CBoxConfig::GetStreamConfig(AX_VOID) {
     }
     conf.nDefaultFps = m_Ini.GetIntValue(SECT, "default fps", 0);
     conf.nInputMode = m_Ini.GetIntValue(SECT, "input mode", 0);
-
+    conf.nStreamCount = m_Ini.GetIntValue(SECT, "stream count", 0);
     conf.nUserPool = m_Ini.GetIntValue(SECT, "user pool", 1);
     if (conf.nUserPool > 2) {
         conf.nUserPool = 1;
@@ -69,17 +88,17 @@ STREAM_CONFIG_T CBoxConfig::GetStreamConfig(AX_VOID) {
     AX_U32 nCount = m_Ini.GetIntValue(SECT, "count", 1);
     if (nCount > 0) {
         conf.v.resize(nCount);
-        for (AX_U32 i = 1; i <= nCount; ++i) {
+        for (AX_U32 i = 0; i < nCount; ++i) {
             AX_CHAR szKey[32];
             sprintf(szKey, "stream%02d", i);
-            conf.v[i - 1] = m_Ini.GetStringValue(SECT, szKey, "");
+            conf.v[i] = m_Ini.GetStringValue(SECT, szKey, "");
         }
     }
 
     conf.nDecodeGrps = m_Ini.GetIntValue(SECT, "vdec count", 0);
-    if (0 == conf.nDecodeGrps || conf.nDecodeGrps > nCount) {
-        conf.nDecodeGrps = nCount;
-    }
+    // if (0 == conf.nDecodeGrps || conf.nDecodeGrps > nCount) {
+    //     conf.nDecodeGrps = nCount;
+    // }
 
     /* SATA */
     conf.strSataPath = m_Ini.GetStringValue(SECT, "sata path", "");
@@ -270,6 +289,9 @@ AX_BOOL CBoxConfig::AddStreamUrl(AX_S32 channelId, std::string& channelUrl) {
         sprintf(szKey, "stream%02d", channelId);
         printf("update stream id: %s to %s\n", szKey, channelUrl.c_str());
         m_Ini.SetStringValue(SECT, szKey, channelUrl);
+
+        int nCount = m_Ini.GetIntValue(SECT, "stream count", 0);
+        m_Ini.SetIntValue(SECT, "stream count", nCount+1);
     } while (0);
 
     return bRet;
@@ -282,6 +304,11 @@ AX_BOOL CBoxConfig::RemoveStreamUrl(AX_S32 channelId) {
         AX_CHAR szKey[32];
         sprintf(szKey, "stream%02d", channelId);
         m_Ini.DeleteValue(SECT, szKey);
+
+        int nCount = m_Ini.GetIntValue(SECT, "stream count", 0);
+        if (nCount>0) {
+            m_Ini.SetIntValue(SECT, "stream count", nCount-1);
+        }
     } while (0);
 
     return AX_TRUE;
@@ -293,7 +320,7 @@ AX_BOOL CBoxConfig::AddAlgoTask(AX_S32 channelId, std::vector<int> &task_vec) {
 
     do {
         AX_CHAR szKey[32];
-        sprintf(szKey, "channel%02d", channelId);
+        sprintf(szKey, "channel_%02d", channelId);
 
         std::ostringstream oss; // 用于构建字符串
         oss << "["; // 开始方括号

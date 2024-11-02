@@ -30,6 +30,7 @@ using namespace std;
 #define DISPVO_CHN VDEC_CHN1
 #define DETECT_CHN VDEC_CHN2
 #define ENC_MAX_BUF_SIZE (3840 * 2160 * 3 / 2)
+#define DEBUG_REMOVE
 
 AX_BOOL CBoxBuilder::Init(AX_VOID) {
     m_sys.InitAppLog("BoxDemo");
@@ -104,14 +105,13 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         return AX_FALSE;
     }
 
-#if 0
+#if 1
     if (dispVoConfig.bOnlineMode || (dispVoConfig_1.nDevId > -1 && dispVoConfig_1.bOnlineMode)) {
         /* fixme: VO online worst cast: keep VB by 2 dispc interrupts */
         if (streamConfig.nChnDepth[DISPVO_CHN] < 6) {
             streamConfig.nChnDepth[DISPVO_CHN] = 6;
         }
     }
-#endif
 
     /* verify */
     for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
@@ -125,6 +125,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
             return AX_FALSE;
         }
     }
+#endif
 
     /* [5]: Init detector and observer */
     if (detectConfig.bEnable) {
@@ -134,6 +135,9 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         }
     }
 
+    if (!InitMqtt()) {
+        return AX_FALSE;
+    }
     /* [6]: Init Mqtt client */
     if (!InitMqtt()) {
         return AX_FALSE;
@@ -407,6 +411,7 @@ AX_BOOL CBoxBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
                 return AX_FALSE;
             }
 
+
             m_vencObservers[i] = CObserverMaker::CreateObserver<CVencObserver>(pVencInstance);
 
             //这里注册
@@ -561,8 +566,6 @@ AX_BOOL CBoxBuilder::InitMqtt() {
         LOG_MM_E(BOX, "MqttClient Init failed.");
         return AX_FALSE;
     }
-    
-    // mqtt_client->BindTransfer(m_transHelper.get());
 
     return AX_TRUE;
 }
@@ -715,7 +718,14 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
         return AX_FALSE;
     }
 
+    // streamConfig.nStreamCount
+    //实际上只绑定实际的流数量。
+    // for (AX_U32 i = 0; i < streamConfig.nStreamCount; ++i) {
+    //     m_arrStreamer[i]->RegObserver(m_vdec.get());
+    // }
+
     for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
+        //问题在于这里？
         /* register vdec to streamer */
         m_arrStreamer[i]->RegObserver(m_vdec.get());
 
@@ -819,7 +829,6 @@ AX_BOOL CBoxBuilder::DeInit(AX_VOID) {
     DESTORY_INSTANCE(m_disp);
     DESTORY_INSTANCE(m_dispSecondary);
     DESTORY_INSTANCE(m_detect);
-    DESTORY_INSTANCE(mqtt_client);
     DESTORY_INSTANCE(m_vdec);
 
 #undef DESTORY_INSTANCE
@@ -928,7 +937,6 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
                 t.detach();
             }
         }
-
         return AX_TRUE;
 
     } while (0);
@@ -1089,11 +1097,15 @@ AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
     return AX_TRUE;
 }
 
-
+//初始化stream和绑定vdec
+//如果说已经初始化了vdec，绑定绑定了stream。那么开启stream即可。
+//需要修改配置文件
 AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
     LOG_MM_W(BOX, "+++");
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    if (channelId < (int)streamConfig.v.size()) {
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetNewStream();
+    // printf("channelId = %d %d\n", channelId, streamConfig.v.size());
+    // if (channelId < (int)streamConfig.v.size()) 
+    {
         STREAMER_ATTR_T stAttr;
         stAttr.strPath = streamConfig.v[channelId];
         stAttr.nMaxWidth = streamConfig.nMaxGrpW;
@@ -1101,6 +1113,7 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
         stAttr.nCookie = (AX_S32)channelId;
         stAttr.bLoop = AX_TRUE;
         stAttr.bSyncObs = AX_TRUE;
+        m_arrStreamer.resize(streamConfig.nStreamCount);
 
         m_arrStreamer[channelId] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
         if (!m_arrStreamer[channelId]) {
@@ -1112,9 +1125,9 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
         }
 
         m_arrStreamer[channelId]->RegObserver(m_vdec.get());
-
         thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[channelId].get());
         t.join();
+
 
         LOG_MM_W(BOX, "---");
 
@@ -1128,18 +1141,21 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
 AX_BOOL CBoxBuilder::StopStream(AX_S32 channelId) {
     LOG_MM_W(BOX, "+++");
 
+    //指定停某个流
     auto &&stream = m_arrStreamer[channelId];
-    
-    STREAMER_STAT_T stStat;
-    if (stream && stream->QueryStatus(stStat) && stStat.bStarted) {
-        stream->UnRegObserver(m_vdec.get());
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetNewStream();
 
-        thread t([](IStreamHandler *p) { p->Stop(); }, stream.get());
-        t.join();
+    if (streamConfig.nStreamCount > 1) {
+        STREAMER_STAT_T stStat;
+        if (stream && stream->QueryStatus(stStat) && stStat.bStarted) {
+            stream->UnRegObserver(m_vdec.get());
 
-        stream->DeInit();
+            thread t([](IStreamHandler *p) { p->Stop(); }, stream.get());
+            t.join();
 
-        stream = nullptr;
+            stream->DeInit();
+            stream = nullptr;
+        }
     }
 
     LOG_MM_W(BOX, "---");

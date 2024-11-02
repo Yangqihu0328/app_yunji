@@ -35,7 +35,9 @@ static std::vector<AlgoTask> algo_task;
 // static std::map<int, int> id_channel_map;
 static std::queue<int> addIdQueue;
 static std::queue<int> RemoveIdQueue;
+static std::mutex mtx_info;
 static std::mutex mtx;
+
 
 // #if 0
 
@@ -433,9 +435,9 @@ static void OnAddAlgoTask(int id, std::string url, std::vector<int> &algo_vec) {
         //应该算法任务的id也是跟媒体通道用同一个id才对，这样子才是合理。
         CBoxConfig::GetInstance()->AddAlgoTask(id, algo_vec);
         //没有配置算法任务的时候，不应该开始媒体通道。
-        std::lock_guard<std::mutex> lock(mtx);
-        addIdQueue.push(id);
-
+        // std::unique_lock<std::mutex> lock(mtx);
+        // addIdQueue.push(id);
+        // lock.unlock();
         root["msg"] = "success";
     }
 
@@ -456,8 +458,9 @@ static void OnRemoveAlgoTask(int id) {
 
     if (it != algo_task.end()) {
         algo_task.erase(it);
-        std::lock_guard<std::mutex> lock(mtx);
+        std::unique_lock<std::mutex> lock(mtx);
         RemoveIdQueue.push(id);
+        lock.unlock();
         CBoxConfig::GetInstance()->RemoveAlgoTask(id);
 
         root["msg"] = "success";
@@ -518,7 +521,7 @@ static void OnQueryAlgoTask() {
 
 
 static void OnGetBoardInfo() {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::unique_lock<std::mutex> lock(mtx_info);
     json root;
     root["result"] = 0;
     root["msg"] = "success";
@@ -526,6 +529,7 @@ static void OnGetBoardInfo() {
     
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
+    lock.unlock();
 }
 
 /*循环中获取板子信息，减少回调耗时*/
@@ -565,7 +569,7 @@ static void GetBoardInfo() {
     std::vector<int> npu_utilization(3, 0); // 初始化三个 NPU 的利用率为 0
     GetNPUInfo(npu_utilization);
 
-    std::lock_guard<std::mutex> lock(mtx);
+    std::unique_lock<std::mutex> lock(mtx_info);
     board_info = {
         {"type", "GetBoardInfo"}, 
         {"BoardId", "YJ-AIBOX-001"}, 
@@ -594,6 +598,7 @@ static void GetBoardInfo() {
             }
         }},
     };
+    lock.unlock();
 
     LOG_MM_D(MQTT_CLIENT, "OnGetBoardInfo ----");
 }
@@ -899,7 +904,7 @@ AX_VOID MqttClient::SendAlarmMsg(MQTT::Message &message) {
 
 /*保证回调执行的程序要简单，如果比较复杂，需要考虑要用状态机处理回调*/
 static void messageArrived(MQTT::MessageData& md) {
-    printf("messageArrived ++++\n");
+    LOG_MM_D(MQTT_CLIENT,"messageArrived ++++\n");
 
     MQTT::Message &message = md.message;
     LOG_MM_D(MQTT_CLIENT, "Message %d arrived: qos %d, retained %d, dup %d, packetid %d.",
@@ -907,12 +912,34 @@ static void messageArrived(MQTT::MessageData& md) {
     LOG_MM_D(MQTT_CLIENT, "Payload %.*s.", (int)message.payloadlen, (char*)message.payload);
 
     std::string recv_msg((char *)message.payload, message.payloadlen);
-    printf("recv msg %s\n", recv_msg.c_str());
+    printf("recv msg: %s\n", recv_msg.c_str());
 
-    auto jsonRes = nlohmann::json::parse(recv_msg);
-    std::string type = jsonRes["type"];
-    printf("msg type %s\n", type.c_str());
+    std::string type;
+    nlohmann::json jsonRes;
+    try {
+        jsonRes = nlohmann::json::parse(recv_msg);
+        type = jsonRes["type"];
+        printf("msg type %s\n", type.c_str());
+    } catch (const nlohmann::json::parse_error& e) {
+        std::cerr << "JSON parse error: " << e.what() << std::endl;
+        std::cerr << "Received message: " << recv_msg << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "An error occurred: " << e.what() << std::endl;
+    }
 
+    if (recv_msg == "add") {
+        // std::string mstring = "rtsp://admin:yunji123456++@192.168.0.150:554/cam/realmonitor?channel=1&subtype=0";
+        
+        //这个地方是已经添加了属性，再去停止流和开启流
+        std::string mstring = "/root/boxDemo/3.mp4";
+        OnAddMediaChanel(0, mstring);
+
+        std::unique_lock<std::mutex> lock(mtx);
+        addIdQueue.push(0);
+        lock.unlock();
+        // std::vector<int> algo_vec = {4, 4, 4};
+        // OnAddAlgoTask(0, mstring, algo_vec);
+    }
 
 
     // if (type == "login") {
@@ -951,6 +978,7 @@ static void messageArrived(MQTT::MessageData& md) {
     } else if (type == "QueryAlgoTask") {
         OnQueryAlgoTask();
     }
+
     // #if 0
     // else if (type == "getMediaChannelInfo") {
     //     OnGetMediaChannelInfo();
@@ -986,7 +1014,7 @@ static void messageArrived(MQTT::MessageData& md) {
     //     }
     // }
 
-    printf("messageArrived ----\n");
+    LOG_MM_D(MQTT_CLIENT,"messageArrived ----\n");
 }
 
 
@@ -1112,26 +1140,27 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
             GetBoardInfo();
         }
         get_info_count++;
-        
         // process alarm message
         MQTT::Message alarm_message;
         SendAlarmMsg(alarm_message);
 
         //不加队列可能会错过
-        std::lock_guard<std::mutex> lock(mtx);
+        std::unique_lock<std::mutex> lock(mtx);
         int id = 0;
         auto p_builder = CBoxBuilder::GetInstance();
         if (!addIdQueue.empty()) {
             id = addIdQueue.front();
             p_builder->StopStream(id);
             p_builder->StartStream(id);
+            addIdQueue.pop();
         } else if (!RemoveIdQueue.empty()) {
             id = RemoveIdQueue.front();
             p_builder->StopStream(id);
             p_builder->StartStream(id);
+            RemoveIdQueue.pop();
         }
+        lock.unlock();
         
-
         client_->yield(1 * 1000UL); // sleep 5 seconds
     }
 
