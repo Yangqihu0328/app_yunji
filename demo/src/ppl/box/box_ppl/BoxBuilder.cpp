@@ -105,7 +105,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         return AX_FALSE;
     }
 
-#if 1
+#if 0
     if (dispVoConfig.bOnlineMode || (dispVoConfig_1.nDevId > -1 && dispVoConfig_1.bOnlineMode)) {
         /* fixme: VO online worst cast: keep VB by 2 dispc interrupts */
         if (streamConfig.nChnDepth[DISPVO_CHN] < 6) {
@@ -135,9 +135,6 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         }
     }
 
-    if (!InitMqtt()) {
-        return AX_FALSE;
-    }
     /* [6]: Init Mqtt client */
     if (!InitMqtt()) {
         return AX_FALSE;
@@ -260,6 +257,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
 }
 
 AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
+    
     const AX_U32 nCount = streamConfig.v.size();
     m_arrStreamer.resize(nCount);
     for (AX_U32 i = 0; i < nCount; ++i) {
@@ -274,13 +272,14 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
         stAttr.nMaxSendNaluIntervalMilliseconds = CBoxConfig::GetInstance()->GetUTConfig().nMaxSendNaluIntervalMilliseconds;
 
         m_arrStreamer[i] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
+
         if (!m_arrStreamer[i]) {
             return AX_FALSE;
         }
 
-        if (!m_arrStreamer[i]->Init(stAttr)) {
-            return AX_FALSE;
-        }
+        // if (!m_arrStreamer[i]->Init(stAttr)) {
+        //     return AX_FALSE;
+        // }
 
         LOG_M_C(BOX, "stream %d: %s", i, stAttr.strPath.c_str());
     }
@@ -720,14 +719,14 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
 
     // streamConfig.nStreamCount
     //实际上只绑定实际的流数量。
-    // for (AX_U32 i = 0; i < streamConfig.nStreamCount; ++i) {
-    //     m_arrStreamer[i]->RegObserver(m_vdec.get());
-    // }
+    for (AX_U32 i = 0; i < streamConfig.nStreamCount; ++i) {
+        m_arrStreamer[i]->RegObserver(m_vdec.get());
+    }
 
     for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
         //问题在于这里？
         /* register vdec to streamer */
-        m_arrStreamer[i]->RegObserver(m_vdec.get());
+        // m_arrStreamer[i]->RegObserver(m_vdec.get());
 
         AX_VDEC_GRP vdGrp = (AX_VDEC_GRP)i;
 
@@ -894,11 +893,11 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             return AX_FALSE;
         }
 
-        if (m_detect) {
-            if (!m_detect->Start()) {
-                return AX_FALSE;
-            }
-        }
+        // if (m_detect) {
+        //     if (!m_detect->Start()) {
+        //         return AX_FALSE;
+        //     }
+        // }
 
         if (mqtt_client) {
             if (!mqtt_client->Start()) {
@@ -931,16 +930,15 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             }
         }
 
-        for (auto &&m : m_arrStreamer) {
-            if (m) {
-                thread t([](IStreamHandler *p) { p->Start(); }, m.get());
-                t.detach();
-            }
-        }
+        // for (auto &&m : m_arrStreamer) {
+        //     if (m) {
+        //         thread t([](IStreamHandler *p) { p->Start(); }, m.get());
+        //         t.detach();
+        //     }
+        // }
         return AX_TRUE;
 
     } while (0);
-
     StopAllStreams();
     WaitDone();
     return AX_FALSE;
@@ -1101,9 +1099,8 @@ AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
 //如果说已经初始化了vdec，绑定绑定了stream。那么开启stream即可。
 //需要修改配置文件
 AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
-    LOG_MM_W(BOX, "+++");
+    LOG_MM_W(BOX, "+++"); 
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetNewStream();
-    // printf("channelId = %d %d\n", channelId, streamConfig.v.size());
     // if (channelId < (int)streamConfig.v.size()) 
     {
         STREAMER_ATTR_T stAttr;
@@ -1140,10 +1137,13 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
 //停止流就是什么都没有，相当于stream停了，vdec停了，det也停了。
 AX_BOOL CBoxBuilder::StopStream(AX_S32 channelId) {
     LOG_MM_W(BOX, "+++");
-
     //指定停某个流
-    auto &&stream = m_arrStreamer[channelId];
+    auto &stream = m_arrStreamer[channelId];
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetNewStream();
+    STREAMER_STAT_T stStat;
+    if (!stream.get()) {
+        std::cerr << "Stream is null!" << std::endl;
+    }
 
     if (streamConfig.nStreamCount > 1) {
         STREAMER_STAT_T stStat;
@@ -1157,7 +1157,6 @@ AX_BOOL CBoxBuilder::StopStream(AX_S32 channelId) {
             stream = nullptr;
         }
     }
-
     LOG_MM_W(BOX, "---");
 
     return AX_TRUE;

@@ -75,7 +75,7 @@ int main(int argc, char const *argv[]) {
     DisableDynamicMallocShrink(128);
 
     try {
-        std::unique_ptr<CBoxBuilder> pApp = std::make_unique<CBoxBuilder>();
+        auto pApp = CBoxBuilder::GetInstance();
         if (!pApp) {
             perror("create box build fail");
             return 1;
