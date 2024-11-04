@@ -211,10 +211,24 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         }
     }
 
+    //1.先确定是否适配过
+    AX_SKEL_INIT_PARAM_T stInit;
+    memset(&stInit, 0, sizeof(stInit));
+    stInit.pStrModelDeploymentPath = m_stAttr.strModelPath.c_str();
+    //先确定路径是否ok，再建立map,绑定代码注册好的ppl
+    AX_S32 ret = AX_SKEL_Init(&stInit);
+    if (0 != ret) {
+        LOG_M_E(DETECTOR, "%s: AX_SKEL_Init fail, ret = 0x%x", __func__, ret);
+
+        delete[] m_arrFrameQ;
+        m_arrFrameQ = nullptr;
+        return AX_FALSE;
+    }
+
     do {
         /* [3]: print SKEL version */
         const AX_SKEL_VERSION_INFO_T *pstVersion = NULL;
-        AX_S32 ret = AX_SKEL_GetVersion(&pstVersion);
+        ret = AX_SKEL_GetVersion(&pstVersion);
         if (0 != ret) {
             LOG_M_E(DETECTOR, "%s: AX_SKEL_GetVersion() fail, ret = 0x%x", __func__, ret);
         } else {
@@ -231,18 +245,6 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
             /* [5]: create SEKL handle */
             for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
-                //1.先确定是否适配过
-                AX_SKEL_INIT_PARAM_T stInit;
-                memset(&stInit, 0, sizeof(stInit));
-                stInit.pStrModelDeploymentPath = m_stAttr.strModelPath.c_str();
-                //先确定路径是否ok，再建立map,绑定代码注册好的ppl
-                AX_S32 ret = AX_SKEL_Init(&stInit);
-                if (0 != ret) {
-                    LOG_M_E(DETECTOR, "%s: AX_SKEL_Init fail, ret = 0x%x", __func__, ret);
-                    // d_vec[nChn][algo_id] = false;
-                    break;
-                }
-
                 /* [4]: check whether has FHVP model or not */
                 //没有找到相应的模型，就退出，这一路视频就可能缺少某个算法，或者没有算法、
                 //这个应该要标记一下。
