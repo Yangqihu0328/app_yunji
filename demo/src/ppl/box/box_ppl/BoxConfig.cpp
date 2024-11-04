@@ -135,9 +135,8 @@ DETECT_CONFIG_T CBoxConfig::GetDetectConfig(AX_VOID) {
     conf.nVnpuMode = m_Ini.GetIntValue(SECT, "npu mode", 3);
 
     //使用的是stream的通道数量。
-    int channel_num = AX_MIN(m_Ini.GetIntValue("STREAM", "count", 0), 32);
-
-    for (AX_S32 i = 0; i < channel_num; ++i) {
+    conf.nChannelNum = AX_MIN(m_Ini.GetIntValue("STREAM", "count", 0), 32);
+    for (AX_S32 i = 0; i < conf.nChannelNum; ++i) {
 
         AX_CHAR str[32];
         sprintf(str, "channe_%02d", i);
