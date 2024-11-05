@@ -1101,7 +1101,7 @@ AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
 AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
     LOG_MM_W(BOX, "+++"); 
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetNewStream();
-    // if (channelId < (int)streamConfig.v.size()) 
+    if (channelId < streamConfig.nStreamCount)
     {
         STREAMER_ATTR_T stAttr;
         stAttr.strPath = streamConfig.v[channelId];
@@ -1111,7 +1111,6 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
         stAttr.bLoop = AX_TRUE;
         stAttr.bSyncObs = AX_TRUE;
         m_arrStreamer.resize(streamConfig.nStreamCount);
-
         m_arrStreamer[channelId] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
         if (!m_arrStreamer[channelId]) {
             return AX_FALSE;
@@ -1120,33 +1119,21 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
         if (!m_arrStreamer[channelId]->Init(stAttr)) {
             return AX_FALSE;
         }
-
         m_arrStreamer[channelId]->RegObserver(m_vdec.get());
         thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[channelId].get());
         t.join();
-
-
-        LOG_MM_W(BOX, "---");
-
-        return AX_TRUE;
     }
+    LOG_MM_W(BOX, "---");
 
     return AX_FALSE;
 }
 
-//停止流就是什么都没有，相当于stream停了，vdec停了，det也停了。
 AX_BOOL CBoxBuilder::StopStream(AX_S32 channelId) {
     LOG_MM_W(BOX, "+++");
-    //指定停某个流
     auto &stream = m_arrStreamer[channelId];
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetNewStream();
     STREAMER_STAT_T stStat;
-    if (!stream.get()) {
-        std::cerr << "Stream is null!" << std::endl;
-    }
-
-    if (streamConfig.nStreamCount > 1) {
-        STREAMER_STAT_T stStat;
+    //判断当前是否为在存在里面新增，如果已存在，那么则清除。如果新增，则不要清除。
+    if (channelId < m_arrStreamer.size()) {
         if (stream && stream->QueryStatus(stStat) && stStat.bStarted) {
             stream->UnRegObserver(m_vdec.get());
 
@@ -1157,6 +1144,7 @@ AX_BOOL CBoxBuilder::StopStream(AX_S32 channelId) {
             stream = nullptr;
         }
     }
+
     LOG_MM_W(BOX, "---");
 
     return AX_TRUE;

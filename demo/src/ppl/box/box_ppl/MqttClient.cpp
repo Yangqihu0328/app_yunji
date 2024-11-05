@@ -831,7 +831,6 @@ static void GetBoardInfo() {
 // /* TODO: need web support file copy, then show in web*/
 AX_BOOL MqttClient::SaveJpgFile(QUEUE_T *jpg_info) {
     JPEG_DATA_INFO_T *pJpegInfo = &jpg_info->tJpegInfo;
-    std::lock_guard<std::mutex> guard(m_mtxConnStatus);
 
     /* Data file parent directory format: </XXX/DEV_XX/YYYY-MM-DD> */
     AX_CHAR szDateBuf[16] = {0};
@@ -927,10 +926,8 @@ static void messageArrived(MQTT::MessageData& md) {
         std::cerr << "An error occurred: " << e.what() << std::endl;
     }
 
-    if (recv_msg == "add") {
+    if (recv_msg == "add0") {
         // std::string mstring = "rtsp://admin:yunji123456++@192.168.0.150:554/cam/realmonitor?channel=1&subtype=0";
-        
-        //这个地方是已经添加了属性，再去停止流和开启流
         std::string mstring = "/root/boxDemo/3.mp4";
         OnAddMediaChanel(0, mstring);
 
@@ -939,6 +936,32 @@ static void messageArrived(MQTT::MessageData& md) {
         lock.unlock();
         // std::vector<int> algo_vec = {4, 4, 4};
         // OnAddAlgoTask(0, mstring, algo_vec);
+    }
+
+    if (recv_msg == "add1") {
+        // std::string mstring = "rtsp://admin:yunji123456++@192.168.0.150:554/cam/realmonitor?channel=1&subtype=0";
+        std::string mstring = "/root/boxDemo/4.mp4";
+        OnAddMediaChanel(1, mstring);
+
+        std::unique_lock<std::mutex> lock(mtx);
+        addIdQueue.push(1);
+        lock.unlock();
+        // std::vector<int> algo_vec = {4, 4, 4};
+        // OnAddAlgoTask(0, mstring, algo_vec);
+    }
+
+    if (recv_msg == "remove0") {
+        OnRemoveMediaChanel(0);
+        std::unique_lock<std::mutex> lock(mtx);
+        RemoveIdQueue.push(0);
+        lock.unlock();
+    }
+
+    if (recv_msg == "remove1") {
+        OnRemoveMediaChanel(1);
+        std::unique_lock<std::mutex> lock(mtx);
+        RemoveIdQueue.push(1);
+        lock.unlock();
     }
 
 
@@ -1133,6 +1156,7 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
     LOG_MM_I(MQTT_CLIENT, "+++");
 
     int get_info_count = 0;
+    int id = 0;
 
     while (m_threadWork.IsRunning()) {
         //不限制5s，会影响性能。
@@ -1146,7 +1170,6 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
 
         //不加队列可能会错过
         std::unique_lock<std::mutex> lock(mtx);
-        int id = 0;
         auto p_builder = CBoxBuilder::GetInstance();
         if (!addIdQueue.empty()) {
             id = addIdQueue.front();
@@ -1156,7 +1179,6 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
         } else if (!RemoveIdQueue.empty()) {
             id = RemoveIdQueue.front();
             p_builder->StopStream(id);
-            p_builder->StartStream(id);
             RemoveIdQueue.pop();
         }
         lock.unlock();
