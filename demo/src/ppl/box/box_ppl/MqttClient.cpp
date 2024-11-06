@@ -931,11 +931,12 @@ static void messageArrived(MQTT::MessageData& md) {
         std::string mstring = "/root/boxDemo/3.mp4";
         OnAddMediaChanel(0, mstring);
 
+        std::vector<int> algo_vec = {4, 4, 4};
+        OnAddAlgoTask(0, mstring, algo_vec);
+
         std::unique_lock<std::mutex> lock(mtx);
         addIdQueue.push(0);
         lock.unlock();
-        // std::vector<int> algo_vec = {4, 4, 4};
-        // OnAddAlgoTask(0, mstring, algo_vec);
     }
 
     if (recv_msg == "add1") {
@@ -943,11 +944,12 @@ static void messageArrived(MQTT::MessageData& md) {
         std::string mstring = "/root/boxDemo/4.mp4";
         OnAddMediaChanel(1, mstring);
 
+        std::vector<int> algo_vec = {4, 4, 4};
+        OnAddAlgoTask(0, mstring, algo_vec);
+
         std::unique_lock<std::mutex> lock(mtx);
         addIdQueue.push(1);
         lock.unlock();
-        // std::vector<int> algo_vec = {4, 4, 4};
-        // OnAddAlgoTask(0, mstring, algo_vec);
     }
 
     if (recv_msg == "remove0") {
