@@ -341,7 +341,7 @@ public:
 private:
     AX_VOID WorkThread(AX_VOID* pArg);
 	AX_BOOL SaveJpgFile(QUEUE_T* jpg_info);
-	AX_VOID SendAlarmMsg(MQTT::Message &message);
+	AX_VOID SendAlarmMsg();
 
 protected:
 	std::mutex m_mtxConnStatus;
