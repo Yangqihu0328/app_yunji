@@ -46,7 +46,7 @@ typedef struct DETECT_RESULT_S {
     AX_U32 nH;
     AX_U32 nCount;
     AX_S32 nGrpId;
-    AX_U32 nAlgoId;
+    AX_U32 nAlgoType;
     DETECT_RESULT_ITEM_T item[MAX_DETECT_RESULT_COUNT];
 
     DETECT_RESULT_S(AX_VOID) {
@@ -70,7 +70,7 @@ public:
         auto &last_result = m_mapRlts[nGrp];
         DETECT_RESULT_T new_result, old_result;
         //说明是推理当前帧的多个算法
-        if (last_result.nSeqNum == cur_result.nSeqNum && last_result.nAlgoId != cur_result.nAlgoId) {
+        if (last_result.nSeqNum == cur_result.nSeqNum && last_result.nAlgoType != cur_result.nAlgoType) {
             //先判断差异，找到最多的，从最多的增加。
             if (cur_result.nCount >= last_result.nCount) {
                 new_result = cur_result;

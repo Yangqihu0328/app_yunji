@@ -11,6 +11,7 @@
 #include "Detector.hpp"
 #include <string.h>
 #include <chrono>
+#include <unordered_set>
 #include <exception>
 #include "AXException.hpp"
 #include "AppLogApi.h"
@@ -42,7 +43,7 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
     fhvp.nH = pstResult->nOriginalHeight;
     fhvp.nSeqNum = pPrivData->nSeqNum;
     fhvp.nGrpId = pPrivData->nGrpId;
-    fhvp.nAlgoId = pPrivData->nAlgoId;
+    fhvp.nAlgoType = pPrivData->nAlgoType;
     fhvp.nCount = pstResult->nObjectSize;
 
     AX_U32 index = 0;
@@ -146,18 +147,20 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
 
         auto &flag_vec = d_vec[nCurrGrp];
-        for (bool flag : flag_vec) {
+        //遍历三种算法是否使能
+        for (int index = 0; index < ALGO_MAX_NUM; index++) {
+            bool flag = flag_vec[index];
             //先判断当前路的第n个算法是否使能，再判断是否重复
-            auto & algo_type_arr = m_stAttr.tChnAttr[pPrivData->nSkelChn].nppL;
+            auto algo_type_arr = m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL;
             if (flag) {
                 bool has_duplicate = false;
                 std::unordered_set<int> seen;
-                for (num : algo_type_arr) {
-                    if (seen.find(num) != seen.end()) {
+                for (int i=0; i<ALGO_MAX_NUM; i++) {
+                    if (seen.find(algo_type_arr[i]) != seen.end()) {
                         has_duplicate = true;
                         break;
                     }
-                    seen.insert(num);
+                    seen.insert(algo_type_arr[i]);
                 }
 
                 //说明有重复的,那么不重复送帧
@@ -165,8 +168,8 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                     continue;
                 }
 
-                LOG_M_N(DETECTOR, "runskel SkelChn %d SkelType %d", pPrivData->nSkelChn, m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL[algo_id]);
-                            pPrivData->nAlgoId = m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL[algo_id];
+                LOG_M_N(DETECTOR, "runskel SkelChn %d SkelType %d", pPrivData->nSkelChn, m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL[index]);
+                pPrivData->nAlgoType = m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL[index];
 
                 #if defined(__RECORD_VB_TIMESTAMP__)
                 CTimestampHelper::RecordTimestamp(axFrame.stFrame.stVFrame.stVFrame, axFrame.nGrp, axFrame.nChn, TIMESTAMP_SKEL_PRE_SEND);
@@ -177,7 +180,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 usleep(3000);
                 m_skelData.giveback(pPrivData);
                 #else
-                AX_S32 ret = AX_SKEL_SendFrame(m_hSkel[pPrivData->nSkelChn][algo_id], &skelFrame, -1);
+                AX_S32 ret = AX_SKEL_SendFrame(m_hSkel[pPrivData->nSkelChn][index], &skelFrame, -1);
                 if (0 != ret) {
                     //送失败，把数据归还，退出当前通道送帧的循环。
                     LOG_M_E(DETECTOR, "%s: AX_SKEL_SendFrame(vdGrp %d, seq %lld, frame %lld) fail, ret = 0x%x", __func__, axFrame.nGrp,

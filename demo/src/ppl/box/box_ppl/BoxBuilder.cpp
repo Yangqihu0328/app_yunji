@@ -1181,6 +1181,7 @@ AX_BOOL CBoxBuilder::StopStream(AX_S32 id) {
     }
 
     //判断当前是否为在存在里面新增，如果已存在，那么则清除。如果新增，则不要清除。
+    CBoxConfig *pConfig = CBoxConfig::GetInstance();
     DETECT_CONFIG_T detectConfig = pConfig->GetDetectConfig();
     if (id < detectConfig.nChannelNum) {
         if (m_detect) {
