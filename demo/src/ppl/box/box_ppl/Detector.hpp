@@ -75,6 +75,9 @@ public:
     AX_BOOL Start(AX_VOID);
     AX_BOOL Stop(AX_VOID);
 
+    AX_BOOL StartId(int id);
+    AX_BOOL StopId(int id);
+
     AX_BOOL Clear(AX_VOID);
 
     AX_BOOL SendFrame(const CAXFrame& axFrame);
@@ -89,7 +92,7 @@ protected:
     AX_VOID ClearQueue(AX_S32 nGrp);
 
 public:
-    std::vector<std::array<int, 3>> d_vec;
+    std::vector<std::array<bool, 3>> d_vec;
 protected:
     CAXLockQ<CAXFrame>* m_arrFrameQ{nullptr};
     DETECTOR_ATTR_T m_stAttr;
