@@ -106,7 +106,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         return AX_FALSE;
     }
 
-
+#if 0
     if (dispVoConfig.bOnlineMode || (dispVoConfig_1.nDevId > -1 && dispVoConfig_1.bOnlineMode)) {
         /* fixme: VO online worst cast: keep VB by 2 dispc interrupts */
         if (streamConfig.nChnDepth[DISPVO_CHN] < 6) {
@@ -114,7 +114,6 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         }
     }
 
-#if 0
     /* verify */
     for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
         /* VDEC has no scaler */
@@ -1122,7 +1121,18 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 id) {
         stAttr.nCookie = id;
         stAttr.bLoop = AX_TRUE;
         stAttr.bSyncObs = AX_TRUE;
+
         m_arrStreamer.resize(nMediaCnt);
+        LOG_MM_W(BOX, "play %s, +++", mediasMap[id].szMediaUrl); 
+
+        if (m_arrStreamer[id]) {
+            LOG_MM_W(BOX, "free, +++"); 
+            m_arrStreamer[id]->UnRegObserver(m_vdec.get());
+
+            m_arrStreamer[id]->DeInit();
+            m_arrStreamer[id] = nullptr;
+        }
+
         m_arrStreamer[id] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
         if (!m_arrStreamer[id]) {
             return AX_FALSE;
