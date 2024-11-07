@@ -46,25 +46,6 @@ AX_BOOL CBoxConfig::Init(AX_VOID) {
     return AX_TRUE;
 }
 
-STREAM_CONFIG_T CBoxConfig::GetNewStream(AX_VOID) {
-    STREAM_CONFIG_T conf;
-    const AX_CHAR *SECT = "STREAM";
-
-    conf.nMaxGrpW = m_Ini.GetIntValue(SECT, "max width", 1920);
-    conf.nMaxGrpH = m_Ini.GetIntValue(SECT, "max height", 1080);
-    conf.nStreamCount = m_Ini.GetIntValue(SECT, "stream count", 0);
-    int nCount = conf.nStreamCount;
-    if (nCount > 0) {
-        conf.v.resize(nCount);
-        for (int i = 0; i < nCount; ++i) {
-            AX_CHAR szKey[32];
-            sprintf(szKey, "stream%02d", i);
-            conf.v[i] = m_Ini.GetStringValue(SECT, szKey, "");
-        }
-    }
-    return conf; /* RVO: optimized by compiler */
-}
-
 STREAM_CONFIG_T CBoxConfig::GetStreamConfig(AX_VOID) {
     STREAM_CONFIG_T conf;
     const AX_CHAR *SECT = "STREAM";
@@ -78,27 +59,17 @@ STREAM_CONFIG_T CBoxConfig::GetStreamConfig(AX_VOID) {
     }
     conf.nDefaultFps = m_Ini.GetIntValue(SECT, "default fps", 0);
     conf.nInputMode = m_Ini.GetIntValue(SECT, "input mode", 0);
-    conf.nStreamCount = m_Ini.GetIntValue(SECT, "stream count", 0);
     conf.nUserPool = m_Ini.GetIntValue(SECT, "user pool", 1);
     if (conf.nUserPool > 2) {
         conf.nUserPool = 1;
     }
 
     conf.nMaxStreamBufSize = m_Ini.GetIntValue(SECT, "max stream buf size", 0x200000);
-    AX_U32 nCount = m_Ini.GetIntValue(SECT, "count", 1);
-    if (nCount > 0) {
-        conf.v.resize(nCount);
-        for (AX_U32 i = 0; i < nCount; ++i) {
-            AX_CHAR szKey[32];
-            sprintf(szKey, "stream%02d", i);
-            conf.v[i] = m_Ini.GetStringValue(SECT, szKey, "");
-        }
-    }
+
+    // media path
+    conf.strMediaPath = m_Ini.GetStringValue(SECT, "path", "");
 
     conf.nDecodeGrps = m_Ini.GetIntValue(SECT, "vdec count", 0);
-    // if (0 == conf.nDecodeGrps || conf.nDecodeGrps > nCount) {
-    //     conf.nDecodeGrps = nCount;
-    // }
 
     /* SATA */
     conf.strSataPath = m_Ini.GetStringValue(SECT, "sata path", "");

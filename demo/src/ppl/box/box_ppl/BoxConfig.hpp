@@ -27,11 +27,10 @@ typedef struct {
     AX_U32 nInputMode;
     AX_U32 nMaxStreamBufSize;
     AX_U32 nDecodeGrps;
-    AX_U32 nStreamCount;
     AX_U64 nSataFileSize;
     AX_U64 nMaxSpaceSize;
     std::string strSataPath;
-    std::vector<std::string> v;
+    std::string strMediaPath;
     AX_U32 nLinkMode;
 } STREAM_CONFIG_T;
 
@@ -117,7 +116,6 @@ public:
     MQTT_CONFIG_T GetMqttConfig(AX_VOID);
     STREAM_CONFIG_T GetStreamConfig(AX_VOID);
     DETECT_CONFIG_T GetDetectConfig(AX_VOID);
-    STREAM_CONFIG_T GetNewStream(AX_VOID);
     DISPVO_CONFIG_T GetDispVoConfig(const std::string &SECT);
     VENC_CONFIG_T GetVencConfig(AX_VOID);
     COMPRESS_CONFIG_T GetCompressConfig(AX_VOID);

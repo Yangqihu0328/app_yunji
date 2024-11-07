@@ -19,6 +19,7 @@
 #include "GlobalDef.h"
 #include "StreamerFactory.hpp"
 #include "VoObserver.hpp"
+#include "BoxMediaParser.hpp"
 #include "make_unique.hpp"
 
 #define BOX "BOX"
@@ -105,7 +106,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         return AX_FALSE;
     }
 
-
+#if 0
     if (dispVoConfig.bOnlineMode || (dispVoConfig_1.nDevId > -1 && dispVoConfig_1.bOnlineMode)) {
         /* fixme: VO online worst cast: keep VB by 2 dispc interrupts */
         if (streamConfig.nChnDepth[DISPVO_CHN] < 6) {
@@ -113,7 +114,6 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         }
     }
 
-#if 0
     /* verify */
     for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
         /* VDEC has no scaler */
@@ -258,12 +258,14 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
 }
 
 AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
-    
-    const AX_U32 nCount = streamConfig.v.size();
-    m_arrStreamer.resize(nCount);
-    for (AX_U32 i = 0; i < nCount; ++i) {
+    AX_U32 nMediaCnt = 0;
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    m_arrStreamer.resize(nMediaCnt);
+    for (AX_U32 i = 0; i < nMediaCnt; ++i) {
+        if (mediasMap[i].nMediaDisable == 1) continue;
+
         STREAMER_ATTR_T stAttr;
-        stAttr.strPath = streamConfig.v[i];
+        stAttr.strPath = mediasMap[i].szMediaUrl;
         stAttr.nMaxWidth = streamConfig.nMaxGrpW;
         stAttr.nMaxHeight = streamConfig.nMaxGrpH;
         stAttr.nCookie = (AX_S32)i;
@@ -282,8 +284,10 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
     }
 
     if (!streamConfig.strSataPath.empty()) {
-        m_sataWritter.resize(nCount);
-        for (AX_U32 i = 0; i < nCount; ++i) {
+        m_sataWritter.resize(nMediaCnt);
+        for (AX_U32 i = 0; i < nMediaCnt; ++i) {
+            if (mediasMap[i].nMediaDisable == 1) continue;
+
             STREAM_RECORD_ATTR_T stAttr = {i, streamConfig.nSataFileSize, streamConfig.nMaxSpaceSize, streamConfig.strSataPath};
             m_sataWritter[i] = make_unique<CStreamRecorder>();
             if (!m_sataWritter[i]) {
@@ -714,9 +718,12 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
         return AX_FALSE;
     }
 
-    // streamConfig.nStreamCount
-    //实际上只绑定实际的流数量。
-    for (AX_U32 i = 0; i < streamConfig.nStreamCount; ++i) {
+    // 实际上只绑定实际的流数量。
+    AX_U32 nMediaCnt = 0;
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    for (AX_U32 i = 0; i < nMediaCnt; ++i) {
+        if (mediasMap[i].nMediaDisable == 1) continue;
+        
         m_arrStreamer[i]->RegObserver(m_vdec.get());
     }
 
@@ -1068,7 +1075,11 @@ AX_BOOL CBoxBuilder::StopAllStreams(AX_VOID) {
 }
 
 AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
-    const AX_U32 TOTAL_STREAM_COUNT = streamConfig.v.size();
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+
+    const AX_U32 TOTAL_STREAM_COUNT = nMediaCnt;
 
     AX_U64 nUsedSpace = {0};
     for (AX_U32 i = 0; i < TOTAL_STREAM_COUNT; ++i) {
@@ -1095,29 +1106,44 @@ AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
 //初始化stream和绑定vdec
 //如果说已经初始化了vdec，绑定绑定了stream。那么开启stream即可。
 //需要修改配置文件
-AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
+AX_BOOL CBoxBuilder::StartStream(AX_S32 id) {
     LOG_MM_W(BOX, "+++"); 
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetNewStream();
-    if (channelId < streamConfig.nStreamCount)
-    {
+
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    if (id < (AX_S32)mediasMap.size()) {
         STREAMER_ATTR_T stAttr;
-        stAttr.strPath = streamConfig.v[channelId];
+        stAttr.strPath = mediasMap[id].szMediaUrl;
         stAttr.nMaxWidth = streamConfig.nMaxGrpW;
         stAttr.nMaxHeight = streamConfig.nMaxGrpH;
-        stAttr.nCookie = (AX_S32)channelId;
+        stAttr.nCookie = id;
         stAttr.bLoop = AX_TRUE;
         stAttr.bSyncObs = AX_TRUE;
-        m_arrStreamer.resize(streamConfig.nStreamCount);
-        m_arrStreamer[channelId] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
-        if (!m_arrStreamer[channelId]) {
+
+        m_arrStreamer.resize(nMediaCnt);
+        LOG_MM_W(BOX, "play %s, +++", mediasMap[id].szMediaUrl); 
+
+        if (m_arrStreamer[id]) {
+            LOG_MM_W(BOX, "free, +++"); 
+            m_arrStreamer[id]->UnRegObserver(m_vdec.get());
+
+            m_arrStreamer[id]->DeInit();
+            m_arrStreamer[id] = nullptr;
+        }
+
+        m_arrStreamer[id] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
+        if (!m_arrStreamer[id]) {
             return AX_FALSE;
         }
 
-        if (!m_arrStreamer[channelId]->Init(stAttr)) {
+        if (!m_arrStreamer[id]->Init(stAttr)) {
             return AX_FALSE;
         }
-        m_arrStreamer[channelId]->RegObserver(m_vdec.get());
-        thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[channelId].get());
+
+        m_arrStreamer[id]->RegObserver(m_vdec.get());
+        thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[id].get());
         t.join();
     }
     LOG_MM_W(BOX, "---");
@@ -1125,12 +1151,12 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 channelId) {
     return AX_FALSE;
 }
 
-AX_BOOL CBoxBuilder::StopStream(AX_S32 channelId) {
+AX_BOOL CBoxBuilder::StopStream(AX_S32 id) {
     LOG_MM_W(BOX, "+++");
-    auto &stream = m_arrStreamer[channelId];
+    auto &stream = m_arrStreamer[id];
     STREAMER_STAT_T stStat;
     //判断当前是否为在存在里面新增，如果已存在，那么则清除。如果新增，则不要清除。
-    if (channelId < m_arrStreamer.size()) {
+    if (id < (AX_S32)m_arrStreamer.size()) {
         if (stream && stream->QueryStatus(stStat) && stStat.bStarted) {
             stream->UnRegObserver(m_vdec.get());
 
