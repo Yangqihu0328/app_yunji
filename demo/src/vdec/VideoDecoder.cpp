@@ -403,7 +403,7 @@ AX_BOOL CVideoDecoder::Start(AX_VOID) {
         stRecvParam.s32RecvPicNum = -1;
         ret = AX_VDEC_StartRecvStream(vdGrp, &stRecvParam);
         if (0 != ret) {
-            LOG_M_E(VDEC, "AX_VDEC_StartRecvStream(vdGrp %d) fail, ret = 0x%x", vdGrp);
+            LOG_M_E(VDEC, "AX_VDEC_StartRecvStream(vdGrp %d) fail, ret = 0x%x", vdGrp, ret);
             Stop();
             return AX_FALSE;
         }

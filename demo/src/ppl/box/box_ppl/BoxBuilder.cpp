@@ -106,7 +106,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         return AX_FALSE;
     }
 
-#if 0
+
     if (dispVoConfig.bOnlineMode || (dispVoConfig_1.nDevId > -1 && dispVoConfig_1.bOnlineMode)) {
         /* fixme: VO online worst cast: keep VB by 2 dispc interrupts */
         if (streamConfig.nChnDepth[DISPVO_CHN] < 6) {
@@ -114,6 +114,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         }
     }
 
+#if 0
     /* verify */
     for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
         /* VDEC has no scaler */
@@ -701,7 +702,7 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
 #ifdef __VDEC_PP_FRAME_CTRL__
                         if (detCfg.nSkipRate > 1) {
                             tChnAttr.stOutputFrmRate.bFrmRateCtrl = AX_TRUE;
-                            tChnAttr.stOutputFrmRate.f32DstFrmRate = stInfo.nFps * 1.0 / detCfg.nSkipRate;
+                            tChnAttr.stOutputFrmRate.f32DstFrmRate = tGrpAttr.nFps * 1.0 / detCfg.nSkipRate;
                         }
 #endif
                     }
