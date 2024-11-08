@@ -44,62 +44,6 @@ extern "C" {
 }
 
 namespace boxconf {
-struct MemoryInfo{
-    long totalMem;
-    long freeMem;
-    long usedMem;
-    long availableMem;
-    long buffers;
-    long cached;
-};
-
-struct FlashInfo{
-    long total;
-    long used;
-    long free;
-};
-
-struct TpuInfo{
-    long total;
-    long used;
-    long free;
-};
-
-struct AlgoInfo{
-    std::string name;
-    int index;
-};
-
-//我希望前端限制传入的channel_id为顺序的，从0-15，而不是乱序的。
-struct MediaChanel{
-    int id; //通道id是前端传下来的
-    std::string url; //流地址
-    std::string channel_status; //输出通道信息
-};
-
-
-struct AlgoTask{
-    int id;
-    std::string url;
-    std::string channel_status;
-    int algo_index0;
-    int algo_index1;
-    int algo_index2;
-};
-
-enum ContrlCmd {
-  AddAlgo = 0,
-  RemoveAlgo = 1,
-  StartStream = 2,
-  StopStream = 3,
-};
-
-struct StreamCmd {
-    ContrlCmd cmd;
-    int id;
-};
-
-
 class IPStack
 {
 public:
@@ -270,6 +214,61 @@ public:
 private:
 
 	struct timeval end_time;
+};
+
+struct MemoryInfo{
+    long totalMem;
+    long freeMem;
+    long usedMem;
+    long availableMem;
+    long buffers;
+    long cached;
+};
+
+struct FlashInfo{
+    long total;
+    long used;
+    long free;
+};
+
+struct TpuInfo{
+    long total;
+    long used;
+    long free;
+};
+
+struct AlgoInfo{
+    std::string name;
+    int index;
+};
+
+//我希望前端限制传入的channel_id为顺序的，从0-15，而不是乱序的。
+struct MediaChanel{
+    int id; //通道id是前端传下来的
+    std::string url; //流地址
+    std::string channel_status; //输出通道信息
+};
+
+
+struct AlgoTask{
+    int id;
+    std::string url;
+    std::string channel_status;
+    int algo_index0;
+    int algo_index1;
+    int algo_index2;
+};
+
+enum ContrlCmd {
+  AddAlgo = 0,
+  RemoveAlgo = 1,
+  StartStream = 2,
+  StopStream = 3,
+};
+
+struct StreamCmd {
+    ContrlCmd cmd;
+    int id;
 };
 
 typedef enum {
