@@ -262,7 +262,7 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     m_arrStreamer.resize(nMediaCnt);
     for (AX_U32 i = 0; i < nMediaCnt; ++i) {
-        if (mediasMap[i].nMediaDisable == 1) continue;
+        // if (mediasMap[i].nMediaDisable == 1) continue;
 
         STREAMER_ATTR_T stAttr;
         stAttr.strPath = mediasMap[i].szMediaUrl;
