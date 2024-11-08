@@ -108,7 +108,7 @@ private:
  * @param Network a network class which supports send, receive
  * @param Timer a timer class with the methods:
  */
-template<class Network, class Timer, int MAX_MQTT_PACKET_SIZE = 1024, int MAX_MESSAGE_HANDLERS = 5>
+template<class Network, class Timer, int MAX_MQTT_PACKET_SIZE = 3072, int MAX_MESSAGE_HANDLERS = 5>
 class Client
 {
 
