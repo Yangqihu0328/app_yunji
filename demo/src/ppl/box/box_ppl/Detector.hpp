@@ -16,7 +16,7 @@
 #include "AXThread.hpp"
 #include "ax_skel_api.h"
 
-#define DETECTOR_MAX_CHN_NUM 32
+#define DETECTOR_MAX_CHN_NUM 16
 #define ALGO_MAX_NUM 3
 
 typedef struct DETECTOR_CHN_ATTR_S {

@@ -47,6 +47,8 @@ public:
     AX_BOOL StopAllStreams(AX_VOID);
     AX_BOOL StartStream(AX_S32 channelId);
     AX_BOOL StopStream(AX_S32 channelId);
+    AX_BOOL AddStream(AX_S32 channelId);
+    AX_BOOL RemoveStream(AX_S32 channelId);
     AX_BOOL WaitDone(AX_VOID);
 
     AX_BOOL QueryStreamsAllEof(AX_VOID);

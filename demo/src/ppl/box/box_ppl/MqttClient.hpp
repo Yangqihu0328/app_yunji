@@ -86,6 +86,19 @@ struct AlgoTask{
     int algo_index2;
 };
 
+enum ContrlCmd {
+  AddAlgo = 0,
+  RemoveAlgo = 1,
+  StartStream = 2,
+  StopStream = 3,
+};
+
+struct StreamCmd {
+    ContrlCmd cmd;
+    int id;
+};
+
+
 class IPStack
 {
 public:
@@ -349,6 +362,5 @@ protected:
 
     CAXThread m_threadWork;
 	std::string topic;
-	
 };
 };

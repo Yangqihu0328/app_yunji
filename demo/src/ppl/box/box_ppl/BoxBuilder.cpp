@@ -725,27 +725,18 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
         if (mediasMap[i].nMediaDisable == 1) continue;
         
         m_arrStreamer[i]->RegObserver(m_vdec.get());
-
-        if (m_detectObserver) {
-            AX_VDEC_GRP vdGrp = (AX_VDEC_GRP)i;
-            m_vdec->RegObserver(vdGrp, m_detectObserver.get());
-        }
     }
 
     for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
-        //问题在于这里？
-        /* register vdec to streamer */
-        // m_arrStreamer[i]->RegObserver(m_vdec.get());
-
         AX_VDEC_GRP vdGrp = (AX_VDEC_GRP)i;
 
         if (!streamConfig.nLinkMode) {
             m_vdec->RegObserver(vdGrp, m_arrDispatchObserver[i].get());
         }
 
-        // if (m_detectObserver) {
-        //     m_vdec->RegObserver(vdGrp, m_detectObserver.get());
-        // }
+        if (m_detectObserver) {
+            m_vdec->RegObserver(vdGrp, m_detectObserver.get());
+        }
 
         VDEC_GRP_ATTR_T tGrpAttr;
         m_vdec->GetGrpAttr(vdGrp, tGrpAttr);
@@ -1109,16 +1100,14 @@ AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
 }
 
 //开始是应该是开算法再开始流
-AX_BOOL CBoxBuilder::StartStream(AX_S32 id) {
+AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
     LOG_MM_W(BOX, "+++"); 
 
-    //可能直接开启会存在问题，应该加判断。
     if (m_detect) {
         if (!m_detect->StartId(id)) {
             return AX_FALSE;
         }
     }
-
 
     // 获取当前通道信息
     AX_U32 nMediaCnt = 0;
@@ -1163,7 +1152,7 @@ AX_BOOL CBoxBuilder::StartStream(AX_S32 id) {
 }
 
 //停应该是先停流，再停算法。因为流往算法，如果先听算法，那么导致数据流会丢失以及异常问题
-AX_BOOL CBoxBuilder::StopStream(AX_S32 id) {
+AX_BOOL CBoxBuilder::RemoveStream(AX_S32 id) {
     LOG_MM_W(BOX, "+++");
 
     if (id < (AX_S32)m_arrStreamer.size()) {
@@ -1196,6 +1185,34 @@ AX_BOOL CBoxBuilder::StopStream(AX_S32 id) {
     return AX_TRUE;
 }
 
+AX_BOOL CBoxBuilder::StartStream(AX_S32 id) {
+    LOG_MM_W(BOX, "+++");
+
+    auto &stream = m_arrStreamer[id];
+    stream->RegObserver(m_vdec.get());
+    thread t([](IStreamHandler *p) { p->Start(); }, stream.get());
+    t.join();
+
+    LOG_MM_W(BOX, "---");
+
+    return AX_TRUE;
+}
+
+AX_BOOL CBoxBuilder::StopStream(AX_S32 id) {
+    LOG_MM_W(BOX, "+++");
+
+    auto &stream = m_arrStreamer[id];
+    STREAMER_STAT_T stStat;
+    if (stream && stream->QueryStatus(stStat) && stStat.bStarted) {
+        stream->UnRegObserver(m_vdec.get());
+        thread t([](IStreamHandler *p) { p->Stop(); }, stream.get());
+        t.join();
+    }
+
+    LOG_MM_W(BOX, "---");
+
+    return AX_TRUE;
+}
 
 #if defined(__RECORD_VB_TIMESTAMP__)
 AX_VOID CBoxBuilder::AllocTimestampBufs(AX_VOID) {

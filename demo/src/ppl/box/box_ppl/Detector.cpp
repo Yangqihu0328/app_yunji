@@ -149,25 +149,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
         auto &flag_vec = d_vec[nCurrGrp];
         //遍历三种算法是否使能
         for (int index = 0; index < ALGO_MAX_NUM; index++) {
-            bool flag = flag_vec[index];
-            //先判断当前路的第n个算法是否使能，再判断是否重复
-            auto algo_type_arr = m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL;
-            if (flag) {
-                bool has_duplicate = false;
-                std::unordered_set<int> seen;
-                for (int i=0; i<ALGO_MAX_NUM; i++) {
-                    if (seen.find(algo_type_arr[i]) != seen.end()) {
-                        has_duplicate = true;
-                        break;
-                    }
-                    seen.insert(algo_type_arr[i]);
-                }
-
-                //说明有重复的,那么不重复送帧
-                if (has_duplicate) {
-                    continue;
-                }
-
+            if (flag_vec[index]) {
                 LOG_M_N(DETECTOR, "runskel SkelChn %d SkelType %d", pPrivData->nSkelChn, m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL[index]);
                 pPrivData->nAlgoType = m_stAttr.tChnAttr[pPrivData->nSkelChn].nPPL[index];
 
@@ -262,7 +244,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         }
 
         //制作一个标记位，表明现在当前路数的算法配置成功与否。
-        d_vec.resize(m_stAttr.nChannelNum);
+        d_vec.resize(stAttr.nGrpCount);
         int all_init_fail = false;
         //很重点这里，实际上nChannelNum才是真实的路数
         for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
@@ -447,12 +429,23 @@ AX_BOOL CDetector::Start(AX_VOID) {
 AX_BOOL CDetector::StartId(int id) {
     LOG_M_W(DETECTOR, "%s: +++", __func__);
     do {
-        d_vec.resize(m_stAttr.nChannelNum);
+        auto &algo_type_arr = m_stAttr.tChnAttr[id].nPPL;
+        bool has_duplicate = false;
+        std::unordered_set<int> seen;
         for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
-            //检查是否已经注册过模型
+            if (seen.find(algo_type_arr[algo_id]) != seen.end()) {
+                has_duplicate = true;
+                break;
+            }
+            seen.insert(algo_type_arr[algo_id]);
+
+            if (has_duplicate) {
+                continue;
+            }
+
             const AX_SKEL_CAPABILITY_T *pstCapability = NULL;
             int ret = AX_SKEL_GetCapability(&pstCapability);
-            auto new_ppl = (AX_SKEL_PPL_E)m_stAttr.tChnAttr[id].nPPL[algo_id];
+            auto new_ppl = (AX_SKEL_PPL_E)algo_type_arr[algo_id];
             if (0 != ret) {
                 LOG_M_E(DETECTOR, "%s: AX_SKEL_GetCapability() fail, ret = 0x%x", __func__, ret);
                 break;
@@ -468,7 +461,6 @@ AX_BOOL CDetector::StartId(int id) {
                         }
                     }
                 }
-
                 AX_SKEL_Release((AX_VOID *)pstCapability);
                 if (!bPPL) {
                     LOG_M_E(DETECTOR, "%s: SKEL not found FHVP model", __func__);
@@ -476,7 +468,6 @@ AX_BOOL CDetector::StartId(int id) {
                     break;
                 }
             }
-
             //配置算法参数
             AX_SKEL_HANDLE_PARAM_T stHandleParam;
             memset(&stHandleParam, 0, sizeof(stHandleParam));
@@ -491,7 +482,6 @@ AX_BOOL CDetector::StartId(int id) {
             } else {
                 stHandleParam.nNpuType = (AX_U32)(1 << (m_stAttr.tChnAttr[id].nVNPU - 1));
             }
-
             AX_SKEL_CONFIG_T stConfig = {0};
             AX_SKEL_CONFIG_ITEM_T stItems[16] = {0};
             AX_U8 itemIndex = 0;
@@ -507,7 +497,6 @@ AX_BOOL CDetector::StartId(int id) {
                 stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_COMMON_THRESHOLD_CONFIG_T);
                 itemIndex++;
             }
-
             // push_disable
             stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"push_disable";
             AX_SKEL_COMMON_THRESHOLD_CONFIG_T stPushDisableThreshold = {0};
@@ -523,7 +512,6 @@ AX_BOOL CDetector::StartId(int id) {
             LOG_M_C(DETECTOR, "ppl %d, depth %d, cache depth %d, %dx%d", stHandleParam.ePPL, stHandleParam.nFrameDepth,
                     stHandleParam.nFrameCacheDepth, stHandleParam.nWidth, stHandleParam.nHeight);
             ret = AX_SKEL_Create(&stHandleParam, &m_hSkel[id][algo_id]);
-
             if (0 != ret || NULL == m_hSkel[id]) {
                 LOG_M_E(DETECTOR, "%s: AX_SKEL_Create() fail, ret = 0x%x", __func__, ret);
                 d_vec[id][algo_id] = false;
@@ -538,12 +526,8 @@ AX_BOOL CDetector::StartId(int id) {
                 LOG_M_E(DETECTOR, "%s: AX_SKEL_RegisterResultCallback() fail, ret = 0x%x", __func__, ret);
                 break;
             }
-
             d_vec[id][algo_id] = true;
         }
-        LOG_M_D(DETECTOR, "%s: ---", __func__);
-        return AX_TRUE;
-
     } while (0);
 
     LOG_M_D(DETECTOR, "%s: ---", __func__);
@@ -554,13 +538,22 @@ AX_BOOL CDetector::StartId(int id) {
 AX_BOOL CDetector::StopId(int id) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
 
+    //先把消息队列清空，再删除skel
     if (m_arrFrameQ) {
         m_arrFrameQ[id].Wakeup();
+        ClearQueue(id);
     }
 
-    //从m_arrFrameQ队列里面清空frame，但是没有清除这个
-    if (m_arrFrameQ) {
-        ClearQueue(id);
+    if (m_hSkel[id]) {
+        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+            if (d_vec[id][algo_id] == true) {
+                int ret = AX_SKEL_Destroy(m_hSkel[id][algo_id]);
+                if (0 != ret) {
+                    LOG_M_E(DETECTOR, "%s: AX_SKEL_Destroy() fail, ret = 0x%x", __func__, ret);
+                    return AX_FALSE;
+                }
+            }
+        }
     }
 
     LOG_M_D(DETECTOR, "%s: ---", __func__);

@@ -31,9 +31,7 @@ static json board_info;
 static int arrivedcount = 0;
 static std::vector<MediaChanel> media_channel;
 static std::vector<AlgoTask> algo_task;
-// static std::map<int, int> id_channel_map;
-static std::queue<int> addIdQueue;
-static std::queue<int> RemoveIdQueue;
+static std::queue<StreamCmd> StreamQueue;
 static std::mutex mtx_info;
 static std::mutex mtx;
 
@@ -457,9 +455,9 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
 
-        std::unique_lock<std::mutex> lock(mtx);
-        addIdQueue.push(id);
-        lock.unlock();
+        // std::unique_lock<std::mutex> lock(mtx);
+        // addIdQueue.push(id);
+        // lock.unlock();
 
         root["result"] = 0;
         root["msg"] = "success";
@@ -525,9 +523,9 @@ static void OnDelMediaChannelInfo(AX_U32 id) {
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
 
-        std::unique_lock<std::mutex> lock(mtx);
-        RemoveIdQueue.push(id);
-        lock.unlock();
+        // std::unique_lock<std::mutex> lock(mtx);
+        // RemoveIdQueue.push(id);
+        // lock.unlock();
 
         root["result"] = 0;
         root["msg"] = "success";
@@ -595,28 +593,30 @@ static void OnSetAlgoTaskInfo(int id) {
     // json child, root;
     // child["type"] = "AddAlgoTask";
     // root["result"] = 0;
+    std::string url = "url-222222222222";
+    std::vector<int> algo_vec = {4, 4, 4};
 
-    // if (algo_task.size() > 16) {
-    //      root["msg"] = "failure";
-    // } else {
-    //     //任务这里是不管id的，因为任务是与url相绑定的
-    //     AlgoTask temp_algo_task;
-    //     temp_algo_task.id = id;
-    //     temp_algo_task.url = url;
-    //     temp_algo_task.channel_status = "ready";
-    //     temp_algo_task.algo_index0 = algo_vec[0];
-    //     temp_algo_task.algo_index1 = algo_vec[1];
-    //     temp_algo_task.algo_index2 = algo_vec[2];
+    if (algo_task.size() > 16) {
+        //  root["msg"] = "failure";
+    } else {
+        //任务这里是不管id的，因为任务是与url相绑定的
+        AlgoTask temp_algo_task;
+        temp_algo_task.id = id;
+        temp_algo_task.url = url;
+        temp_algo_task.channel_status = "ready";
+        temp_algo_task.algo_index0 = algo_vec[0];
+        temp_algo_task.algo_index1 = algo_vec[1];
+        temp_algo_task.algo_index2 = algo_vec[2];
 
-    //     algo_task.push_back(temp_algo_task);
-    //     //应该算法任务的id也是跟媒体通道用同一个id才对，这样子才是合理。
-    //     CBoxConfig::GetInstance()->AddAlgoTask(id, algo_vec);
-    //     //没有配置算法任务的时候，不应该开始媒体通道。
-    //     // std::unique_lock<std::mutex> lock(mtx);
-    //     // addIdQueue.push(id);
-    //     // lock.unlock();
-    //     root["msg"] = "success";
-    // }
+        algo_task.push_back(temp_algo_task);
+        //应该算法任务的id也是跟媒体通道用同一个id才对，这样子才是合理。
+        CBoxConfig::GetInstance()->AddAlgoTask(id, algo_vec);
+        //没有配置算法任务的时候，不应该开始媒体通道。
+        // std::unique_lock<std::mutex> lock(mtx);
+        // addIdQueue.push(id);
+        // lock.unlock();
+        // root["msg"] = "success";
+    }
 
     // root["data"] = child;
     // std::string payload = root.dump();
@@ -642,7 +642,7 @@ static void OnDelAlgoTaskInfo(int id) {
     //     std::unique_lock<std::mutex> lock(mtx);
     //     RemoveIdQueue.push(id);
     //     lock.unlock();
-    //     CBoxConfig::GetInstance()->RemoveAlgoTask(id);
+    CBoxConfig::GetInstance()->RemoveAlgoTask(id);
 
     //     root["msg"] = "success";
     // } else {
@@ -656,9 +656,13 @@ static void OnDelAlgoTaskInfo(int id) {
     LOG_M_C(MQTT_CLIENT, "OnDelAlgoTaskInfo ----.");
 }
 
+//
 static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskControl ++++.");
+    std::unique_lock<std::mutex> lock(mtx);
 
+    StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
+    lock.unlock();
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskControl ----.");
 }
 
@@ -1074,25 +1078,28 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
     LOG_MM_I(MQTT_CLIENT, "+++");
 
     int id = 0;
-
+    CBoxBuilder *p_builder = CBoxBuilder::GetInstance();
     while (m_threadWork.IsRunning()) {
         // process alarm message
         SendAlarmMsg();
 
-        //不加队列可能会错过
-        std::unique_lock<std::mutex> lock(mtx);
-        auto p_builder = CBoxBuilder::GetInstance();
-        if (!addIdQueue.empty()) {
-            id = addIdQueue.front();
-            p_builder->StopStream(id);
-            p_builder->StartStream(id);
-            addIdQueue.pop();
-        } else if (!RemoveIdQueue.empty()) {
-            id = RemoveIdQueue.front();
-            p_builder->StopStream(id);
-            RemoveIdQueue.pop();
+        if (!StreamQueue.empty()) {
+            std::unique_lock<std::mutex> lock(mtx);
+            StreamCmd stream_cmd = StreamQueue.front();
+            StreamQueue.pop();
+            lock.unlock();
+
+            if (stream_cmd.cmd == ContrlCmd::AddAlgo) {
+                p_builder->RemoveStream(id);
+                p_builder->AddStream(id);
+            } else if (stream_cmd.cmd == ContrlCmd::RemoveAlgo) {
+                p_builder->RemoveStream(id);
+            } else if (stream_cmd.cmd == ContrlCmd::StartStream) {
+                p_builder->StartStream(id);
+            } else if (stream_cmd.cmd == ContrlCmd::StopStream) {
+                p_builder->StopStream(id);
+            }
         }
-        lock.unlock();
         
         client_->yield(1 * 1000UL); // sleep 1 seconds
     }

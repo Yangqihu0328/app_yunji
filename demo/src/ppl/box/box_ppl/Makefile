@@ -171,7 +171,7 @@ endif
 # install
 INSTALL_TARGET      := $(TARGET)
 INSTALL_TARGET      += $(DEMO_BIN_PATH)/*
-INSTALL_DIR         := $(ROOTFS_TARGET_PATH)/bin/BoxDemo
+INSTALL_DIR         := $(ROOTFS_TARGET_PATH)/bin/boxDemo
 
 # link
 LINK = $(CC)
