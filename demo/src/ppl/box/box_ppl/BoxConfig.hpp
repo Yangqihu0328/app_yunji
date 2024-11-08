@@ -121,11 +121,8 @@ public:
     COMPRESS_CONFIG_T GetCompressConfig(AX_VOID);
     UT_CONFIG_T GetUTConfig(AX_VOID);
 
-    AX_BOOL AddStreamUrl(AX_S32 channelId, std::string& channelUrl);
-    AX_BOOL RemoveStreamUrl(AX_S32 channelId);
     AX_BOOL AddAlgoTask(AX_S32 channelId, std::vector<int> &task_vec);
     AX_BOOL RemoveAlgoTask(AX_S32 channelId);
-    AX_BOOL GetStreamCount(AX_S32 &count);
 
 private:
     CBoxConfig(AX_VOID) = default;
