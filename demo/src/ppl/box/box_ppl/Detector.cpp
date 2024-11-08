@@ -82,7 +82,10 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
     fhvp.nCount = index;
 
     /* save fhvp result */
-    CDetectResult::GetInstance()->Set(pPrivData->nGrpId, fhvp);
+    //有结果才存储
+    if (fhvp.nCount > 0) {
+        CDetectResult::GetInstance()->Set(pPrivData->nGrpId, fhvp);
+    }
 
     /* release fhvp result */
     AX_SKEL_Release((AX_VOID *)pstResult);

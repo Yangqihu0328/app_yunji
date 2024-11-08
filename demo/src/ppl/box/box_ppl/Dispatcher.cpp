@@ -26,38 +26,28 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
 
     CAXFrame axFrame;
     DETECT_RESULT_T fhvp;
-    // static int count = 0;
     const boxconf::COMPRESS_CONFIG_T fbc = boxconf::CBoxConfig::GetInstance()->GetCompressConfig();
     //每一路视频都有一个显示线程。
     while (m_DispatchThread.IsRunning()) {
         if (m_qFrame.Pop(axFrame, -1)) {
             if (0 == fbc.nMode) { /* if no compress, draw box because AX_IVPS_DrawRect not support FBC */
-                //每一路视频只能绑定一种算法，现在假设有2-3个算法。每个算法有多个结果
-                //现在只能绑定每个通道只能绑定一个结果。其实现在的结果是对不上的。
-                //也就是现在推理的结果frame id与真实显示的frame不是同一个
-                //并且没有清除，可能没有检测结果但是还是会出现这个框
+                //这个地方检测出来肯定会有结果
                 if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
-                    /* CPU draw rectange, needs virtual address */
-                    if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
-                        axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+                    //这个地方+1的原因：存在跳帧处理，ai推理速度慢，当前帧只能获取上一帧ai结果
+                    if (fhvp.nSeqNum+1 == axFrame.stFrame.stVFrame.stVFrame.u64SeqNum) {
+                        /* CPU draw rectange, needs virtual address */
+                        if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
+                            axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+                        }
+
+                        DrawBox(axFrame, fhvp);
+
+                        //相当于每一帧他都进行检测
+                        for (auto &m : s_lstObs) {
+                            m->ProcessFrame(&axFrame);
+                        }
                     }
-
-                    //TODO:测试，每10s保存一张图片,进行结果分析，然后进行告警。
-                    // if (count == (30*10)) {
-                    //     for (auto& m : s_lstObs) {
-                    //         m->ProcessFrame(&axFrame);
-                    //     }
-                    //     count = 0; 
-                    // }
-                    // count++;
-
-                    DrawBox(axFrame, fhvp);
                 }
-            }
-
-            // 给编码器送帧
-            for (auto &m : s_lstObs) {
-                m->ProcessFrame(&axFrame);
             }
 
             if (m_enDispType == AX_DISP_TYPE::SRC_DIFF) {

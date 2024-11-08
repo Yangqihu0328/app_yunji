@@ -110,6 +110,7 @@ public:
         }
 
         result = m_mapRlts[nGrp];
+        m_mapRlts.erase(nGrp);
         return AX_TRUE;
     }
 
