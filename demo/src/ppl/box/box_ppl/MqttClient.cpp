@@ -225,7 +225,7 @@ static bool SendMsg(const char *topic, const char *msg, size_t len) {
     if (client_) {
         int ret = client_->publish(topic, message);
         if (ret != 0) {
-            LOG_M_C(MQTT_CLIENT, "MQTT CLIENT publish [%s] message [%s] failed ...", topic, msg);
+            printf("MQTT CLIENT publish message len %ld failed %d...\n", len, ret);
         }
     } else {
         LOG_M_C(MQTT_CLIENT, "MQTT CLIENT can not get client to publis");
@@ -236,8 +236,24 @@ static bool SendMsg(const char *topic, const char *msg, size_t len) {
     return true;
 }
 
-static void OnLogin(const std::string& accout, const std::string& password) {
+static void OnLogin(const std::string& account, const std::string& password) {
     LOG_M_C(MQTT_CLIENT, "OnLogin ++++.");
+
+    json child;
+    child["type"] = "login";
+
+    json root;
+    root["data"] = child;
+    if (account == "admin" && password == "admin") {
+        root["result"] = 0;
+        root["msg"] = "success";
+    } else {
+        root["result"] = -1;
+        root["msg"] = "The account or password is incorrect";
+    }
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
 
     LOG_M_C(MQTT_CLIENT, "OnLogin ----.");
 }
@@ -278,8 +294,8 @@ static void OnGetDashBoardInfo() {
     GetNPUInfo(npu_utilization);
 
     json board_info = {
-        {"type", "GetBoardInfo"},
-        {"BoardId", "YJ-AIBOX-001"},
+        {"type", "getDashBoardInfo"}, 
+        {"BoardId", "YJ-AIBOX-001"}, 
         {"BoardIp", ipAddress},
         {"BoardPlatform", "AX650"},
         {"BoardTemp", temperature},
@@ -312,12 +328,11 @@ static void OnGetDashBoardInfo() {
     root["data"] = board_info;
 
     std::string payload = root.dump();
+    printf("OnGetDashBoardInfo %s %ld----.\n", payload.c_str(), payload.size());
     SendMsg("web-message", payload.c_str(), payload.size());
 
     LOG_M_C(MQTT_CLIENT, "OnGetDashBoardInfo ----.");
 }
-
-
 
 static void OnRebootAiBox() {
     LOG_M_D(MQTT_CLIENT, "OnRebootAiBox ++++.");
@@ -333,6 +348,7 @@ static void OnRebootAiBox() {
     std::string payload = root.dump();
 
     SendMsg("web-message", payload.c_str(), payload.size());
+
     system("reboot");
 
     LOG_M_D(MQTT_CLIENT, "OnRebootAiBox ----.");
@@ -356,6 +372,56 @@ static void OnRestartAppService() {
     LOG_M_C(MQTT_CLIENT, "OnRestartAppService ----.");
 }
 
+static void OnSyncSystemTime(int year, int month, int day, int hour, int minute, int second) {
+    LOG_M_C(MQTT_CLIENT, "OnSyncSystemTime ++++.");
+
+    json child;
+    child["type"] = "syncSystemTime";
+
+    json root;
+
+    // sync system time
+    struct tm timeinfo = {};
+    timeinfo.tm_year = year - 1900; // tm_year 是从 1900 年开始的
+    timeinfo.tm_mon = month - 1;    // tm_mon 是从 0 开始的
+    timeinfo.tm_mday = day;
+    timeinfo.tm_hour = hour;
+    timeinfo.tm_min = minute;
+    timeinfo.tm_sec = second;
+ 
+    time_t newtime = mktime(&timeinfo);
+    if (newtime == -1) {
+        LOG_M_E(MQTT_CLIENT, "Failed to convert tm to time_t.");
+
+        root["result"] = -1;
+        root["msg"] = "failed";
+        root["data"] = child;
+
+        std::string payload = root.dump();
+        SendMsg("web-message", payload.c_str(), payload.size());
+
+        return;
+    }
+ 
+    struct timeval tv;
+    tv.tv_sec = newtime;
+    tv.tv_usec = 0;
+ 
+    if (settimeofday(&tv, nullptr) == -1) {
+        root["result"] = -1;
+        root["msg"] = "failed";
+    } else {
+        root["result"] = 0;
+        root["msg"] = "success";
+    }
+    root["data"] = child;
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+
+    LOG_M_C(MQTT_CLIENT, "OnSyncSystemTime ----.");
+}
+
 // // 查找下一个可用的 ID
 // static int findNextAvailableId() {
 //     std::set<int> existing_ids;
@@ -375,6 +441,8 @@ static void OnRestartAppService() {
 
 // 这个函数可能会有耗时问题
 bool check_RTSP_stream(const std::string& rtspUrl) {
+    LOG_M_C(MQTT_CLIENT, "check_RTSP_stream ++++.");
+
     AVFormatContext* formatContext = avformat_alloc_context();
     if (!formatContext) {
         LOG_M_D(MQTT_CLIENT, "avformat_alloc_context(stream %d) failed!");
@@ -393,6 +461,9 @@ bool check_RTSP_stream(const std::string& rtspUrl) {
     }
 
     avformat_close_input(&formatContext);
+
+    LOG_M_C(MQTT_CLIENT, "check_RTSP_stream ++++.");
+
     return true;
 }
 
@@ -404,20 +475,25 @@ static void OnGetMediaChannelList() {
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
+    LOG_M_C(MQTT_CLIENT, "OnGetMediaChannelList %d %s++++.", mediasMap.size(), streamConfig.strMediaPath.c_str());
+
     json arr = nlohmann::json::array();
     for (size_t i = 0; i < mediasMap.size(); i++) {
         if (mediasMap[i].nMediaDisable == 1) continue;
+        
+        // // 测试连接
+        // AX_U32 status = check_RTSP_stream(mediasMap[i].szMediaUrl) ? 1 : 0;
 
-        // 测试连接
-        AX_U32 status = check_RTSP_stream(mediasMap[i].szMediaUrl) ? 1 : 0;
+        LOG_M_C(MQTT_CLIENT, "%d, %s, %s, %s----.", mediasMap[i].nMediaId, mediasMap[i].szMediaName, mediasMap[i].szMediaDesc, mediasMap[i].szMediaUrl);
 
-        arr.push_back({
-            {"mediaId",     mediasMap[i].nMediaId},
-            {"mediaStatus", status},
-            {"mediaUrl",    mediasMap[i].szMediaUrl},
-            {"mediaName",   mediasMap[i].szMediaName},
-            {"mediaDesc",   mediasMap[i].szMediaDesc},
-        });
+        json leaf;
+        leaf["mediaId"] = mediasMap[i].nMediaId;
+        leaf["mediaStatus"] = 0;
+        leaf["mediaUrl"] = mediasMap[i].szMediaUrl;
+        leaf["mediaName"] = mediasMap[i].szMediaName;
+        leaf["mediaDesc"] = mediasMap[i].szMediaDesc;
+
+        arr.push_back(leaf);
     }
 
     json child;
@@ -430,6 +506,7 @@ static void OnGetMediaChannelList() {
     root["data"] = child;
 
     std::string payload = root.dump();
+    printf("OnGetMediaChannelList %s %ld----.\n", payload.c_str(), payload.size());
     SendMsg("web-message", payload.c_str(), payload.size());
 
     LOG_M_C(MQTT_CLIENT, "OnGetMediaChannelList ----.");
@@ -674,14 +751,145 @@ static void OnAlgoTaskSnapshot(AX_U32 id) {
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskSnapshot ----.");
 }
 
+static std::string macAddressToString(const char* mac) {
+    std::ostringstream macStr;
+    macStr << std::hex << std::setw(2) << std::setfill('0')
+           << (int)mac[0] << ":"
+           << (int)mac[1] << ":"
+           << (int)mac[2] << ":"
+           << (int)mac[3] << ":"
+           << (int)mac[4] << ":"
+           << (int)mac[5];
+    return macStr.str();
+}
+
+static void getMacAddress(const std::string& ifname, std::string& mac) {
+    int sockfd;
+    struct ifreq ifr;
+ 
+    // 创建套接字
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) {
+        return;
+    }
+ 
+    // 清零ifreq结构体
+    memset(&ifr, 0, sizeof(struct ifreq));
+ 
+    // 复制接口名称到ifr_name字段
+    strncpy(ifr.ifr_name, ifname.c_str(), IFNAMSIZ - 1);
+ 
+    // 使用ioctl获取MAC地址
+    if (ioctl(sockfd, SIOCGIFHWADDR, &ifr) < 0) {
+        close(sockfd);
+        return;
+    }
+ 
+    // 打印MAC地址
+    mac = macAddressToString(ifr.ifr_hwaddr.sa_data);
+
+    // 关闭套接字
+    close(sockfd);
+}
+
 static void OnGetAiBoxNetwork() {
     LOG_M_C(MQTT_CLIENT, "OnGetAiBoxNetwork ++++.");
+
+    struct ifaddrs *ifaddr, *ifa;
+    int family, s;
+    char host[NI_MAXHOST];
+
+    if (getifaddrs(&ifaddr) == -1) {
+        return;
+    }
+
+    json arr = nlohmann::json::array();
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr) 
+            continue;
+
+        family = ifa->ifa_addr->sa_family;
+
+        // Check if interface is valid and IPv4
+        if (family == AF_INET) {
+            s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+            if (s != 0) {
+                printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                continue;
+            }
+            
+            LOG_M_C(MQTT_CLIENT, "Interface %s has IP address: %s", ifa->ifa_name, host);
+
+            std::string mac;
+            getMacAddress(ifa->ifa_name, mac);
+
+            arr.push_back({
+                {"name",    ifa->ifa_name},
+                {"address", host},
+                {"mask",    "255.255.255.0"},
+                {"gateway", "192.168.0.1"},
+                {"dns",     "8.8.8.8"},
+                {"mac",     mac},
+            });
+
+            freeifaddrs(ifaddr);
+        }
+    }
+
+    json child;
+    child["type"] = "getAiBoxNetwork";
+    child["Interfaces"] = arr;
+
+    json root;
+    root["result"] = 0;
+    root["msg"] = "success";
+    root["data"] = child;
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
 
     LOG_M_C(MQTT_CLIENT, "OnGetAiBoxNetwork ----.");
 }
 
 static void OnSetAiBoxNetwork(const std::string& name, const std::string& address, const std::string& gateway, const std::string& mask, const std::string& dns) {
     LOG_M_C(MQTT_CLIENT, "OnGetAiBoxNetwork ++++.");
+
+    std::vector<std::string> lines;
+    std::ifstream ifile("/etc/network/interfaces");
+    std::string line;
+    while (std::getline(ifile, line)) {
+        lines.push_back(line);
+    }
+
+    bool found = false;
+    std::vector<std::string> newConfig;
+    newConfig.push_back("auto " + name);
+    newConfig.push_back("iface " + name + " inet static");
+    newConfig.push_back("    address " + address);
+    newConfig.push_back("    netmask " + mask);
+    newConfig.push_back("    gateway " + gateway);
+ 
+    for (auto& line : lines) {
+        if (line.find("iface " + name) != std::string::npos ||
+            line.find("auto " + name) != std::string::npos ||
+            (line.find("gateway") != std::string::npos && found)) {
+            found = true;
+            continue;
+        }
+        newConfig.push_back(line);
+    }
+ 
+    if (!found) {
+        newConfig.insert(newConfig.end(), lines.begin(), lines.end());
+        lines = newConfig;
+    } else {
+        lines = newConfig;
+    }
+
+    std::ofstream ofile("/etc/network/interfaces");
+    for (const auto& line : lines) {
+        ofile << line << std::endl;
+    }
 
     LOG_M_C(MQTT_CLIENT, "OnGetAiBoxNetwork ----.");
 }
@@ -878,6 +1086,14 @@ static void messageArrived(MQTT::MessageData& md) {
         OnRebootAiBox();
     } else if (type == "restartAppService") { // 重启应用服务
         OnRestartAppService();
+    } else if (type == "syncSystemTime") { // 同步系统时间
+        AX_S32 year = jsonRes["year"];
+        AX_S32 month = jsonRes["month"];
+        AX_S32 day = jsonRes["day"];
+        AX_S32 hour = jsonRes["hour"];
+        AX_S32 minute = jsonRes["minute"];
+        AX_S32 second = jsonRes["second"];
+        OnSyncSystemTime(year, month, day, hour, minute, second);
     } else if (type == "getMediaChannelList") { // 获取通道列表
         OnGetMediaChannelList();
     } else if (type == "setMediaChannelInfo") { // 设置通道信息
