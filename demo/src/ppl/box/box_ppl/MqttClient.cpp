@@ -94,7 +94,7 @@ int GetIP(const std::string interfaceName, std::string &ip_addr, std::string &ne
     }
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (!ifa->ifa_addr) 
+        if (!ifa->ifa_addr)
             continue;
 
         family = ifa->ifa_addr->sa_family;
@@ -106,7 +106,7 @@ int GetIP(const std::string interfaceName, std::string &ip_addr, std::string &ne
                 LOG_M_C(MQTT_CLIENT, "getnameinfo() failed: %s\n", gai_strerror(s));
                 continue;
             }
-            
+
             LOG_M_C(MQTT_CLIENT, "Interface %s has IP address: %s", interfaceName.c_str(), host);
             ip_addr = std::string(host);
             net_type = "WAN";
@@ -250,7 +250,7 @@ static void OnGetDashBoardInfo() {
     if (ret == -1) {
         LOG_MM_D(MQTT_CLIENT, "GetTemperature fail.");
     }
-    
+
     const std::string interfaceName = "eth0";
     std::string ipAddress = "127.0.0.1";
     std::string NetType = "LAN";
@@ -278,8 +278,8 @@ static void OnGetDashBoardInfo() {
     GetNPUInfo(npu_utilization);
 
     json board_info = {
-        {"type", "GetBoardInfo"}, 
-        {"BoardId", "YJ-AIBOX-001"}, 
+        {"type", "GetBoardInfo"},
+        {"BoardId", "YJ-AIBOX-001"},
         {"BoardIp", ipAddress},
         {"BoardPlatform", "AX650"},
         {"BoardTemp", temperature},
@@ -298,7 +298,7 @@ static void OnGetDashBoardInfo() {
             {"Used", memInfo.usedMem}, // 已用
         }},
         {"Tpu", { // 当前设备的算力资源使用情况
-            { 
+            {
                 {"vpu0_usage", npu_utilization[0]},
                 {"vpu1_usage", npu_utilization[1]},
                 {"vpu2_usage", npu_utilization[2]}
@@ -310,7 +310,7 @@ static void OnGetDashBoardInfo() {
     root["result"] = 0;
     root["msg"] = "success";
     root["data"] = board_info;
-    
+
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
 
@@ -406,6 +406,8 @@ static void OnGetMediaChannelList() {
 
     json arr = nlohmann::json::array();
     for (size_t i = 0; i < mediasMap.size(); i++) {
+        if (mediasMap[i].nMediaDisable == 1) continue;
+
         // 测试连接
         AX_U32 status = check_RTSP_stream(mediasMap[i].szMediaUrl) ? 1 : 0;
 
@@ -917,7 +919,7 @@ static void messageArrived(MQTT::MessageData& md) {
     } else if (type == "stopRtspPreview") { // 停止预览
         std::string mediaUrl = jsonRes["mediaUrl"];
         OnStopRtspPreview(mediaUrl);
-    } 
+    }
 
     // if (recv_msg == "add0") {
     //     // std::string mstring = "rtsp://admin:yunji123456++@192.168.0.150:554/cam/realmonitor?channel=1&subtype=0";
@@ -1010,11 +1012,11 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
     LOG_M_C(MQTT_CLIENT, "Connecting to %s:%d", mqtt_config.hostname.c_str(), mqtt_config.port);
 
     int rc = ipstack_->connect(mqtt_config.hostname.c_str(), mqtt_config.port);
-	if (rc != 0) {
+    if (rc != 0) {
         LOG_M_E(MQTT_CLIENT, "rc from TCP connect fail, rc = %d", rc);
         return AX_FALSE;
     } else {
-        MQTTPacket_connectData data = MQTTPacket_connectData_initializer;       
+        MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
         data.MQTTVersion = mqtt_config.version;
         data.clientID.cstring = mqtt_config.name.c_str();
         data.username.cstring = mqtt_config.name.c_str();
@@ -1029,7 +1031,7 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
             if (rc != 0) {
                 LOG_M_E(MQTT_CLIENT, "rc from MQTT subscribe is %d\n", rc);
                 return AX_FALSE;
-            }      
+            }
         }
     }
 
@@ -1049,7 +1051,7 @@ AX_BOOL MqttClient::DeInit(AX_VOID) {
     ipstack_->disconnect();
 
     LOG_M_C(MQTT_CLIENT, "Finishing with messages received");
-    
+
     return AX_TRUE;
 }
 
@@ -1077,7 +1079,6 @@ AX_BOOL MqttClient::Stop(AX_VOID) {
 AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
     LOG_MM_I(MQTT_CLIENT, "+++");
 
-    int id = 0;
     CBoxBuilder *p_builder = CBoxBuilder::GetInstance();
     while (m_threadWork.IsRunning()) {
         // process alarm message
@@ -1090,17 +1091,17 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
             lock.unlock();
 
             if (stream_cmd.cmd == ContrlCmd::AddAlgo) {
-                p_builder->RemoveStream(id);
-                p_builder->AddStream(id);
+                p_builder->RemoveStream(stream_cmd.id);
+                p_builder->AddStream(stream_cmd.id);
             } else if (stream_cmd.cmd == ContrlCmd::RemoveAlgo) {
-                p_builder->RemoveStream(id);
+                p_builder->RemoveStream(stream_cmd.id);
             } else if (stream_cmd.cmd == ContrlCmd::StartStream) {
-                p_builder->StartStream(id);
+                p_builder->StartStream(stream_cmd.id);
             } else if (stream_cmd.cmd == ContrlCmd::StopStream) {
-                p_builder->StopStream(id);
+                p_builder->StopStream(stream_cmd.id);
             }
         }
-        
+
         client_->yield(1 * 1000UL); // sleep 1 seconds
     }
 
