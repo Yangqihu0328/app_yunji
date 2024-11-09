@@ -22,6 +22,7 @@
 #include "ax_vdec_api.h"
 #include "ax_venc_api.h"
 #include "ax_vo_api.h"
+#include "ax_ao_api.h"
 
 using namespace std;
 using namespace boxconf;
@@ -96,6 +97,7 @@ AX_BOOL CBoxAppSys::InitSysMods(AX_VOID) {
     m_arrMods.push_back({AX_FALSE, "DISP", AX_VO_Init, AX_VO_Deinit});
 #endif
     m_arrMods.push_back({AX_FALSE, "NPU", bind(&CBoxAppSys::APP_NPU_Init, this), bind(&CBoxAppSys::APP_NPU_DeInit, this)});
+    m_arrMods.push_back({AX_FALSE, "AO", AX_AO_Init, AX_AO_DeInit});
 
     for (auto& m : m_arrMods) {
         AX_S32 ret = m.Init();
