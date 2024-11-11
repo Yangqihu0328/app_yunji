@@ -11,6 +11,8 @@
 #include "httplib.h"
 #include "nlohmann/json.hpp"
 
+#include <linux/rtnetlink.h>
+
 namespace boxconf {
 
 #define MQTT_CLIENT "MQTT_CLIENT"
@@ -724,6 +726,61 @@ static void getMacAddress(const std::string& ifname, std::string& mac) {
     close(sockfd);
 }
 
+int get_gateway(struct in_addr *gw,const char *ifname) {
+    int sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    if (sock < 0) {
+        LOG_E("socket");
+        return -1;
+    }
+
+    struct {
+        struct nlmsghdr nlh;
+        struct rtmsg rtm;
+    } req;
+
+    memset(&req, 0, sizeof(req));
+    req.nlh.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+    req.nlh.nlmsg_type = RTM_GETROUTE;
+    req.nlh.nlmsg_flags = NLM_F_DUMP | NLM_F_REQUEST;
+    req.rtm.rtm_family = AF_INET;
+
+    if (send(sock, &req, req.nlh.nlmsg_len, 0) < 0) {
+        perror("send");
+        close(sock);
+        return -1;
+    }
+
+    char buffer[8192];
+    int n;
+    while ((n = recv(sock, buffer, sizeof(buffer), 0)) > 0) {
+        struct nlmsghdr *nlh = (struct nlmsghdr *)buffer;
+        for (; NLMSG_OK(nlh, n); nlh = NLMSG_NEXT(nlh, n)) {
+            if (nlh->nlmsg_type == NLMSG_DONE)
+                break;
+            if (nlh->nlmsg_type == NLMSG_ERROR)
+                break;
+
+            struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nlh);
+            struct rtattr *rta = (struct rtattr *)RTM_RTA(rtm);
+            int len = RTM_PAYLOAD(nlh);
+
+            while (RTA_OK(rta, len)) {
+                switch (rta->rta_type) {
+                case RTA_GATEWAY:
+                    gw->s_addr = *((uint32_t *)RTA_DATA(rta));
+                    close(sock);
+                    return 0;
+                }
+                rta = RTA_NEXT(rta, len);
+            }
+            return -1;
+        }
+    }
+
+    close(sock);
+    return 0;
+}
+
 static void OnGetAiBoxNetwork() {
     LOG_M_C(MQTT_CLIENT, "OnGetAiBoxNetwork ++++.");
 
@@ -743,24 +800,53 @@ static void OnGetAiBoxNetwork() {
         family = ifa->ifa_addr->sa_family;
 
         // Check if interface is valid and IPv4
-        if (family == AF_INET) {
+        if (ifa->ifa_name && family == AF_INET &&
+            (!strcmp(ifa->ifa_name, "eth0") || !strcmp(ifa->ifa_name, "eth1"))) {
             s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
             if (s != 0) {
                 printf("getnameinfo() failed: %s\n", gai_strerror(s));
                 continue;
             }
-            
+
             LOG_M_C(MQTT_CLIENT, "Interface %s has IP address: %s", ifa->ifa_name, host);
+
+            struct sockaddr_in *sin_netmask = (struct sockaddr_in *)ifa->ifa_netmask;
+            struct in_addr gw;
+            if (get_gateway(&gw, ifa->ifa_name)) {
+                LOG_E("Can't get gateway");
+                continue;
+            }
 
             std::string mac;
             getMacAddress(ifa->ifa_name, mac);
 
+            std::string line;
+            std::ifstream ifile("/etc/network/interfaces");
+            bool found = false;
+            int pos = 0;
+            while (std::getline(ifile, line)) {
+                if (line.find("static") != std::string::npos && line.find(ifa->ifa_name) != std::string::npos)
+                    found = true;
+                if (found && line.empty())
+                    found = false;
+
+                if (found) {
+                    if (pos = line.find("dns-nameservers") != std::string::npos) {
+                        found = false;
+                        pos += (16 + 3);
+                        printf("dns-nameservers: %s\n", line.c_str());
+                        line = line.substr(pos, line.length() - pos);
+                        break;
+                    }
+                }
+            }
+
             arr.push_back({
                 {"name",    ifa->ifa_name},
                 {"address", host},
-                {"mask",    "255.255.255.0"},
-                {"gateway", "192.168.0.1"},
-                {"dns",     "8.8.8.8"},
+                {"mask",    inet_ntoa(sin_netmask->sin_addr)},
+                {"gateway", inet_ntoa(gw)},
+                {"dns",     line},
                 {"mac",     mac},
                 {"status",  0},
             });
