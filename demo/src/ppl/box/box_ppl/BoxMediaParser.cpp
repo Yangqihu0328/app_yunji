@@ -80,11 +80,14 @@ std::vector<MEDIA_INFO_T> CBoxMediaParser::GetMediasMap(AX_U32 *nMediaCnt, const
                 for (auto device_value : arr_device) {
 
                     MEDIA_INFO_T devInfo;
-                    if (!GET_VALUE(device_value, "channel", dValue)) break;
+                    if (!GET_VALUE(device_value, "id", dValue)) break;
                     devInfo.nMediaId = dValue;
 
-                    if (!GET_VALUE(device_value, "disable", dValue)) break;
-                    devInfo.nMediaDisable = dValue;
+                    if (!GET_VALUE(device_value, "delete", dValue)) break;
+                    devInfo.nMediaDelete = dValue;
+
+                    if (!GET_VALUE(device_value, "status", dValue)) break;
+                    devInfo.nMediaStatus = dValue;
 
                     if (!GET_VALUE(device_value, "url", strValue)) break;
                     strcpy(devInfo.szMediaUrl, strValue.c_str());
@@ -94,6 +97,35 @@ std::vector<MEDIA_INFO_T> CBoxMediaParser::GetMediasMap(AX_U32 *nMediaCnt, const
 
                     if (!GET_VALUE(device_value, "desc", strValue)) break;
                     strcpy(devInfo.szMediaDesc, strValue.c_str());
+
+                    // task
+                    auto valueTask = device_value.get<picojson::object>()["task"];
+                    if (!GET_VALUE(valueTask, "id", dValue)) break;
+                    devInfo.taskInfo.nTaskId = dValue;
+
+                    if (!GET_VALUE(valueTask, "delete", dValue)) break;
+                    devInfo.taskInfo.nTaskDelete = dValue;
+
+                    if (!GET_VALUE(valueTask, "status", dValue)) break;
+                    devInfo.taskInfo.nTaskStatus = dValue;
+
+                    if (!GET_VALUE(valueTask, "url", strValue)) break;
+                    strcpy(devInfo.taskInfo.szPushUrl, strValue.c_str());
+
+                    if (!GET_VALUE(valueTask, "name", strValue)) break;
+                    strcpy(devInfo.taskInfo.szTaskName, strValue.c_str());
+
+                    if (!GET_VALUE(valueTask, "desc", strValue)) break;
+                    strcpy(devInfo.taskInfo.szTaskDesc, strValue.c_str());
+
+                    if (!GET_VALUE(valueTask, "algo1", dValue)) break;
+                    devInfo.taskInfo.nAlgo1 = dValue;
+
+                    if (!GET_VALUE(valueTask, "algo2", dValue)) break;
+                    devInfo.taskInfo.nAlgo2 = dValue;
+
+                    if (!GET_VALUE(valueTask, "algo3", dValue)) break;
+                    devInfo.taskInfo.nAlgo3 = dValue;
 
                     vecMedia.emplace_back(devInfo);
                 }
@@ -116,11 +148,26 @@ AX_BOOL CBoxMediaParser::SetMediasMap(std::vector<MEDIA_INFO_T>& vecMedia) {
         picojson::array arr;
         for (auto &info : vecMedia) {
             picojson::object objDev;
-            objDev["channel"] = picojson::value((double)info.nMediaId);
-            objDev["disable"] = picojson::value((double)info.nMediaDisable);
+            LOG_M_C(TAG, "[%s][%d] +++ ", __func__, __LINE__);
+            objDev["id"] = picojson::value((double)info.nMediaId);
+            objDev["delete"] = picojson::value((double)info.nMediaDelete);
+            objDev["status"] = picojson::value((double)info.nMediaStatus);
             objDev["url"] = picojson::value(string(info.szMediaUrl));
             objDev["name"] = picojson::value(string(info.szMediaName));
             objDev["desc"] = picojson::value(string(info.szMediaDesc));
+
+            picojson::object objTask;
+            objTask["id"] = picojson::value((double)info.taskInfo.nTaskId);
+            objTask["delete"] = picojson::value((double)info.taskInfo.nTaskDelete);
+            objTask["status"] = picojson::value((double)info.taskInfo.nTaskStatus);
+            objTask["url"] = picojson::value(string(info.taskInfo.szPushUrl));
+            objTask["name"] = picojson::value(string(info.taskInfo.szTaskName));
+            objTask["desc"] = picojson::value(string(info.taskInfo.szTaskDesc));
+            objTask["algo1"] = picojson::value((double)info.taskInfo.nAlgo1);
+            objTask["algo2"] = picojson::value((double)info.taskInfo.nAlgo2);
+            objTask["algo3"] = picojson::value((double)info.taskInfo.nAlgo3);
+
+            objDev["task"] = picojson::value(objTask);
 
             arr.push_back(picojson::value(objDev));
         }

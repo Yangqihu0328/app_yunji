@@ -268,7 +268,7 @@ enum ContrlCmd {
 
 struct StreamCmd {
     ContrlCmd cmd;
-    int id;
+    AX_U32 id;
 };
 
 typedef enum {
