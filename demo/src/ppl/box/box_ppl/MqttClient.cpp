@@ -784,45 +784,48 @@ static void OnGetAiBoxNetwork() {
     LOG_M_C(MQTT_CLIENT, "OnGetAiBoxNetwork ----.");
 }
 
-static void OnSetAiBoxNetwork(const std::string& name, const std::string& address, const std::string& gateway, const std::string& mask, const std::string& dns) {
-    LOG_M_C(MQTT_CLIENT, "OnGetAiBoxNetwork ++++.");
+static void OnSetAiBoxNetwork(const std::string& name, const AX_U32 dhcp, const std::string& address, const std::string& gateway, const std::string& mask, const std::string& dns) {
+    LOG_M_C(MQTT_CLIENT, "OnSetAiBoxNetwork ++++.");
 
-    // std::vector<std::string> lines;
-    // std::ifstream ifile("/etc/network/interfaces");
-    // std::string line;
-    // while (std::getline(ifile, line)) {
-    //     lines.push_back(line);
-    // }
+    std::vector<std::string> lines;
+    std::ifstream ifile("/etc/network/interfaces");
+    std::string line;
+    while (std::getline(ifile, line)) {
+        lines.push_back(line);
+    }
 
-    // bool found = false;
-    // std::vector<std::string> newConfig;
-    // newConfig.push_back("auto " + name);
-    // newConfig.push_back("iface " + name + " inet static");
-    // newConfig.push_back("    address " + address);
-    // newConfig.push_back("    netmask " + mask);
-    // newConfig.push_back("    gateway " + gateway);
- 
-    // for (auto& line : lines) {
-    //     if (line.find("iface " + name) != std::string::npos ||
-    //         line.find("auto " + name) != std::string::npos ||
-    //         (line.find("gateway") != std::string::npos && found)) {
-    //         found = true;
-    //         continue;
-    //     }
-    //     newConfig.push_back(line);
-    // }
- 
-    // if (!found) {
-    //     newConfig.insert(newConfig.end(), lines.begin(), lines.end());
-    //     lines = newConfig;
-    // } else {
-    //     lines = newConfig;
-    // }
+    bool found = false;
+    std::vector<std::string> newConfig;
+    newConfig.push_back("allow-hotplug " + name);
 
-    // std::ofstream ofile("/etc/network/interfaces");
-    // for (const auto& line : lines) {
-    //     ofile << line << std::endl;
-    // }
+    if (dhcp)
+        newConfig.push_back("iface " + name + " inet dhcp");
+    else {
+        newConfig.push_back("iface " + name + " inet static");
+        newConfig.push_back("    address " + address);
+        newConfig.push_back("    netmask " + mask);
+        newConfig.push_back("    gateway " + gateway);
+        newConfig.push_back("    dns-nameservers " + gateway + " " + dns);
+    }
+
+    for (auto &line : lines) {
+        if (line.find("allow-hotplug " + name) != std::string::npos)
+            found = true;
+        if (found && line.empty())
+            found = false;
+
+        if (found)
+            continue;
+
+        newConfig.push_back(line);
+    }
+
+    lines = newConfig;
+
+    std::ofstream ofile("/etc/network/interfaces");
+    for (const auto& line : lines) {
+        ofile << line << std::endl;
+    }
 
     json child;
     child["type"] = "setAiBoxNetwork";
@@ -835,7 +838,9 @@ static void OnSetAiBoxNetwork(const std::string& name, const std::string& addres
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
 
-    LOG_M_C(MQTT_CLIENT, "OnGetAiBoxNetwork ----.");
+    system("/etc/init.d/networking restart");
+
+    LOG_M_C(MQTT_CLIENT, "OnSetAiBoxNetwork ----.");
 }
 
 static void OnStartRtspPreview(std::string& streamUrl) {
@@ -1092,11 +1097,12 @@ static void messageArrived(MQTT::MessageData& md) {
         OnGetAiBoxNetwork();
     } else if (type == "setAiBoxNetwork") { // 设置盒子网络
         std::string name = jsonRes["name"];
+        AX_U32 dhcp = jsonRes["dhcp"];
         std::string address = jsonRes["address"];
         std::string gateway = jsonRes["gateway"];
         std::string mask = jsonRes["mask"];
         std::string dns = jsonRes["dns"];
-        OnSetAiBoxNetwork(name, address, gateway, mask, dns);
+        OnSetAiBoxNetwork(name, dhcp, address, gateway, mask, dns);
     } else if (type == "startRtspPreview") { // 开始预览
         std::string mediaUrl = jsonRes["mediaUrl"];
         OnStartRtspPreview(mediaUrl);
