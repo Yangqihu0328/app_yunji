@@ -266,8 +266,6 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     m_arrStreamer.resize(nMediaCnt);
     for (AX_U32 i = 0; i < nMediaCnt; ++i) {
-        // if (mediasMap[i].nMediaDisable == 1) continue;
-
         STREAMER_ATTR_T stAttr;
         stAttr.strPath = mediasMap[i].szMediaUrl;
         stAttr.nMaxWidth = streamConfig.nMaxGrpW;
@@ -283,6 +281,10 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
         if (!m_arrStreamer[i]) {
             return AX_FALSE;
         }
+
+        if (!mediasMap[i].nMediaDisable)
+            if (!m_arrStreamer[i]->Init(stAttr))
+                return AX_FALSE;
 
         LOG_M_C(BOX, "stream %d: %s", i, stAttr.strPath.c_str());
     }
@@ -955,12 +957,18 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             }
         }
 
-        // for (auto &&m : m_arrStreamer) {
-        //     if (m) {
-        //         thread t([](IStreamHandler *p) { p->Start(); }, m.get());
-        //         t.detach();
-        //     }
-        // }
+        // 实际上只绑定实际的流数量。
+        AX_U32 nMediaCnt = 0;
+        STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+        std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+        for (AX_U32 i = 0; i < nMediaCnt; ++i) {
+            if (mediasMap[i].nMediaDisable == 1)
+                continue;
+
+            thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[i].get());
+            t.join();
+        }
+
         return AX_TRUE;
 
     } while (0);

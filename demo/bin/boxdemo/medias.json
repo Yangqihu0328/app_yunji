@@ -3,112 +3,112 @@
     "medias":[
         {
             "channel": 0,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 1,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 2,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 3,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 4,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 5,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 6,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 7,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 8,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 9,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 10,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 11,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 12,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 13,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 14,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
         },
         {
             "channel": 15,
-            "disable": 0,
+            "disable": 1,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
             "desc": "remote device"
