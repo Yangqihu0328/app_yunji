@@ -282,7 +282,7 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
             return AX_FALSE;
         }
 
-        if (!mediasMap[i].nMediaDisable)
+        if (!mediasMap[i].nMediaDelete)
             if (!m_arrStreamer[i]->Init(stAttr))
                 return AX_FALSE;
 
@@ -292,7 +292,7 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
     if (!streamConfig.strSataPath.empty()) {
         m_sataWritter.resize(nMediaCnt);
         for (AX_U32 i = 0; i < nMediaCnt; ++i) {
-            if (mediasMap[i].nMediaDisable == 1) continue;
+            if (mediasMap[i].nMediaDelete == 1) continue;
 
             STREAM_RECORD_ATTR_T stAttr = {i, streamConfig.nSataFileSize, streamConfig.nMaxSpaceSize, streamConfig.strSataPath};
             m_sataWritter[i] = make_unique<CStreamRecorder>();
@@ -728,7 +728,7 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
     AX_U32 nMediaCnt = 0;
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     for (AX_U32 i = 0; i < nMediaCnt; ++i) {
-        if (mediasMap[i].nMediaDisable == 1) continue;
+        if (mediasMap[i].nMediaDelete == 1) continue;
         
         m_arrStreamer[i]->RegObserver(m_vdec.get());
     }
@@ -957,12 +957,11 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             }
         }
 
-        // 实际上只绑定实际的流数量。
         AX_U32 nMediaCnt = 0;
         STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
         std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
         for (AX_U32 i = 0; i < nMediaCnt; ++i) {
-            if (mediasMap[i].nMediaDisable == 1)
+            if (mediasMap[i].nMediaDelete == 1)
                 continue;
 
             thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[i].get());
