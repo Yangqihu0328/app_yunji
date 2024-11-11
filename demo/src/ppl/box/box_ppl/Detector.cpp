@@ -431,8 +431,6 @@ AX_BOOL CDetector::Start(AX_VOID) {
 AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
     LOG_M_W(DETECTOR, "%s: +++", __func__);
     do {
-        printf("sssssssssssssdddddddd %d %d %d %d %d\n", det_attr.nPPL[0] , det_attr.nPPL[1] , det_attr.nPPL[2],
-            det_attr.bTrackEnable,  det_attr.nVNPU);
         auto &algo_type_arr = det_attr.nPPL;
         bool has_duplicate = false;
         std::unordered_set<int> seen;
@@ -493,8 +491,6 @@ AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
             stConfig.nSize = 0;
             stConfig.pstItems = &stItems[0];
 
-            printf("sssssssssssssdddddddd %d %d %d %d %d\n", det_attr.nPPL[0] , det_attr.nPPL[1] , det_attr.nPPL[2],
-            det_attr.bTrackEnable,  det_attr.nVNPU);
             if (!det_attr.bTrackEnable) {
                 // track_disable
                 stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"track_disable";

@@ -487,7 +487,6 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
     LOG_M_C(MQTT_CLIENT, "OnSetMediaChannelInfo ++++.");
 
     json root;
-
     // 获取当前通道信息
     AX_U32 nMediaCnt = 0;
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
