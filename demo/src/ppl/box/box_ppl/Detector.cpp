@@ -23,9 +23,8 @@
 using namespace std;
 #define DETECTOR "SKEL"
 
-//主要是从这里入手。
-//相当于同一帧可能会被多个算法进行推理。会不会遇到性能不够，算法推理不够送过来帧速度快呢？
 //同一帧被多个算法推理是正常情况。那么推理的结果应该都是存在同一个结果里面。
+//考虑的问题，检测的框要一直存在，但是检测结果不要一直送。
 static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstResult, AX_VOID *pUserData) {
     CDetector *pThis = (CDetector *)pUserData;
     if (!pThis) {
@@ -73,7 +72,7 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
                     pstResult->pstObjectItems[i].pstrObjectCategory, fhvp.nGrpId, fhvp.nSeqNum, pstResult->nFrameId);
             fhvp.item[index].eType = DETECT_TYPE_UNKNOWN;
         }
-
+        
         fhvp.item[index].nTrackId = pstResult->pstObjectItems[i].nTrackId;
         fhvp.item[index].tBox = pstResult->pstObjectItems[i].stRect;
         index++;
@@ -276,7 +275,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
 
                     AX_SKEL_Release((AX_VOID *)pstCapability);
                     if (!bFHVP) {
-                        LOG_M_E(DETECTOR, "%s: SKEL not found FHVP model", __func__);
+                        LOG_M_E(DETECTOR, "%s: SKEL not found skel model", __func__);
                         d_vec[nChn][algo_id] = false;
                         break;
                     }
@@ -429,10 +428,12 @@ AX_BOOL CDetector::Start(AX_VOID) {
 }
 
 //指定id开始，实际上就是对m_arrFrameQ进行初始化和调用npu接口
-AX_BOOL CDetector::StartId(int id) {
+AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
     LOG_M_W(DETECTOR, "%s: +++", __func__);
     do {
-        auto &algo_type_arr = m_stAttr.tChnAttr[id].nPPL;
+        printf("sssssssssssssdddddddd %d %d %d %d %d\n", det_attr.nPPL[0] , det_attr.nPPL[1] , det_attr.nPPL[2],
+            det_attr.bTrackEnable,  det_attr.nVNPU);
+        auto &algo_type_arr = det_attr.nPPL;
         bool has_duplicate = false;
         std::unordered_set<int> seen;
         for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
@@ -466,11 +467,12 @@ AX_BOOL CDetector::StartId(int id) {
                 }
                 AX_SKEL_Release((AX_VOID *)pstCapability);
                 if (!bPPL) {
-                    LOG_M_E(DETECTOR, "%s: SKEL not found FHVP model", __func__);
+                    LOG_M_E(DETECTOR, "%s: SKEL not found skel model", __func__);
                     d_vec[id][algo_id] = false;
                     break;
                 }
             }
+
             //配置算法参数
             AX_SKEL_HANDLE_PARAM_T stHandleParam;
             memset(&stHandleParam, 0, sizeof(stHandleParam));
@@ -480,10 +482,10 @@ AX_BOOL CDetector::StartId(int id) {
             stHandleParam.nIoDepth = 0;
             stHandleParam.nWidth = m_stAttr.nW;
             stHandleParam.nHeight = m_stAttr.nH;
-            if (m_stAttr.tChnAttr[id].nVNPU == AX_SKEL_NPU_DEFAULT) {
+            if (det_attr.nVNPU == AX_SKEL_NPU_DEFAULT) {
                 stHandleParam.nNpuType = AX_SKEL_NPU_DEFAULT;
             } else {
-                stHandleParam.nNpuType = (AX_U32)(1 << (m_stAttr.tChnAttr[id].nVNPU - 1));
+                stHandleParam.nNpuType = (AX_U32)(1 << (det_attr.nVNPU - 1));
             }
             AX_SKEL_CONFIG_T stConfig = {0};
             AX_SKEL_CONFIG_ITEM_T stItems[16] = {0};
@@ -491,7 +493,9 @@ AX_BOOL CDetector::StartId(int id) {
             stConfig.nSize = 0;
             stConfig.pstItems = &stItems[0];
 
-            if (!m_stAttr.tChnAttr[id].bTrackEnable) {
+            printf("sssssssssssssdddddddd %d %d %d %d %d\n", det_attr.nPPL[0] , det_attr.nPPL[1] , det_attr.nPPL[2],
+            det_attr.bTrackEnable,  det_attr.nVNPU);
+            if (!det_attr.bTrackEnable) {
                 // track_disable
                 stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"track_disable";
                 AX_SKEL_COMMON_THRESHOLD_CONFIG_T stTrackDisableThreshold = {0};
@@ -503,10 +507,20 @@ AX_BOOL CDetector::StartId(int id) {
             // push_disable
             stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"push_disable";
             AX_SKEL_COMMON_THRESHOLD_CONFIG_T stPushDisableThreshold = {0};
-            stPushDisableThreshold.fValue = 1;
+            stPushDisableThreshold.fValue = 0;
             stConfig.pstItems[itemIndex].pstrValue = (AX_VOID *)&stPushDisableThreshold;
             stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_COMMON_THRESHOLD_CONFIG_T);
             itemIndex++;
+
+            // // 设置3分钟不重复推送
+            // stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"push_strategy";
+            // AX_SKEL_PUSH_STRATEGY_T strategy;
+            // strategy.ePushMode = AX_SKEL_PUSH_MODE_INTERVAL;
+            // strategy.nIntervalTimes = 60*1000*3;
+            // strategy.nPushCounts = 1;
+            // stConfig.pstItems[itemIndex].pstrValue = (AX_VOID *)&strategy;
+            // stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_PUSH_STRATEGY_T);
+            // itemIndex++;
 
             stConfig.nSize = itemIndex;
             stHandleParam.stConfig = stConfig;

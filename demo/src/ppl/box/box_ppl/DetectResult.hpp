@@ -12,6 +12,7 @@
 #include <string.h>
 #include <map>
 #include <mutex>
+#include <unordered_set>
 #include "AXSingleton.h"
 #include "ax_skel_type.h"
 
@@ -47,6 +48,7 @@ typedef struct DETECT_RESULT_S {
     AX_U32 nCount;
     AX_S32 nGrpId;
     AX_U32 nAlgoType;
+    AX_U32 result_diff;
     DETECT_RESULT_ITEM_T item[MAX_DETECT_RESULT_COUNT];
 
     DETECT_RESULT_S(AX_VOID) {
@@ -66,35 +68,64 @@ public:
     //需要在这里进行组合
     AX_BOOL Set(AX_S32 nGrp, const DETECT_RESULT_T& cur_result) {
         std::lock_guard<std::mutex> lck(m_mtx);
-
         auto &last_result = m_mapRlts[nGrp];
-        DETECT_RESULT_T new_result, old_result;
+
+        DETECT_RESULT_T new_result, few_result;
         //说明是推理当前帧的多个算法
         if (last_result.nSeqNum == cur_result.nSeqNum && last_result.nAlgoType != cur_result.nAlgoType) {
             //先判断差异，找到最多的，从最多的增加。
             if (cur_result.nCount >= last_result.nCount) {
                 new_result = cur_result;
-                old_result = last_result;
+                few_result = last_result;
             } else {
                 new_result = last_result;
-                old_result = cur_result;
+                few_result = cur_result;
             }
 
             int i = new_result.nCount, j = 0;
             int temp_count = new_result.nCount + last_result.nCount;
             int sum_count = temp_count < MAX_DETECT_RESULT_COUNT ? temp_count : MAX_DETECT_RESULT_COUNT;
             for (; i < sum_count; i++ && j++) {
-                new_result.item[i].eType = old_result.item[j].eType;
-                new_result.item[i].nTrackId  = old_result.item[j].nTrackId;
-                new_result.item[i].tBox  = old_result.item[j].tBox;
+                new_result.item[i].eType = few_result.item[j].eType;
+                new_result.item[i].nTrackId  = few_result.item[j].nTrackId;
+                new_result.item[i].tBox  = few_result.item[j].tBox;
             }
             new_result.nCount = sum_count;
         } else {
             new_result = cur_result;
         }
 
+        auto track_id_set = [](const DETECT_RESULT_T& result) {
+            std::unordered_set<int> track_ids;
+            for (int i = 0; i < result.nCount; ++i) {
+                track_ids.insert(result.item[i].nTrackId);
+            }
+            return track_ids;
+        };
+
+        // 比较两个track_id集合是否存在差异
+        auto has_difference = [](const std::unordered_set<int>& set1, const DETECT_RESULT_T& result) {
+            for (int j = 0; j < result.nCount; ++j) {
+                if (set1.find(result.item[j].nTrackId) == set1.end()) {
+                    return true; // 找到不同的track_id
+                }
+            }
+            return false; // 所有track_id都匹配
+        };
+
+        // 获取last_result的track_id集合
+        std::unordered_set<int> last_track_ids = track_id_set(last_result);
+        if (last_result.nCount > cur_result.nCount) {
+            new_result.result_diff = has_difference(last_track_ids, cur_result);
+        } else if (last_result.nCount < cur_result.nCount) {
+            new_result.result_diff = true;
+        } else {
+            new_result.result_diff = has_difference(last_track_ids, cur_result);
+        }
+
         m_mapRlts[nGrp] = new_result;
 
+        //统计每个类型的总数量
         for (AX_U32 i = 0; i < new_result.nCount; ++i) {
             ++m_arrCount[new_result.item[i].eType];
         }
@@ -110,7 +141,6 @@ public:
         }
 
         result = m_mapRlts[nGrp];
-        m_mapRlts.erase(nGrp);
         return AX_TRUE;
     }
 

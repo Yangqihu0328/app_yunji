@@ -105,12 +105,12 @@ DETECT_CONFIG_T CBoxConfig::GetDetectConfig(AX_VOID) {
     conf.nDepth = m_Ini.GetIntValue(SECT, "fifo depth", 1);
     conf.nVnpuMode = m_Ini.GetIntValue(SECT, "npu mode", 3);
 
-    //使用的是stream的通道数量。
-    conf.nChannelNum = AX_MIN(m_Ini.GetIntValue("STREAM", "count", 0), 32);
-    for (AX_S32 i = 0; i < conf.nChannelNum; ++i) {
-
+    //TODO:通道数量默认为0？要杨工修改一下，要读取配置文件，否则无法开启算法功能
+    conf.nChannelNum = 0;
+    //默认开启16个配置
+    for (AX_S32 i = 0; i < 16; ++i) {
         AX_CHAR str[32];
-        sprintf(str, "channe_%02d", i);
+        sprintf(str, "channel_%02d", i);
         vector<AX_S32> vec;
         m_Ini.GetIntValue(SECT, str, vec);
 

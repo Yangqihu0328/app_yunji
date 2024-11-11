@@ -42,9 +42,11 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
 
                         DrawBox(axFrame, fhvp);
 
-                        //相当于每一帧他都进行检测
-                        for (auto &m : s_lstObs) {
-                            m->ProcessFrame(&axFrame);
+                        //有差别才送去
+                        if (fhvp.result_diff == true) {
+                            for (auto &m : s_lstObs) {
+                                m->ProcessFrame(&axFrame);
+                            }
                         }
                     }
                 }
@@ -348,7 +350,11 @@ AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhv
         yuv.DrawRect(rc.nX, rc.nY, rc.nW, rc.nH, CYuvHandler::YUV_WHITE);
 #endif
         // PRINT_ELAPSED_USEC("cpu draw rect");
+        AX_CHAR track_id[32] = {0};
+        snprintf(track_id, sizeof(track_id), "TRACK:%02d ", fhvp.item[i].nTrackId);
+        m_font.FillString(track_id, rc.nX, rc.nY, &yuv, canvas.nW, canvas.nH);
     }
+    
 
 #ifdef DRAW_FHVP_LABEL
     //这里只是统计最终数量

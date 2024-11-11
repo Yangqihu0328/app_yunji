@@ -75,7 +75,7 @@ public:
     AX_BOOL Start(AX_VOID);
     AX_BOOL Stop(AX_VOID);
 
-    AX_BOOL StartId(int id);
+    AX_BOOL StartId(int id, DETECTOR_CHN_ATTR_T det_attr);
     AX_BOOL StopId(int id);
 
     AX_BOOL Clear(AX_VOID);

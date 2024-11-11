@@ -1140,7 +1140,15 @@ AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
     LOG_MM_W(BOX, "+++"); 
 
     if (m_detect) {
-        if (!m_detect->StartId(id)) {
+        DETECTOR_CHN_ATTR_T det_attr;
+        DETECT_CONFIG_T detectConfig = CBoxConfig::GetInstance()->GetDetectConfig();
+
+        for (int i=0; i<3; i++) {
+            det_attr.nPPL[i] = detectConfig.tChnParam[id].nPPL[i];
+        }
+        det_attr.nVNPU = detectConfig.tChnParam[id].nVNPU;
+        det_attr.bTrackEnable = detectConfig.tChnParam[id].bTrackEnable;
+        if (!m_detect->StartId(id, det_attr)) {
             return AX_FALSE;
         }
     }
