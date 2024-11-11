@@ -995,6 +995,23 @@ AX_VOID MqttClient::SendAlarmMsg() {
     }
 }
 
+static void OnPlayAudio(std::string &audioUrl) {
+    json root;
+    root["result"] = 0;
+
+    if (access(audioUrl.c_str(), F_OK) == 0) {
+        CBoxBuilder *a_builder = CBoxBuilder::GetInstance();
+        a_builder->playAudio(audioUrl);
+
+        root["msg"] = "success";
+    } else {
+        root["msg"] = "failed";
+    }
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+}
+
 /*保证回调执行的程序要简单，如果比较复杂，需要考虑要用状态机处理回调*/
 static void messageArrived(MQTT::MessageData& md) {
     LOG_MM_D(MQTT_CLIENT,"messageArrived ++++\n");
@@ -1086,6 +1103,9 @@ static void messageArrived(MQTT::MessageData& md) {
     } else if (type == "stopRtspPreview") { // 停止预览
         std::string mediaUrl = jsonRes["mediaUrl"];
         OnStopRtspPreview(mediaUrl);
+    } else if (type == "playAudio"){ // 播放音频
+        std::string audioUrl = jsonRes["audioUrl"];
+        OnPlayAudio(audioUrl);
     }
 
     LOG_MM_D(MQTT_CLIENT,"messageArrived ----\n");

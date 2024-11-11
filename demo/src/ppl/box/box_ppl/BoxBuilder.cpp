@@ -250,6 +250,10 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         }
     }
 
+    if(!InitAudio()) {
+        return AX_FALSE;
+    }
+
 #if defined(__RECORD_VB_TIMESTAMP__)
     AllocTimestampBufs();
 #endif
@@ -793,6 +797,20 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
     return AX_TRUE;
 }
 
+AX_BOOL CBoxBuilder::InitAudio() {
+    m_audio = make_unique<CAudio>();
+    if (!m_audio) {
+        LOG_M_E(BOX, "%s: create audio instance fail", __func__);
+        return AX_FALSE;
+    }
+
+    if (!m_audio->Init()) {
+        return AX_FALSE;
+    }
+
+    return AX_TRUE;
+}
+
 AX_BOOL CBoxBuilder::DeInit(AX_VOID) {
     /* destory instances */
 #define DESTORY_INSTANCE(p) \
@@ -829,6 +847,7 @@ AX_BOOL CBoxBuilder::DeInit(AX_VOID) {
     DESTORY_INSTANCE(m_dispSecondary);
     DESTORY_INSTANCE(m_detect);
     DESTORY_INSTANCE(m_vdec);
+    DESTORY_INSTANCE(m_audio);
 
 #undef DESTORY_INSTANCE
 
@@ -930,6 +949,12 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             }
         }
 
+        if (m_audio) {
+            if (!m_audio->Start()) {
+                return AX_FALSE;
+            }
+        }
+
         // for (auto &&m : m_arrStreamer) {
         //     if (m) {
         //         thread t([](IStreamHandler *p) { p->Start(); }, m.get());
@@ -998,6 +1023,10 @@ AX_BOOL CBoxBuilder::WaitDone(AX_VOID) {
 
     if (m_vdec) {
         m_vdec->Stop();
+    }
+
+    if (m_audio) {
+        m_audio->Stop();
     }
 
     DeInit();
@@ -1211,6 +1240,11 @@ AX_BOOL CBoxBuilder::StopStream(AX_S32 id) {
 
     LOG_MM_W(BOX, "---");
 
+    return AX_TRUE;
+}
+
+AX_BOOL CBoxBuilder::playAudio(std::string file) {
+    m_audio->PlayAudio(file);
     return AX_TRUE;
 }
 

@@ -28,6 +28,7 @@
 #include "AXRtspObserver.h"
 #include "Vo.hpp"
 #include "linker.hpp"
+#include "BoxAudio.hpp"
 
 //3rd
 #include "MqttClient.hpp"
@@ -53,6 +54,8 @@ public:
 
     AX_BOOL QueryStreamsAllEof(AX_VOID);
 
+    AX_BOOL playAudio(std::string file);
+
 protected:
     AX_BOOL Init(AX_VOID);
     AX_BOOL DeInit(AX_VOID);
@@ -70,6 +73,8 @@ protected:
     AX_BOOL InitDetector(const DETECT_CONFIG_T& detectConfig);
     AX_BOOL InitDecoder(const STREAM_CONFIG_T& streamConfig);
     AX_BOOL CheckDiskSpace(const STREAM_CONFIG_T& streamConfig);
+
+    AX_BOOL InitAudio();
 
 #if defined(__RECORD_VB_TIMESTAMP__)
     AX_VOID AllocTimestampBufs(AX_VOID);
@@ -93,6 +98,8 @@ protected:
     std::vector<CVideoEncoder*> m_vecVencInstance;
     std::vector<std::unique_ptr<IObserver>> m_vencObservers;
     std::vector<std::unique_ptr<IObserver>> m_vecRtspObs;
+
+    std::unique_ptr<CAudio> m_audio;
 
     // primary
     std::unique_ptr<CVo> m_disp;
