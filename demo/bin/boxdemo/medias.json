@@ -2,116 +2,324 @@
     "count": 16,
     "medias":[
         {
-            "channel": 0,
-            "disable": 0,
+            "id": 0,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 1,
-            "disable": 0,
+            "id": 1,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 2,
-            "disable": 0,
+            "id": 2,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 3,
-            "disable": 0,
+            "id": 3,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 4,
-            "disable": 0,
+            "id": 4,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 5,
-            "disable": 0,
+            "id": 5,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 6,
-            "disable": 0,
+            "id": 6,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 7,
-            "disable": 0,
+            "id": 7,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 8,
-            "disable": 0,
+            "id": 8,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 9,
-            "disable": 0,
+            "id": 9,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 10,
-            "disable": 0,
+            "id": 10,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 11,
-            "disable": 0,
+            "id": 11,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 12,
-            "disable": 0,
+            "id": 12,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 13,
-            "disable": 0,
+            "id": 13,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 14,
-            "disable": 0,
+            "id": 14,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         },
         {
-            "channel": 15,
-            "disable": 0,
+            "id": 15,
+            "delete": 0,
+            "status": 0,
             "url": "rtsp://192.168.2.8:8554/road3_1920x1080_25fps_2000kbps.264",
             "name": "remote device",
-            "desc": "remote device"
+            "desc": "remote device",
+            "task": 
+            {
+                "id": 0,
+                "delete": 0,
+                "status": 0,
+                "url": "push url",
+                "name": "task name",
+                "desc": "task desc",
+                "algo1": 4,
+                "algo2": 5,
+                "algo3": 6
+            }
         }
     ]
 }

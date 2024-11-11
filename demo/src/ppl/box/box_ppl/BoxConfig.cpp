@@ -251,40 +251,6 @@ UT_CONFIG_T CBoxConfig::GetUTConfig(AX_VOID) {
     return conf;
 }
 
-AX_BOOL CBoxConfig::AddStreamUrl(AX_S32 channelId, std::string& channelUrl) {
-    AX_BOOL bRet = AX_FALSE;
-    const AX_CHAR *SECT = "STREAM";
-
-    do {
-        AX_CHAR szKey[32];
-        sprintf(szKey, "stream%02d", channelId);
-        printf("update stream id: %s to %s\n", szKey, channelUrl.c_str());
-        m_Ini.SetStringValue(SECT, szKey, channelUrl);
-
-        int nCount = m_Ini.GetIntValue(SECT, "stream count", 0);
-        m_Ini.SetIntValue(SECT, "stream count", nCount+1);
-    } while (0);
-
-    return bRet;
-}
-
-AX_BOOL CBoxConfig::RemoveStreamUrl(AX_S32 channelId) {
-    const AX_CHAR *SECT = "STREAM";
-
-    do {
-        AX_CHAR szKey[32];
-        sprintf(szKey, "stream%02d", channelId);
-        m_Ini.DeleteValue(SECT, szKey);
-
-        int nCount = m_Ini.GetIntValue(SECT, "stream count", 0);
-        if (nCount>0) {
-            m_Ini.SetIntValue(SECT, "stream count", nCount-1);
-        }
-    } while (0);
-
-    return AX_TRUE;
-}
-
 AX_BOOL CBoxConfig::AddAlgoTask(AX_S32 channelId, std::vector<int> &task_vec) {
     AX_BOOL bRet = AX_FALSE;
     const AX_CHAR *SECT = "DETECT";
@@ -321,14 +287,6 @@ AX_BOOL CBoxConfig::RemoveAlgoTask(AX_S32 channelId) {
         sprintf(szKey, "channel%02d", channelId);
         m_Ini.DeleteValue(SECT, szKey);
     } while (0);
-
-    return AX_TRUE;
-}
-
-AX_BOOL CBoxConfig::GetStreamCount(AX_S32 &count) {
-    const AX_CHAR *SECT = "STREAM";
-
-    count = m_Ini.GetIntValue(SECT, "count", 0);
 
     return AX_TRUE;
 }

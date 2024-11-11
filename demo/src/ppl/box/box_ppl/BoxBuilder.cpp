@@ -266,7 +266,7 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     m_arrStreamer.resize(nMediaCnt);
     for (AX_U32 i = 0; i < nMediaCnt; ++i) {
-        // if (mediasMap[i].nMediaDisable == 1) continue;
+        // if (mediasMap[i].nMediaDelete == 1) continue;
 
         STREAMER_ATTR_T stAttr;
         stAttr.strPath = mediasMap[i].szMediaUrl;
@@ -290,7 +290,7 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
     if (!streamConfig.strSataPath.empty()) {
         m_sataWritter.resize(nMediaCnt);
         for (AX_U32 i = 0; i < nMediaCnt; ++i) {
-            if (mediasMap[i].nMediaDisable == 1) continue;
+            if (mediasMap[i].nMediaDelete == 1) continue;
 
             STREAM_RECORD_ATTR_T stAttr = {i, streamConfig.nSataFileSize, streamConfig.nMaxSpaceSize, streamConfig.strSataPath};
             m_sataWritter[i] = make_unique<CStreamRecorder>();
@@ -726,7 +726,7 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
     AX_U32 nMediaCnt = 0;
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     for (AX_U32 i = 0; i < nMediaCnt; ++i) {
-        if (mediasMap[i].nMediaDisable == 1) continue;
+        if (mediasMap[i].nMediaDelete == 1) continue;
         
         m_arrStreamer[i]->RegObserver(m_vdec.get());
     }
