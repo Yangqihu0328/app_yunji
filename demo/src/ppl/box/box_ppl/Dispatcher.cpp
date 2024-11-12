@@ -44,6 +44,7 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
 
                         //有差别才送去
                         if (fhvp.result_diff == true) {
+                            axFrame.nAlgoType = fhvp.nAlgoType;
                             for (auto &m : s_lstObs) {
                                 m->ProcessFrame(&axFrame);
                             }

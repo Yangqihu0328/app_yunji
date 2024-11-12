@@ -80,6 +80,7 @@ public:
             } else {
                 new_result = last_result;
                 few_result = cur_result;
+                new_result.nAlgoType = cur_result.nAlgoType;
             }
 
             int i = new_result.nCount, j = 0;
