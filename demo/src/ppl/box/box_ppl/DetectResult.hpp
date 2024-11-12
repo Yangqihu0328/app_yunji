@@ -122,6 +122,7 @@ public:
         if (last_result.nCount == new_result.nCount) {
             //这里的result就是表示上一次稳定目标的结果
             auto result = channel_result[nGrp];
+
             if (result.nCount == 0) {
                 new_result.result_diff = true;
             } else {
@@ -129,8 +130,10 @@ public:
                 //当前结果与上一次稳定结果相比较
                 new_result.result_diff = has_difference(last_track_ids, new_result);
             }
-            //相当于会一直赋值
-            channel_result[nGrp] = new_result;
+
+            if (new_result.result_diff == true) {
+                channel_result[nGrp] = new_result;
+            }
         }
 
         m_mapRlts[nGrp] = new_result;
