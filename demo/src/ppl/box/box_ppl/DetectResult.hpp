@@ -166,7 +166,7 @@ public:
     }
 
 protected:
-    CDetectResult(AX_VOID) noexcept : channel_result(16);
+    CDetectResult(AX_VOID) noexcept : channel_result(16){};
     virtual ~CDetectResult(AX_VOID) = default;
 
 private:
