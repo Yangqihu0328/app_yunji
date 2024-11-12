@@ -621,7 +621,7 @@ static void OnSetAlgoTaskInfo(AX_U32 id, const std::string& pushUrl, const std::
     }
 
     json child;
-    child["type"] = "setMediaChannelInfo";
+    child["type"] = "OnSetAlgoTaskInfo";
     child["status"] = 0; // 0异常 1正常
 
     root["data"] = child;
@@ -725,7 +725,7 @@ static void getMacAddress(const std::string& ifname, std::string& mac) {
     close(sockfd);
 }
 
-int get_gateway(struct in_addr *gw,const char *ifname) {
+static int get_gateway(struct in_addr *gw,const char *ifname) {
     int sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
     if (sock < 0) {
         LOG_E("socket");
@@ -1023,10 +1023,10 @@ AX_BOOL MqttClient::SaveJpgFile(QUEUE_T *jpg_info) {
     CElapsedTimer::GetLocalDate(szDateBuf, 16, '-');
 
     AX_CHAR szDateDir[128] = {0};
-    sprintf(szDateDir, "%s/DEV_%02d/%s", ALARM_IMG_PATH, pJpegInfo->tCaptureInfo.tHeaderInfo.nSnsSrc + 1, szDateBuf);
+    sprintf(szDateDir, "%s/DEV_%02lld/%s", ALARM_IMG_PATH, jpg_info->u64UserData, szDateBuf);
 
     if (CDiskHelper::CreateDir(szDateDir, AX_FALSE)) {
-        sprintf(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, "%s/%s_%lld.jpg", szDateDir, pJpegInfo->tCaptureInfo.tHeaderInfo.szTimestamp, jpg_info->u64UserData);
+        sprintf(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, "%s/%s_%02lld.jpg", szDateDir, pJpegInfo->tCaptureInfo.tHeaderInfo.szTimestamp, jpg_info->u64UserData);
 
         // Open file to write
         std::ofstream outFile(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, std::ios::binary);
@@ -1057,20 +1057,11 @@ AX_VOID MqttClient::SendAlarmMsg() {
             std::string currentTimeStr;
             GetSystime(currentTimeStr);
 
-            AX_CHAR szDateBuf[16] = {0};
-            CElapsedTimer::GetLocalDate(szDateBuf, 16, '-');
-
-            AX_CHAR szDateDir[128] = {0};
-            sprintf(szDateDir, "%s/DEV_%02d/%s", ALARM_IMG_PATH, jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc + 1, szDateBuf);
-
-            AX_CHAR szImgPath[256] = {0};
-            sprintf(szImgPath, "%s/%s.jpg", szDateDir, jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp);
-
             json child = {
                 {"type", "alarmMsg"},    {"BoardId", "YJ-AIBOX-001"}, {"Time", currentTimeStr},
                 {"AlarmType", "people"}, {"AlarmStatus", "success"},  {"AlarmContent", "alarm test test ..."},
-                {"Path", szImgPath},  // jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath},
-                {"channleId", 1},     // jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel},
+                {"Path", jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath},
+                {"channleId", jpg_info.u64UserData},
             };
 
             json root;
