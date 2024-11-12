@@ -51,6 +51,7 @@ public:
     AX_BOOL bMultiplex{AX_FALSE};
     AX_U32 nFrmRefCnt{0};
     std::mutex mtxFrmRefCnt;
+    AX_U32 nAlgoType;
 
     CAXFrame(AX_VOID) {
         memset(&stFrame, 0, sizeof(stFrame));
