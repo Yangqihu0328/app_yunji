@@ -262,6 +262,8 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
 }
 
 AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
+    LOG_M_C(BOX, "InitStreamer +++++.");
+
     AX_U32 nMediaCnt = 0;
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     m_arrStreamer.resize(nMediaCnt);
@@ -282,13 +284,13 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
             return AX_FALSE;
         }
 
+        LOG_M_C(BOX, "stream %d: %s", i, stAttr.strPath.c_str());
+
         if (!mediasMap[i].nMediaDelete)
             if (!m_arrStreamer[i]->Init(stAttr))
-                return AX_FALSE;
-
-        LOG_M_C(BOX, "stream %d: %s", i, stAttr.strPath.c_str());
+                continue;
     }
-
+    
     if (!streamConfig.strSataPath.empty()) {
         m_sataWritter.resize(nMediaCnt);
         for (AX_U32 i = 0; i < nMediaCnt; ++i) {
@@ -310,10 +312,14 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
         m_sataWritter.clear();
     }
 
+    LOG_M_C(BOX, "InitStreamer -----.");
+
     return AX_TRUE;
 }
 
 AX_BOOL CBoxBuilder::InitDisplay(AX_DISPDEV_TYPE enDispDev, const DISPVO_CONFIG_T &dispVoConfig, AX_U32 nChnCount) {
+    LOG_M_C(BOX, "InitDisplay +++++.");
+
     if (dispVoConfig.nDevId == -1) {
         return AX_TRUE;
     }
@@ -372,10 +378,15 @@ AX_BOOL CBoxBuilder::InitDisplay(AX_DISPDEV_TYPE enDispDev, const DISPVO_CONFIG_
             return AX_FALSE;
         }
     }
+
+    LOG_M_C(BOX, "InitDisplay -----.");
+
     return AX_TRUE;
 }
 
 AX_BOOL CBoxBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
+    LOG_M_C(BOX, "InitEncoder +++++.");
+
     int encoding_num = streamConfig.nDecodeGrps > MAX_VENC_CHANNEL_NUM ? MAX_VENC_CHANNEL_NUM : streamConfig.nDecodeGrps;
     m_vencObservers.resize(encoding_num);
     m_vecRtspObs.resize(encoding_num);
@@ -428,10 +439,14 @@ AX_BOOL CBoxBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
         } while (0);
     }
 
+     LOG_M_C(BOX, "InitEncoder -----.");
+
     return AX_TRUE;
 }
 
 AX_BOOL CBoxBuilder::InitDispRecorder(const string &strRecordPath, AX_S32 nMaxRecordSize, AX_BOOL bMP4) {
+    LOG_M_C(BOX, "InitEncoder +++++.");
+
     m_dispRecorder = make_unique<CBoxRecorder>();
     if (!m_dispRecorder) {
         LOG_M_E(BOX, "%s: create record instance fail", __func__);
@@ -469,6 +484,8 @@ AX_BOOL CBoxBuilder::InitDispRecorder(const string &strRecordPath, AX_S32 nMaxRe
     /* link from vo draw layer to venc */
     m_linker.Link({AX_ID_VO, (AX_S32)m_disp->GetVideoLayer(), 0}, {AX_ID_VENC, (AX_S32)conf.veChn, 0});
     LOG_M_N(BOX, "enable recording, save path %s", strRecordPath.c_str());
+
+    LOG_M_C(BOX, "InitEncoder -----.");
 
     return AX_TRUE;
 }
@@ -514,6 +531,8 @@ AX_BOOL CBoxBuilder::InitJenc() {
 }
 
 AX_BOOL CBoxBuilder::InitDispatcher(const string &strFontPath, AX_U32 nDispType) {
+    LOG_M_C(BOX, "InitDispatcher +++++.");
+
     m_arrDispatcher.resize(m_nDecodeGrpCount);
     m_arrDispatchObserver.resize(m_nDecodeGrpCount);
     for (AX_U32 i = 0; i < m_nDecodeGrpCount; ++i) {
@@ -556,10 +575,14 @@ AX_BOOL CBoxBuilder::InitDispatcher(const string &strFontPath, AX_U32 nDispType)
         }
     }
 
+    LOG_M_C(BOX, "InitDispatcher -----.");
+
     return AX_TRUE;
 }
 
 AX_BOOL CBoxBuilder::InitMqtt() {
+    LOG_M_C(BOX, "InitMqtt +++++.");
+
     mqtt_client = std::make_unique<MqttClient>();
     if (!mqtt_client) {
         LOG_MM_E(BOX, "Create MqttClient instance failed.");
@@ -573,10 +596,14 @@ AX_BOOL CBoxBuilder::InitMqtt() {
         return AX_FALSE;
     }
 
+    LOG_M_C(BOX, "InitMqtt -----.");
+
     return AX_TRUE;
 }
 
 AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
+    LOG_M_C(BOX, "InitDetector +++++.");
+
     m_detect = make_unique<CDetector>();
     if (!m_detect) {
         LOG_M_E(BOX, "%s: create detector instance fail", __func__);
@@ -608,10 +635,14 @@ AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
         return AX_FALSE;
     }
 
+    LOG_M_C(BOX, "InitDetector -----.");
+
     return AX_TRUE;
 }
 
 AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
+    LOG_M_C(BOX, "InitDecoder +++++.");
+
     m_vdec = make_unique<CVideoDecoder>();
     if (!m_vdec) {
         LOG_M_E(BOX, "%s: create vidoe decoder instance instance fail", __func__);
@@ -795,6 +826,8 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
             return AX_FALSE;
         }
     }
+
+    LOG_M_C(BOX, "InitDecoder -----.");
 
     return AX_TRUE;
 }
@@ -1107,6 +1140,7 @@ AX_BOOL CBoxBuilder::StopAllStreams(AX_VOID) {
 }
 
 AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
+    LOG_M_C(BOX, "CheckDiskSpace +++++.");
     // 获取当前通道信息
     AX_U32 nMediaCnt = 0;
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
@@ -1132,6 +1166,8 @@ AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
         return AX_FALSE;
     }
 
+    LOG_M_C(BOX, "CheckDiskSpace -----.");
+
     return AX_TRUE;
 }
 
@@ -1139,24 +1175,25 @@ AX_BOOL CBoxBuilder::CheckDiskSpace(const STREAM_CONFIG_T &streamConfig) {
 AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
     LOG_MM_W(BOX, "+++"); 
 
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+
     if (m_detect) {
         DETECTOR_CHN_ATTR_T det_attr;
-        DETECT_CONFIG_T detectConfig = CBoxConfig::GetInstance()->GetDetectConfig();
-
-        for (int i=0; i<3; i++) {
-            det_attr.nPPL[i] = detectConfig.tChnParam[id].nPPL[i];
+        memset(&det_attr, 0, sizeof(det_attr));
+        for (int i=0; i<mediasMap[id].taskInfo.vAlgo.size(); i++) {
+            det_attr.nPPL[i] = mediasMap[id].taskInfo.vAlgo[i];
         }
-        det_attr.nVNPU = detectConfig.tChnParam[id].nVNPU;
-        det_attr.bTrackEnable = detectConfig.tChnParam[id].bTrackEnable;
+        det_attr.nVNPU = 1;
+        det_attr.bTrackEnable = AX_TRUE;
         if (!m_detect->StartId(id, det_attr)) {
             return AX_FALSE;
         }
     }
 
-    // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    
     if (id < (AX_S32)mediasMap.size()) {
         STREAMER_ATTR_T stAttr;
         stAttr.strPath = mediasMap[id].szMediaUrl;

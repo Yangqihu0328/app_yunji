@@ -17,22 +17,20 @@
 typedef struct {
     AX_U32 nTaskId;
     AX_U32 nTaskDelete;
-    AX_U32 nTaskStatus;
+    AX_U32 nTaskStatus; // 0未运行 1运行中
     char szPushUrl[128];
     char szTaskName[32];
-    char szTaskDesc[32];
-    AX_U32 nAlgo1;
-    AX_U32 nAlgo2;
-    AX_U32 nAlgo3;
+    char szTaskDesc[256];
+    std::vector<AX_U32> vAlgo;
 } TASK_INFO_T;
 
 typedef struct {
     AX_U32 nMediaId;
     AX_U32 nMediaDelete;
-    AX_U32 nMediaStatus;
+    AX_U32 nMediaStatus; // 0异常 1正常/未使用 2使用中
     char szMediaUrl[128];
     char szMediaName[32];
-    char szMediaDesc[32];
+    char szMediaDesc[256];
     TASK_INFO_T taskInfo;
 } MEDIA_INFO_T;
 

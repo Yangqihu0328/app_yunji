@@ -67,7 +67,9 @@ STREAM_CONFIG_T CBoxConfig::GetStreamConfig(AX_VOID) {
     conf.nMaxStreamBufSize = m_Ini.GetIntValue(SECT, "max stream buf size", 0x200000);
 
     // media path
-    conf.strMediaPath = m_Ini.GetStringValue(SECT, "path", "");
+    conf.strMediaPath = m_Ini.GetStringValue(SECT, "media list path", "");
+
+    conf.strModelPath = m_Ini.GetStringValue(SECT, "model list path", "");
 
     conf.nDecodeGrps = m_Ini.GetIntValue(SECT, "vdec count", 0);
 

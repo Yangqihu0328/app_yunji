@@ -260,10 +260,9 @@ struct AlgoTask{
 };
 
 enum ContrlCmd {
-  AddAlgo = 0,
+  StartAlgo = 0,
   RemoveAlgo = 1,
-  StartStream = 2,
-  StopStream = 3,
+  StopAlgo = 2,
 };
 
 struct StreamCmd {

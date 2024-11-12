@@ -31,6 +31,7 @@ typedef struct {
     AX_U64 nMaxSpaceSize;
     std::string strSataPath;
     std::string strMediaPath;
+    std::string strModelPath;
     AX_U32 nLinkMode;
 } STREAM_CONFIG_T;
 

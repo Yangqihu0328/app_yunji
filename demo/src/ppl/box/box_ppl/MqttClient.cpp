@@ -7,6 +7,7 @@
 #include "BoxBuilder.hpp"
 #include "EncoderOptionHelper.h"
 #include "BoxMediaParser.hpp"
+#include "BoxModelParser.hpp"
 
 #include "httplib.h"
 #include "nlohmann/json.hpp"
@@ -495,7 +496,7 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
     if (id < (AX_U32)mediasMap.size()) {
         mediasMap[id].nMediaId = id;
         mediasMap[id].nMediaDelete = 0;
-        mediasMap[id].nMediaStatus = 0;
+        mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
         strcpy(mediasMap[id].szMediaUrl, mediaUrl.c_str());
         strcpy(mediasMap[id].szMediaName, mediaName.c_str());
         strcpy(mediasMap[id].szMediaDesc, mediaDesc.c_str());
@@ -555,6 +556,39 @@ static void OnDelMediaChannelInfo(AX_U32 id) {
     LOG_M_C(MQTT_CLIENT, "OnDelMediaChannelInfo ----.");
 }
 
+static void OnGetAiModelList() {
+    LOG_M_C(MQTT_CLIENT, "OnGetAiModelList ++++.");
+
+    // 获取当前通道信息
+    AX_U32 nModelCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MODEL_INFO_T> modelsMap = CBoxModelParser::GetInstance()->GetModelsMap(&nModelCnt, streamConfig.strModelPath);
+
+    json arr = nlohmann::json::array();
+    for (size_t i = 0; i < modelsMap.size(); i++) {
+        arr.push_back({
+            {"modelId",      modelsMap[i].nModelId}, 
+            {"modelPath",    modelsMap[i].szModelPath}, 
+            {"modelName",    modelsMap[i].szModelName}, 
+            {"modelDesc",    modelsMap[i].szModelDesc},
+            {"modelVersion", modelsMap[i].szModelVersion}
+        });
+    }
+
+    json child;
+    child["type"] = "getAiModelList";
+    child["models"] = arr;
+
+    json root;
+    root["msg"] = "success";
+    root["data"] = child;
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+
+    LOG_M_C(MQTT_CLIENT, "OnGetAiModelList ----.");
+}
+
 static void OnGetAlgoTaskList() {
     LOG_M_C(MQTT_CLIENT, "OnGetAlgoTaskList ++++.");
 
@@ -565,17 +599,21 @@ static void OnGetAlgoTaskList() {
 
     json arr = nlohmann::json::array();
     for (size_t i = 0; i < mediasMap.size(); i++) {
-        arr.push_back({
-            {"id",        mediasMap[i].taskInfo.nTaskId}, 
-            {"delete",    mediasMap[i].taskInfo.nTaskDelete}, 
-            {"status",    mediasMap[i].taskInfo.nTaskStatus}, 
-            {"mediaName", mediasMap[i].szMediaName}, 
-            {"url",       mediasMap[i].taskInfo.szPushUrl}, 
-            {"name",      mediasMap[i].taskInfo.szTaskName}, 
-            {"algo1",     mediasMap[i].taskInfo.nAlgo1},
-            {"algo2",     mediasMap[i].taskInfo.nAlgo2},
-            {"algo3",     mediasMap[i].taskInfo.nAlgo3},
-        });
+        json leaf;
+        leaf["mediaId"]     = mediasMap[i].nMediaId;
+        leaf["mediaUrl"]    = mediasMap[i].szMediaUrl;
+        leaf["taskDelete"]  = mediasMap[i].taskInfo.nTaskDelete;
+        leaf["taskStatus"]  = mediasMap[i].taskInfo.nTaskStatus;
+        leaf["taskPushUrl"] = mediasMap[i].taskInfo.szPushUrl;
+        leaf["taskName"]    = mediasMap[i].taskInfo.szTaskName;
+        leaf["taskDesc"]    = mediasMap[i].taskInfo.szTaskDesc;
+        json algos = nlohmann::json::array();
+        for (size_t j = 0; j < mediasMap[i].taskInfo.vAlgo.size(); j++) {
+            algos.push_back(mediasMap[i].taskInfo.vAlgo[j]);
+        }
+        leaf["taskAlgos"]       = algos;
+
+        arr.push_back(leaf);
     }
 
     json child;
@@ -592,7 +630,7 @@ static void OnGetAlgoTaskList() {
     LOG_M_C(MQTT_CLIENT, "OnGetAlgoTaskList ----.");
 }
 
-static void OnSetAlgoTaskInfo(AX_U32 id, const std::string& pushUrl, const std::string& taskName, const std::string& taskDesc, AX_U32 algo1, AX_U32 algo2, AX_U32 algo3) {
+static void OnSetAlgoTaskInfo(AX_U32 id, const std::string& pushUrl, const std::string& taskName, const std::string& taskDesc, std::vector<AX_U32> vAlgo) {
     LOG_M_C(MQTT_CLIENT, "OnSetAlgoTaskInfo ++++.");
 
     json root;
@@ -602,14 +640,13 @@ static void OnSetAlgoTaskInfo(AX_U32 id, const std::string& pushUrl, const std::
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     if (id < (AX_U32)mediasMap.size()) {
+        mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
         mediasMap[id].taskInfo.nTaskDelete = 0;
-        mediasMap[id].taskInfo.nTaskStatus = 0;
+        mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
         strcpy(mediasMap[id].taskInfo.szPushUrl, pushUrl.c_str());
         strcpy(mediasMap[id].taskInfo.szTaskName, taskName.c_str());
         strcpy(mediasMap[id].taskInfo.szTaskDesc, taskDesc.c_str());
-        mediasMap[id].taskInfo.nAlgo1 = algo1;
-        mediasMap[id].taskInfo.nAlgo2 = algo2;
-        mediasMap[id].taskInfo.nAlgo3 = algo3;
+        mediasMap[id].taskInfo.vAlgo = vAlgo;
 
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
@@ -622,7 +659,7 @@ static void OnSetAlgoTaskInfo(AX_U32 id, const std::string& pushUrl, const std::
     }
 
     json child;
-    child["type"] = "setMediaChannelInfo";
+    child["type"] = "setAlgoTaskInfo";
     child["status"] = 0; // 0异常 1正常
 
     root["data"] = child;
@@ -643,14 +680,17 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     if (id < (AX_U32)mediasMap.size()) {
+        mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
         mediasMap[id].taskInfo.nTaskDelete = 1;
+        mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
 
-        LOG_M_C(MQTT_CLIENT, "OnDelAlgoTaskInfo ++++.");
+        std::unique_lock<std::mutex> lock(mtx);
+        StreamQueue.push({ContrlCmd::RemoveAlgo, id});
+        lock.unlock();
 
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
 
-        LOG_M_C(MQTT_CLIENT, "OnDelAlgoTaskInfo ++++.");
 
         root["result"] = 0;
         root["msg"] = "success";
@@ -660,7 +700,7 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
     }
 
     json child;
-    child["type"] = "getAlgoTaskList";
+    child["type"] = "delAlgoTaskInfo";
 
     root["data"] = child;
 
@@ -672,10 +712,43 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
 
 static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskControl ++++.");
-    std::unique_lock<std::mutex> lock(mtx);
 
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    if (id < (AX_U32)mediasMap.size()) {
+        if (controlCommand == ContrlCmd::StartAlgo) {
+            mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
+            mediasMap[id].taskInfo.nTaskStatus = 1; // 0未运行 1运行中
+        } else if (controlCommand == ContrlCmd::RemoveAlgo) {
+            mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
+            mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
+        } else if (controlCommand == ContrlCmd::StopAlgo) {
+            mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
+            mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
+        }
+
+        // 更新配置
+        CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
+    }
+
+    std::unique_lock<std::mutex> lock(mtx);
     StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
     lock.unlock();
+
+    json child;
+    child["type"] = "algoTaskControl";
+
+    json root;
+    root["result"] = 0;
+    root["msg"] = "success";
+    root["data"] = child;
+
+    std::string payload = root.dump();
+
+    SendMsg("web-message", payload.c_str(), payload.size());
+
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskControl ----.");
 }
 
@@ -1158,17 +1231,25 @@ static void messageArrived(MQTT::MessageData& md) {
     } else if (type == "delMediaChannelInfo") { // 删除通道信息
         AX_U32 mediaId = jsonRes["mediaId"];
         OnDelMediaChannelInfo(mediaId);
+    } else if (type == "getAiModelList") { // 算法模型列表
+        OnGetAiModelList();
     } else if (type == "getAlgoTaskList") { // 算法任务列表
         OnGetAlgoTaskList();
     } else if (type == "setAlgoTaskInfo") { // 配置算法任务
         AX_U32 mediaId = jsonRes["mediaId"];
-        std::string pushUrl  = jsonRes["pushUrl"];
+        std::string pushUrl  = jsonRes["taskPushUrl"];
         std::string taskName = jsonRes["taskName"];
         std::string taskDesc = jsonRes["taskDesc"];
-        AX_U32 algo1 = jsonRes["algo1"];
-        AX_U32 algo2 = jsonRes["algo2"];
-        AX_U32 algo3 = jsonRes["algo3"];
-        OnSetAlgoTaskInfo(mediaId, pushUrl, taskName, taskDesc, algo1, algo2, algo3);
+
+        std::vector<AX_U32> vAlgo;
+        nlohmann::json algos = jsonRes["taskAlgos"];
+        if (algos.is_array()) {
+            for (auto algo : algos) {
+                vAlgo.push_back((AX_U32)algo);
+            }
+        }
+
+        OnSetAlgoTaskInfo(mediaId, pushUrl, taskName, taskDesc, vAlgo);
     } else if (type == "delAlgoTaskInfo") { // 删除算法任务
         AX_U32 mediaId = jsonRes["mediaId"];
         OnDelAlgoTaskInfo(mediaId);
@@ -1329,15 +1410,13 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
             StreamQueue.pop();
             lock.unlock();
 
-            if (stream_cmd.cmd == ContrlCmd::AddAlgo) {
+            if (stream_cmd.cmd == ContrlCmd::StartAlgo) {
                 p_builder->RemoveStream(stream_cmd.id);
                 p_builder->AddStream(stream_cmd.id);
             } else if (stream_cmd.cmd == ContrlCmd::RemoveAlgo) {
                 p_builder->RemoveStream(stream_cmd.id);
-            } else if (stream_cmd.cmd == ContrlCmd::StartStream) {
-                p_builder->StartStream(stream_cmd.id);
-            } else if (stream_cmd.cmd == ContrlCmd::StopStream) {
-                p_builder->StopStream(stream_cmd.id);
+            } else if (stream_cmd.cmd == ContrlCmd::StopAlgo) {
+                p_builder->RemoveStream(stream_cmd.id);
             }
         }
 
