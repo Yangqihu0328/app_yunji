@@ -906,7 +906,6 @@ static void OnGetAiBoxNetwork() {
                     if (pos = line.find("dns-nameservers") != std::string::npos) {
                         found = false;
                         pos += (16 + 3);
-                        printf("dns-nameservers: %s\n", line.c_str());
                         line = line.substr(pos, line.length() - pos);
                         break;
                     }
@@ -963,13 +962,15 @@ static void OnSetAiBoxNetwork(const std::string& name, const AX_U32 dhcp, const 
         newConfig.push_back("    address " + address);
         newConfig.push_back("    netmask " + mask);
         newConfig.push_back("    gateway " + gateway);
-        newConfig.push_back("    dns-nameservers " + gateway + " " + dns);
+        newConfig.push_back("    dns-nameservers " + dns);
     }
 
     for (auto &line : lines) {
-        if (line.find("allow-hotplug " + name) != std::string::npos)
+        if (line.find("allow-hotplug " + name) != std::string::npos) {
             found = true;
-        if (found && line.empty())
+            continue;
+        }
+        if (found && (line.empty() || (line.find("allow-hotplug") != std::string::npos)))
             found = false;
 
         if (found)
