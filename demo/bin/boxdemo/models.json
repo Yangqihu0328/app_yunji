@@ -1,0 +1,26 @@
+{
+    "count": 3,
+    "models":[
+        {
+            "id": 4,
+            "path": "/opt/etc/skelModels/1024x576/part/ax_ax650_hvcfp_algo_model_V1.0.2.axmodel",
+            "name": "人车非",
+            "desc": "人物,机动车,非机动车检测",
+            "version": "1.0.2"
+        },
+        {
+            "id": 5,
+            "path": "/opt/etc/skelModels/1024x576/part/ax_ax650_hvcfp_algo_model_V1.0.2.axmodel",
+            "name": "人脸",
+            "desc": "人物面部检测",
+            "version": "1.0.2"
+        },
+        {
+            "id": 6,
+            "path": "/opt/etc/skelModels/1024x576/part/ax_ax650_hvcfp_algo_model_V1.0.2.axmodel",
+            "name": "火焰",
+            "desc": "火焰检测",
+            "version": "1.0.2"
+        }
+    ]
+}

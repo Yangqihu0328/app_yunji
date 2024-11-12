@@ -28,7 +28,8 @@ all: $(SUBDIRS)
 
 install: $(SUBDIRS_INSTALL)
 	@$(ECHO) -e $(GREEN)"\nInstall $(CURDIR) success!!\n"  $(DONE)
-	cp $(CUR_PATH)/../../3rd/lib/mqtt/libMQTTPacketClient.so  $(ROOTFS_TARGET_PATH)/bin/boxDemo
+	cp -rf $(CUR_PATH)/../../3rd/lib/mqtt/libMQTTPacketClient.so  $(ROOTFS_TARGET_PATH)/bin/BoxDemo
+	cp -rf $(CUR_PATH)/../../3rd/bin/ZLMediaKit  $(ROOTFS_TARGET_PATH)/bin/BoxDemo
 
 clean:	$(SUBDIRS_CLEAN)
 	@$(ECHO) -e $(GREEN)"\nClean $(CURDIR) success!!\n"  $(DONE)
