@@ -1017,16 +1017,18 @@ static void OnStopRtspPreview(std::string& key) {
 // /* TODO: need web support file copy, then show in web*/
 AX_BOOL MqttClient::SaveJpgFile(QUEUE_T *jpg_info) {
     JPEG_DATA_INFO_T *pJpegInfo = &jpg_info->tJpegInfo;
+    AX_U32 nChn = jpg_info->u64UserData & 0xff;
+    AX_U32 nAlgoType = (jpg_info->u64UserData >> 8) & 0xff;
 
     /* Data file parent directory format: </XXX/DEV_XX/YYYY-MM-DD> */
     AX_CHAR szDateBuf[16] = {0};
     CElapsedTimer::GetLocalDate(szDateBuf, 16, '-');
 
     AX_CHAR szDateDir[128] = {0};
-    sprintf(szDateDir, "%s/DEV_%02lld/%s", ALARM_IMG_PATH, jpg_info->u64UserData, szDateBuf);
+    sprintf(szDateDir, "%s/DEV_%02d/%02d/%s", ALARM_IMG_PATH, nChn, nAlgoType, szDateBuf);
 
     if (CDiskHelper::CreateDir(szDateDir, AX_FALSE)) {
-        sprintf(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, "%s/%s_%02lld.jpg", szDateDir, pJpegInfo->tCaptureInfo.tHeaderInfo.szTimestamp, jpg_info->u64UserData);
+        sprintf(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, "%s/%s_%02d_%02d.jpg", szDateDir, pJpegInfo->tCaptureInfo.tHeaderInfo.szTimestamp, nChn, nAlgoType);
 
         // Open file to write
         std::ofstream outFile(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, std::ios::binary);
