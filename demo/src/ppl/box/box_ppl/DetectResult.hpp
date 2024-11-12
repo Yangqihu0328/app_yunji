@@ -118,29 +118,20 @@ public:
 
         //现在的问题：检测容易漏检，导致跟踪算法容易跟丢,容易出现新的track id
         //如果某一帧跟丢的话，判断上一帧的结果，下一帧肯定找不到上一帧的track id
-        //现在使用错误的写法，因为同个目标的track id会更新，直接判断相等的情况
-        //其实本质的写法应该是保存多个结果，两帧确实有点少
-        std::unordered_set<int> last_track_ids = track_id_set(last_result);
-
         //两次的数量相同，说明当前是较稳定的,把这个结果保存起来。
         if (last_result.nCount == new_result.nCount) {
-            for (int i=0; i<cur_result.nCount; i++) {
-                channel_result[nGrp].push_back(cur_result.item[i].nTrackId);
+            //这里的result就是表示上一次稳定目标的结果
+            auto result = channel_result[nGrp];
+            if (result.nCount == 0) {
+                new_result.result_diff = true;
+            } else {
+                std::unordered_set<int> last_track_ids = track_id_set(result);
+                //当前结果与上一次稳定结果相比较
+                new_result.result_diff = has_difference(last_track_ids, new_result);
             }
-
-
-            // new_result.result_diff = true;
-            // std::unordered_set<int> track_ids;
-            // track_ids.insert(result.item[i].nTrackId);
-            
-            // channel_result[nGrp].insert(cur_result.item[i].nTrackId);
+            //相当于会一直赋值
+            channel_result[nGrp] = new_result;
         }
-
-
-        new_result.result_diff = has_difference(last_track_ids, cur_result);
-
-        //保存5帧的历史数据,如果有结果的话，就
-        channel_result[nGrp][]
 
         m_mapRlts[nGrp] = new_result;
 
@@ -175,14 +166,13 @@ public:
     }
 
 protected:
-    CDetectResult(AX_VOID) noexcept = default;
+    CDetectResult(AX_VOID) noexcept : channel_result(16);
     virtual ~CDetectResult(AX_VOID) = default;
 
 private:
     std::mutex m_mtx;
     std::map<AX_S32, DETECT_RESULT_T> m_mapRlts;
-    // int channel_result[MAX_CHANNEL_SIZE][MAX_RESULT_SIZE] = {0};
-    std::vector<std::vector<int>> channel_result;
+    std::vector<DETECT_RESULT_T> channel_result;
 
     AX_U64 m_arrCount[DETECT_TYPE_BUTT] = {0};
 };
