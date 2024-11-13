@@ -294,15 +294,9 @@ static void OnGetDashBoardInfo() {
     GetNPUInfo(npu_utilization);
 
     json board_info = {
-<<<<<<< HEAD
         {"type", "getDashBoardInfo"}, 
         {"BoardId", "YJ-AIBOX-001"}, 
         {"BoardIp", szIP},
-=======
-        {"type", "getDashBoardInfo"},
-        {"BoardId", "YJ-AIBOX-001"},
-        {"BoardIp", ipAddress},
->>>>>>> 7a95b09ec04153f69719f7a2c332a7e48a6e1ab2
         {"BoardPlatform", "AX650"},
         {"BoardTemp", temperature},
         {"BoardType", "LAN"},
@@ -1081,122 +1075,6 @@ static void OnSetAiBoxNetwork(const std::string& name, const AX_U32 dhcp, const 
     LOG_M_C(MQTT_CLIENT, "OnSetAiBoxNetwork ----.");
 }
 
-<<<<<<< HEAD
-=======
-static void OnStartRtspPreview(std::string& streamUrl) {
-    printf("OnStartRtspPreview ++++\n");
-
-    time_t t = time(nullptr);
-
-    httplib::Client httpclient(ZLM_API_URL);
-    httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
-        printf("=====================================================================\n");
-        printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
-        printf("=====================================================================\n");
-        printf("http response body=\n%s", res.body.c_str());
-        printf("=====================================================================\n"); });
-    httpclient.set_logger(logger);
-
-    char api[128] = {0};
-    sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=%ld&url=%s", ZLM_SECRET, ZLM_IP, "live", t, streamUrl.c_str());
-
-    json child;
-    child["type"] = "startRtspPreview";
-    child["streamUrl"] = streamUrl;
-
-    json root;
-    httplib::Result result = httpclient.Get(api);
-    if (result && result->status == httplib::OK_200) {
-        auto jsonRes = nlohmann::json::parse(result->body);
-        int code = jsonRes["code"];
-        if (code == 0) {
-            std::string key = jsonRes["data"]["key"];
-            child["key"] = key;
-
-            root["result"] = 0;
-            root["msg"] = "success";
-        } else {
-            root["result"] = -1;
-            root["msg"] = jsonRes["msg"];
-        }
-    }
-    root["data"] = child;
-
-    std::string payload = root.dump();
-
-    SendMsg("web-message", payload.c_str(), payload.size());
-
-    printf("OnStartRtspPreview ----\n");
-}
-
-static void OnStopRtspPreview(std::string& key) {
-    printf("OnStopRtspPreview ++++\n");
-
-    httplib::Client httpclient(ZLM_API_URL);
-    httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
-        printf("=====================================================================\n");
-        printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
-        printf("=====================================================================\n");
-        printf("http response body=\n%s", res.body.c_str());
-        printf("=====================================================================\n"); });
-    httpclient.set_logger(logger);
-
-    char api[128] = {0};
-    sprintf(api, "/index/api/delStreamProxy?secret=%s&key=%s", ZLM_SECRET, key.c_str());
-
-    json child;
-    child["type"] = "stopRtspPreview";
-
-    json root;
-    root["data"] = child;
-    httplib::Result result = httpclient.Get(api);
-    if (result && result->status == httplib::OK_200) {
-        auto jsonRes = nlohmann::json::parse(result->body);
-        int code = jsonRes["code"];
-        if (code != 0) {
-            root["result"] = -1;
-            root["msg"] = jsonRes["msg"];
-        } else {
-            root["result"] = 0;
-            root["msg"] = "success";
-        }
-    }
-
-    std::string payload = root.dump();
-
-    SendMsg("web-message", payload.c_str(), payload.size());
-
-    printf("OnStopRtspPreview ----\n");
-}
-
-static AX_VOID removeJpgFile(AX_BOOL isDir, nlohmann::json fileUrls) {
-    printf("removeJpgFile ++++\n");
-
-    json root;
-
-    if (isDir) {
-        AX_CHAR JpgDir[128] = { 0 };
-        sprintf(JpgDir, "%s%s/", GetExecPath().c_str(), ALARM_IMG_PATH);
-
-        root["type"] = "clearAllJpg";
-        root["result"] = CDiskHelper::RemoveDir(JpgDir);
-    } else {
-        root["type"] = "clearJpgFile";
-        if (fileUrls.is_array()) {
-            for (std::string path : fileUrls) {
-                CDiskHelper::RemoveFile(path.c_str());
-            }
-        }
-        root["result"] = 1;
-    }
-
-    std::string payload = root.dump();
-    SendMsg("web-message", payload.c_str(), payload.size());
-
-    printf("removeJpgFile ----\n");
-}
-
->>>>>>> 7a95b09ec04153f69719f7a2c332a7e48a6e1ab2
 // /* TODO: need web support file copy, then show in web*/
 AX_BOOL MqttClient::SaveJpgFile(QUEUE_T *jpg_info) {
     JPEG_DATA_INFO_T *pJpegInfo = &jpg_info->tJpegInfo;
@@ -1237,30 +1115,13 @@ AX_VOID MqttClient::SendAlarmMsg() {
     if (nCount > 0) {
         QUEUE_T jpg_info;
         if (arrjpegQ->Pop(jpg_info, 0)) {
-<<<<<<< HEAD
-            // SaveJpgFile(&jpg_info);
-=======
             SaveJpgFile(&jpg_info);
             AX_U32 nChn = jpg_info.u64UserData & 0xff;
             AX_U32 nAlgoType = (jpg_info.u64UserData >> 8) & 0xff;
->>>>>>> 7a95b09ec04153f69719f7a2c332a7e48a6e1ab2
 
-            // std::string currentTimeStr;
-            // GetSystime(currentTimeStr);
+            std::string currentTimeStr;
+            GetSystime(currentTimeStr);
 
-<<<<<<< HEAD
-            // json child = {
-            //     {"type", "alarmMsg"},    {"BoardId", "YJ-AIBOX-001"}, {"Time", currentTimeStr},
-            //     {"AlarmType", "people"}, {"AlarmStatus", "success"},  {"AlarmContent", "alarm test test ..."},
-            //     {"Path", jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath},
-            //     {"channleId", jpg_info.u64UserData},
-            // };
-
-            // json root;
-            // root["result"] = 0;
-            // root["msg"] = "success";
-            // root["data"] = child;
-=======
             // 获取当前通道信息
             AX_U32 nMediaCnt = 0;
             STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
@@ -1288,7 +1149,6 @@ AX_VOID MqttClient::SendAlarmMsg() {
             root["result"] = 0;
             root["msg"] = "success";
             root["data"] = child;
->>>>>>> 7a95b09ec04153f69719f7a2c332a7e48a6e1ab2
 
             // std::string payload = root.dump();
 
@@ -1322,6 +1182,33 @@ static void OnGetAlarmStatus(void) {
 
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
+}
+
+static AX_VOID removeJpgFile(AX_BOOL isDir, nlohmann::json fileUrls) {
+    printf("removeJpgFile ++++\n");
+
+    json root;
+
+    if (isDir) {
+        AX_CHAR JpgDir[128] = { 0 };
+        sprintf(JpgDir, "%s%s/", GetExecPath().c_str(), ALARM_IMG_PATH);
+
+        root["type"] = "clearAllJpg";
+        root["result"] = CDiskHelper::RemoveDir(JpgDir);
+    } else {
+        root["type"] = "clearJpgFile";
+        if (fileUrls.is_array()) {
+            for (std::string path : fileUrls) {
+                CDiskHelper::RemoveFile(path.c_str());
+            }
+        }
+        root["result"] = 1;
+    }
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+
+    printf("removeJpgFile ----\n");
 }
 
 /*保证回调执行的程序要简单，如果比较复杂，需要考虑要用状态机处理回调*/
@@ -1418,17 +1305,6 @@ static void messageArrived(MQTT::MessageData& md) {
         std::string mask = jsonRes["mask"];
         std::string dns = jsonRes["dns"];
         OnSetAiBoxNetwork(name, dhcp, address, gateway, mask, dns);
-<<<<<<< HEAD
-    } else if (type == "playAudio"){ // 播放音频
-        std::string audioUrl = jsonRes["audioUrl"];
-        OnPlayAudio(audioUrl);
-=======
-    } else if (type == "startRtspPreview") { // 开始预览
-        std::string mediaUrl = jsonRes["mediaUrl"];
-        OnStartRtspPreview(mediaUrl);
-    } else if (type == "stopRtspPreview") { // 停止预览
-        std::string mediaUrl = jsonRes["mediaUrl"];
-        OnStopRtspPreview(mediaUrl);
     } else if (type == "playAudio") { // 播放告警音频
         AX_U32 status = jsonRes["status"];
         OnAlarmControl(AX_TRUE, status);
@@ -1442,7 +1318,6 @@ static void messageArrived(MQTT::MessageData& md) {
     } else if (type == "clearJpgFiles") { // 删除指定图片
         nlohmann::json fileUrls = jsonRes["fileUrls"];
         removeJpgFile(AX_FALSE, fileUrls);
->>>>>>> 7a95b09ec04153f69719f7a2c332a7e48a6e1ab2
     }
 
     LOG_MM_D(MQTT_CLIENT,"messageArrived ----\n");
@@ -1584,7 +1459,7 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
             }
         }
 
-        client_->yield(1 * 1000UL); // sleep 1 seconds
+        client_->yield(50UL); // sleep 50ms
     }
 
     LOG_MM_I(MQTT_CLIENT, "---");
