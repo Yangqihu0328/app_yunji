@@ -1182,8 +1182,7 @@ AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
 
     if (m_detect) {
         DETECTOR_CHN_ATTR_T det_attr;
-        memset(&det_attr, 0, sizeof(det_attr));
-        for (int i=0; i<mediasMap[id].taskInfo.vAlgo.size(); i++) {
+        for (size_t i = 0; i < mediasMap[id].taskInfo.vAlgo.size(); i++) {
             det_attr.nPPL[i] = mediasMap[id].taskInfo.vAlgo[i];
         }
         det_attr.nVNPU = 1;

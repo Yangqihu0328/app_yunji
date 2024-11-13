@@ -21,6 +21,7 @@ typedef struct {
     char szPushUrl[128];
     char szTaskName[32];
     char szTaskDesc[256];
+    char szTaskKey[32];
     std::vector<AX_U32> vAlgo;
 } TASK_INFO_T;
 
