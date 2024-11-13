@@ -34,6 +34,20 @@ static int arrivedcount = 0;
 static std::queue<StreamCmd> StreamQueue;
 static std::mutex mtx;
 
+static string GetExecPath(AX_VOID) {
+    string strPath;
+    AX_CHAR szPath[260] = {0};
+    ssize_t sz = readlink("/proc/self/exe", szPath, sizeof(szPath));
+    if (sz <= 0) {
+        strPath = "./";
+    } else {
+        strPath = szPath;
+        strPath = strPath.substr(0, strPath.rfind('/') + 1);
+    }
+
+    return strPath;
+}
+
 static int GetVersion(std::string& version) {
     std::ifstream temp_file("/proc/ax_proc/version");
     if (!temp_file) {
@@ -1093,6 +1107,33 @@ static void OnStopRtspPreview(std::string& key) {
     printf("OnStopRtspPreview ----\n");
 }
 
+static AX_VOID removeJpgFile(AX_BOOL isDir, nlohmann::json fileUrls) {
+    printf("removeJpgFile ++++\n");
+
+    json root;
+
+    if (isDir) {
+        AX_CHAR JpgDir[128] = { 0 };
+        sprintf(JpgDir, "%s%s/", GetExecPath().c_str(), ALARM_IMG_PATH);
+
+        root["type"] = "clearAllJpg";
+        root["result"] = CDiskHelper::RemoveDir(JpgDir);
+    } else {
+        root["type"] = "clearJpgFile";
+        if (fileUrls.is_array()) {
+            for (std::string path : fileUrls) {
+                CDiskHelper::RemoveFile(path.c_str());
+            }
+        }
+        root["result"] = 1;
+    }
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+
+    printf("removeJpgFile ----\n");
+}
+
 // /* TODO: need web support file copy, then show in web*/
 AX_BOOL MqttClient::SaveJpgFile(QUEUE_T *jpg_info) {
     JPEG_DATA_INFO_T *pJpegInfo = &jpg_info->tJpegInfo;
@@ -1295,6 +1336,11 @@ static void messageArrived(MQTT::MessageData& md) {
     // } else if (type == "playAudio"){ // 播放音频
     //     std::string audioUrl = jsonRes["audioUrl"];
     //     OnPlayAudio(audioUrl);
+    } else if (type == "clearAllJpg") {
+        removeJpgFile(AX_TRUE, NULL);
+    } else if (type == "clearJpgFiles") {
+        nlohmann::json fileUrls = jsonRes["fileUrls"];
+        removeJpgFile(AX_FALSE, fileUrls);
     }
 
     LOG_MM_D(MQTT_CLIENT,"messageArrived ----\n");
@@ -1442,17 +1488,4 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
     LOG_MM_I(MQTT_CLIENT, "---");
 }
 
-string MqttClient::GetExecPath(AX_VOID) {
-    string strPath;
-    AX_CHAR szPath[260] = {0};
-    ssize_t sz = readlink("/proc/self/exe", szPath, sizeof(szPath));
-    if (sz <= 0) {
-        strPath = "./";
-    } else {
-        strPath = szPath;
-        strPath = strPath.substr(0, strPath.rfind('/') + 1);
-    }
-
-    return strPath;
-}
 };
