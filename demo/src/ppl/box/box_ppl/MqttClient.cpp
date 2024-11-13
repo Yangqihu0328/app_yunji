@@ -367,6 +367,8 @@ static void OnRestartAppService() {
 
     SendMsg("web-message", payload.c_str(), payload.size());
 
+    system("/usr/bin/systemctl restart yj-aibox");
+
     LOG_M_C(MQTT_CLIENT, "OnRestartAppService ----.");
 }
 
