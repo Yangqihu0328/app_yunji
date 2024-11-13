@@ -17,6 +17,8 @@
 #include "ax_skel_type.h"
 
 #define MAX_DETECT_RESULT_COUNT (64)
+#define MAX_CHANNEL_SIZE (16)
+#define MAX_RESULT_SIZE (5)
 
 //临时写一个算法列表，火焰，动物，手势，抽烟
 typedef enum {
@@ -114,14 +116,24 @@ public:
             return false; // 所有track_id都匹配
         };
 
-        // 获取last_result的track_id集合
-        std::unordered_set<int> last_track_ids = track_id_set(last_result);
-        if (last_result.nCount > cur_result.nCount) {
-            new_result.result_diff = has_difference(last_track_ids, cur_result);
-        } else if (last_result.nCount < cur_result.nCount) {
-            new_result.result_diff = true;
-        } else {
-            new_result.result_diff = has_difference(last_track_ids, cur_result);
+        //现在的问题：检测容易漏检，导致跟踪算法容易跟丢,容易出现新的track id
+        //如果某一帧跟丢的话，判断上一帧的结果，下一帧肯定找不到上一帧的track id
+        //两次的数量相同，说明当前是较稳定的,把这个结果保存起来。
+        if (last_result.nCount == new_result.nCount) {
+            //这里的result就是表示上一次稳定目标的结果
+            auto result = channel_result[nGrp];
+
+            if (result.nCount == 0) {
+                new_result.result_diff = true;
+            } else {
+                std::unordered_set<int> last_track_ids = track_id_set(result);
+                //当前结果与上一次稳定结果相比较
+                new_result.result_diff = has_difference(last_track_ids, new_result);
+            }
+
+            if (new_result.result_diff == true) {
+                channel_result[nGrp] = new_result;
+            }
         }
 
         m_mapRlts[nGrp] = new_result;
@@ -157,11 +169,13 @@ public:
     }
 
 protected:
-    CDetectResult(AX_VOID) noexcept = default;
+    CDetectResult(AX_VOID) noexcept : channel_result(16){};
     virtual ~CDetectResult(AX_VOID) = default;
 
 private:
     std::mutex m_mtx;
     std::map<AX_S32, DETECT_RESULT_T> m_mapRlts;
+    std::vector<DETECT_RESULT_T> channel_result;
+
     AX_U64 m_arrCount[DETECT_TYPE_BUTT] = {0};
 };

@@ -146,6 +146,7 @@ else
 fi
 
 export LD_LIBRARY_PATH=$PWD:/soc/lib:/usr/local/lib:/usr/lib:/opt/lib:$LD_LIBRARY_PATH
+cd ZLMediaKit && ./MediaServer &
 md5=`md5sum ${process} | awk '{ print $1 }'`
 echo "launching ${process}, md5: ${md5} ..."
 $debug ./${process} $*

@@ -610,6 +610,10 @@ AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
         return AX_FALSE;
     }
 
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+
     DETECTOR_ATTR_T tDetectAttr;
     tDetectAttr.nGrpCount = m_nDecodeGrpCount;
     tDetectAttr.nSkipRate = detectConfig.nSkipRate;
@@ -617,15 +621,15 @@ AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
     tDetectAttr.nH = detectConfig.nH;
     tDetectAttr.nDepth = detectConfig.nDepth * m_nDecodeGrpCount;
     tDetectAttr.strModelPath = detectConfig.strModelPath;
-    tDetectAttr.nChannelNum = AX_MIN(detectConfig.nChannelNum, DETECTOR_MAX_CHN_NUM);
+    tDetectAttr.nChannelNum = AX_MIN(m_nDecodeGrpCount, DETECTOR_MAX_CHN_NUM);
     for (AX_U32 i = 0; i < tDetectAttr.nChannelNum; ++i) {
-        for (AX_U32 j=0; j<3; j++) {
-            tDetectAttr.tChnAttr[i].nPPL[j] = detectConfig.tChnParam[i].nPPL[j];
+        for (AX_U32 j = 0; j < ALGO_MAX_NUM; j++) {
+            tDetectAttr.tChnAttr[i].nPPL[j] = mediasMap[i].taskInfo.vAlgo[j];
         }
-        tDetectAttr.tChnAttr[i].nVNPU = detectConfig.tChnParam[i].nVNPU;
-        tDetectAttr.tChnAttr[i].bTrackEnable = detectConfig.tChnParam[i].bTrackEnable;
+        tDetectAttr.tChnAttr[i].nVNPU = 1;
+        tDetectAttr.tChnAttr[i].bTrackEnable = AX_TRUE;
     }
-    if (!m_detect->Init(tDetectAttr)) {
+    if (!m_detect->Init(tDetectAttr, mediasMap)) {
         return AX_FALSE;
     }
 
@@ -1295,7 +1299,9 @@ AX_BOOL CBoxBuilder::StopStream(AX_S32 id) {
 }
 
 AX_BOOL CBoxBuilder::playAudio(std::string file) {
-    m_audio->PlayAudio(file);
+    const DETECT_CONFIG_T &detCfg = CBoxConfig::GetInstance()->GetDetectConfig();
+    if (detCfg.bAudio)
+        m_audio->PlayAudio(file);
     return AX_TRUE;
 }
 
