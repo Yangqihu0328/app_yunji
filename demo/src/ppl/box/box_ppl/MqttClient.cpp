@@ -1232,6 +1232,18 @@ static void OnAlarmControl(AX_BOOL isAudio, AX_U32 status) {
     SendMsg("web-message", payload.c_str(), payload.size());
 }
 
+static void OnGetAlarmStatus(void) {
+    json root;
+    root["type"] = "alarmStatus";
+
+    DETECT_CONFIG_T detecConfig = CBoxConfig::GetInstance()->GetDetectConfig();
+    root["audio"] = detecConfig.bAudio;
+    root["window"] = detecConfig.bWindow;
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+}
+
 /*保证回调执行的程序要简单，如果比较复杂，需要考虑要用状态机处理回调*/
 static void messageArrived(MQTT::MessageData& md) {
     LOG_MM_D(MQTT_CLIENT,"messageArrived ++++\n");
@@ -1338,6 +1350,8 @@ static void messageArrived(MQTT::MessageData& md) {
     } else if (type == "showWindow") { // 显示告警弹窗
         AX_U32 status = jsonRes["status"];
         OnAlarmControl(AX_FALSE, status);
+    } else if (type == "getAlarmStatus") { // 获取告警配置
+        OnGetAlarmStatus();
     } else if (type == "clearAllJpg") { // 删除所有图片
         removeJpgFile(AX_TRUE, NULL);
     } else if (type == "clearJpgFiles") { // 删除指定图片
