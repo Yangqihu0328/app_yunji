@@ -13,6 +13,7 @@
 #include <vector>
 #include "AXSingleton.h"
 #include "IniWrapper.hpp"
+#include "ax_base_type.h"
 
 namespace boxconf {
 
@@ -51,6 +52,8 @@ typedef struct {
     AX_S32 nVnpuMode;
     DETECT_CHN_PARAM_T tChnParam[32];
     std::string strModelPath;
+    AX_BOOL bAudio;
+    AX_BOOL bWindow;
 } DETECT_CONFIG_T;
 
 typedef struct {
@@ -125,11 +128,15 @@ public:
     AX_BOOL AddAlgoTask(AX_S32 channelId, std::vector<int> &task_vec);
     AX_BOOL RemoveAlgoTask(AX_S32 channelId);
 
+    AX_BOOL SetAudioValue(AX_S32 nValue);
+    AX_BOOL SetWindowValue(AX_S32 nValue);
+
 private:
     CBoxConfig(AX_VOID) = default;
     virtual ~CBoxConfig(AX_VOID) = default;
 
     std::string GetExecPath(AX_VOID);
+    AX_BOOL SetIntValue(const std::string &SECT, const std::string &Key, AX_S32 nValue);
 
 private:
     CIniWrapper m_Ini;
