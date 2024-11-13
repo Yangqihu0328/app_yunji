@@ -1,5 +1,6 @@
 #include "MqttClient.hpp"
 
+#include "ax_base_type.h"
 #include "cmdline.hpp"
 #include "AppLog.hpp"
 #include "DiskHelper.hpp"
@@ -1216,17 +1217,15 @@ AX_VOID MqttClient::SendAlarmMsg() {
     }
 }
 
-static void OnPlayAudio(std::string &audioUrl) {
+static void OnAlarmControl(AX_BOOL isAudio, AX_U32 status) {
     json root;
-    root["result"] = 0;
 
-    if (access(audioUrl.c_str(), F_OK) == 0) {
-        CBoxBuilder *a_builder = CBoxBuilder::GetInstance();
-        a_builder->playAudio(audioUrl);
-
-        root["msg"] = "success";
+    if (isAudio) {
+        root["type"] = "audio";
+        root["result"] = CBoxConfig::GetInstance()->SetAudioValue(status);
     } else {
-        root["msg"] = "failed";
+        root["type"] = "window";
+        root["result"] = CBoxConfig::GetInstance()->SetWindowValue(status);
     }
 
     std::string payload = root.dump();
@@ -1333,12 +1332,15 @@ static void messageArrived(MQTT::MessageData& md) {
     } else if (type == "stopRtspPreview") { // 停止预览
         std::string mediaUrl = jsonRes["mediaUrl"];
         OnStopRtspPreview(mediaUrl);
-    // } else if (type == "playAudio"){ // 播放音频
-    //     std::string audioUrl = jsonRes["audioUrl"];
-    //     OnPlayAudio(audioUrl);
-    } else if (type == "clearAllJpg") {
+    } else if (type == "playAudio") { // 播放告警音频
+        AX_U32 status = jsonRes["status"];
+        OnAlarmControl(AX_TRUE, status);
+    } else if (type == "showWindow") { // 显示告警弹窗
+        AX_U32 status = jsonRes["status"];
+        OnAlarmControl(AX_FALSE, status);
+    } else if (type == "clearAllJpg") { // 删除所有图片
         removeJpgFile(AX_TRUE, NULL);
-    } else if (type == "clearJpgFiles") {
+    } else if (type == "clearJpgFiles") { // 删除指定图片
         nlohmann::json fileUrls = jsonRes["fileUrls"];
         removeJpgFile(AX_FALSE, fileUrls);
     }

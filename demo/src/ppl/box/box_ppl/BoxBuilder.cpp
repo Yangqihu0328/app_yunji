@@ -1296,7 +1296,9 @@ AX_BOOL CBoxBuilder::StopStream(AX_S32 id) {
 }
 
 AX_BOOL CBoxBuilder::playAudio(std::string file) {
-    m_audio->PlayAudio(file);
+    const DETECT_CONFIG_T &detCfg = CBoxConfig::GetInstance()->GetDetectConfig();
+    if (detCfg.bAudio)
+        m_audio->PlayAudio(file);
     return AX_TRUE;
 }
 
