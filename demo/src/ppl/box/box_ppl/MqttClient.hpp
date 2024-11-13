@@ -354,6 +354,7 @@ private:
     AX_VOID WorkThread(AX_VOID* pArg);
 	AX_BOOL SaveJpgFile(QUEUE_T* jpg_info);
 	AX_VOID SendAlarmMsg();
+	string GetExecPath(AX_VOID);
 
 protected:
 	std::mutex m_mtxConnStatus;
