@@ -718,6 +718,9 @@ static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
             StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
             lock.unlock();
 
+            // sleep 1 second
+            sleep(1);
+
             AX_CHAR szIP[64] = {0};
             AX_CHAR mediaUrl[128] = {0};
 
