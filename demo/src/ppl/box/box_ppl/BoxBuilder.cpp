@@ -629,7 +629,7 @@ AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
         tDetectAttr.tChnAttr[i].nVNPU = 1;
         tDetectAttr.tChnAttr[i].bTrackEnable = AX_TRUE;
     }
-    if (!m_detect->Init(tDetectAttr)) {
+    if (!m_detect->Init(tDetectAttr, mediasMap)) {
         return AX_FALSE;
     }
 

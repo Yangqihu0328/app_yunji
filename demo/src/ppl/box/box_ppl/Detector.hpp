@@ -15,6 +15,7 @@
 #include "AXResource.hpp"
 #include "AXThread.hpp"
 #include "ax_skel_api.h"
+#include "BoxMediaParser.hpp"
 
 #define DETECTOR_MAX_CHN_NUM 16
 #define ALGO_MAX_NUM 3
@@ -69,7 +70,7 @@ class CDetector {
 public:
     CDetector(AX_VOID) = default;
 
-    AX_BOOL Init(const DETECTOR_ATTR_T& stAttr);
+    AX_BOOL Init(const DETECTOR_ATTR_T& stAttr, std::vector<MEDIA_INFO_T>& mediasMap);
     AX_BOOL DeInit(AX_VOID);
 
     AX_BOOL Start(AX_VOID);
