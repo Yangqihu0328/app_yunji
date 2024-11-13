@@ -963,20 +963,20 @@ static void OnGetAiBoxNetwork() {
 
             std::string line;
             std::ifstream ifile("/etc/network/interfaces");
-            bool found = false;
+            AX_U32 dhcp = 0;
             size_t pos = 0;
             while (std::getline(ifile, line)) {
                 if (line.find("static") != std::string::npos && line.find(ifa->ifa_name) != std::string::npos) {
-                    found = true;
+                    dhcp = true;
                     continue;
                 }
-                if (found && (line.empty() || (line.find("allow-hotplug") != std::string::npos)))
-                    found = false;
+                if (dhcp && (line.empty() || (line.find("allow-hotplug") != std::string::npos)))
+                    dhcp = false;
 
-                if (found) {
+                if (dhcp) {
                     pos = line.find("dns-nameservers");
                     if (pos != std::string::npos) {
-                        found = false;
+                        dhcp = false;
                         pos += (16 + 3);
                         line = line.substr(pos, line.length() - pos);
                         break;
@@ -986,7 +986,7 @@ static void OnGetAiBoxNetwork() {
 
             arr.push_back({
                 {"name",    ifa->ifa_name},
-                {"dhcp",    found},
+                {"dhcp",    dhcp},
                 {"address", host},
                 {"mask",    inet_ntoa(sin_netmask->sin_addr)},
                 {"gateway", inet_ntoa(gw)},
