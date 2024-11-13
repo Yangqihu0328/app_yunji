@@ -1154,6 +1154,15 @@ AX_VOID MqttClient::SendAlarmMsg() {
                 { "jpgPath", jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath },
             };
 
+            AX_CHAR AudioFile[128] = { 0 };
+            sprintf(AudioFile, "%saudio/%d.wav", GetExecPath().c_str(),  nAlgoType);
+            if (access(AudioFile, F_OK) == 0) {
+                CBoxBuilder *a_builder = CBoxBuilder::GetInstance();
+                a_builder->playAudio(AudioFile);
+            } else {
+                LOG_D("AudioFile %s not exist", AudioFile);
+            }
+
             json root;
             root["result"] = 0;
             root["msg"] = "success";
@@ -1283,9 +1292,9 @@ static void messageArrived(MQTT::MessageData& md) {
     } else if (type == "stopRtspPreview") { // 停止预览
         std::string mediaUrl = jsonRes["mediaUrl"];
         OnStopRtspPreview(mediaUrl);
-    } else if (type == "playAudio"){ // 播放音频
-        std::string audioUrl = jsonRes["audioUrl"];
-        OnPlayAudio(audioUrl);
+    // } else if (type == "playAudio"){ // 播放音频
+    //     std::string audioUrl = jsonRes["audioUrl"];
+    //     OnPlayAudio(audioUrl);
     }
 
     LOG_MM_D(MQTT_CLIENT,"messageArrived ----\n");
