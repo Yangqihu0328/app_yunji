@@ -122,18 +122,7 @@ int GetIP(AX_CHAR* pOutIPAddress) {
 }
 
 static int GetNPUInfo(std::vector<int> &npu_utilization) {
-    static int read_flag = 0;
-    if (read_flag == 0) {
-        std::ofstream enable_file("/proc/ax_proc/npu/enable");
-        if (!enable_file) {
-            LOG_M_E(MQTT_CLIENT, "Cannot open the file.");
-            return -1;
-        }
-
-        enable_file << "1";
-        enable_file.close();
-        read_flag = 1;
-    }
+    system("echo 1 > /proc/ax_proc/npu/enable");
 
     std::ifstream temp_file("/proc/ax_proc/npu/top");
     if (!temp_file) {
@@ -954,7 +943,7 @@ static void OnGetAiBoxNetwork() {
             struct sockaddr_in *sin_netmask = (struct sockaddr_in *)ifa->ifa_netmask;
             struct in_addr gw;
             if (get_gateway(&gw, ifa->ifa_name)) {
-                LOG_E("Can't get gateway");
+                LOG_E("%s can't get gateway", ifa->ifa_name);
                 continue;
             }
 
