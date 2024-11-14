@@ -122,18 +122,7 @@ int GetIP(AX_CHAR* pOutIPAddress) {
 }
 
 static int GetNPUInfo(std::vector<int> &npu_utilization) {
-    static int read_flag = 0;
-    if (read_flag == 0) {
-        std::ofstream enable_file("/proc/ax_proc/npu/enable");
-        if (!enable_file) {
-            LOG_M_E(MQTT_CLIENT, "Cannot open the file.");
-            return -1;
-        }
-
-        enable_file << "1";
-        enable_file.close();
-        read_flag = 1;
-    }
+    system("echo 1 > /proc/ax_proc/npu/enable");
 
     std::ifstream temp_file("/proc/ax_proc/npu/top");
     if (!temp_file) {
@@ -992,7 +981,7 @@ static void OnGetAiBoxNetwork() {
             struct sockaddr_in *sin_netmask = (struct sockaddr_in *)ifa->ifa_netmask;
             struct in_addr gw;
             if (get_gateway(&gw, ifa->ifa_name)) {
-                LOG_E("Can't get gateway");
+                LOG_E("%s can't get gateway", ifa->ifa_name);
                 continue;
             }
 
@@ -1014,8 +1003,7 @@ static void OnGetAiBoxNetwork() {
                 if (dhcp) {
                     pos = line.find("dns-nameservers");
                     if (pos != std::string::npos) {
-                        dhcp = false;
-                        pos += (16 + 3);
+                        pos += (16);
                         line = line.substr(pos, line.length() - pos);
                         break;
                     }
@@ -1024,7 +1012,7 @@ static void OnGetAiBoxNetwork() {
 
             arr.push_back({
                 {"name",    ifa->ifa_name},
-                {"dhcp",    dhcp},
+                {"dhcp",    !dhcp},
                 {"address", host},
                 {"mask",    inet_ntoa(sin_netmask->sin_addr)},
                 {"gateway", inet_ntoa(gw)},
@@ -1055,42 +1043,34 @@ static void OnGetAiBoxNetwork() {
 static void OnSetAiBoxNetwork(const std::string& name, const AX_U32 dhcp, const std::string& address, const std::string& gateway, const std::string& mask, const std::string& dns) {
     LOG_M_C(MQTT_CLIENT, "OnSetAiBoxNetwork ++++.");
 
+    bool found = false;
     std::vector<std::string> lines;
     std::ifstream ifile("/etc/network/interfaces");
     std::string line;
     while (std::getline(ifile, line)) {
-        lines.push_back(line);
-    }
-
-    bool found = false;
-    std::vector<std::string> newConfig;
-    newConfig.push_back("allow-hotplug " + name);
-
-    if (dhcp)
-        newConfig.push_back("iface " + name + " inet dhcp");
-    else {
-        newConfig.push_back("iface " + name + " inet static");
-        newConfig.push_back("    address " + address);
-        newConfig.push_back("    netmask " + mask);
-        newConfig.push_back("    gateway " + gateway);
-        newConfig.push_back("    dns-nameservers " + dns);
-    }
-
-    for (auto &line : lines) {
         if (line.find("allow-hotplug " + name) != std::string::npos) {
             found = true;
             continue;
         }
-        if (found && (line.empty() || (line.find("allow-hotplug") != std::string::npos)))
+        if (found && (line.empty() || (line.find("allow-hotplug") != std::string::npos))) {
+            lines.push_back("allow-hotplug " + name);
+            if (dhcp)
+                lines.push_back("iface " + name + " inet dhcp");
+            else {
+                lines.push_back("iface " + name + " inet static");
+                lines.push_back("    address " + address);
+                lines.push_back("    netmask " + mask);
+                lines.push_back("    gateway " + gateway);
+                lines.push_back("    dns-nameservers " + dns);
+            }
             found = false;
+        }
 
         if (found)
             continue;
 
-        newConfig.push_back(line);
+        lines.push_back(line);
     }
-
-    lines = newConfig;
 
     std::ofstream ofile("/etc/network/interfaces");
     for (const auto& line : lines) {
