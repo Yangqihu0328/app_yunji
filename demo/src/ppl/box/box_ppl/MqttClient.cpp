@@ -1460,6 +1460,20 @@ AX_BOOL MqttClient::Start(AX_VOID) {
         return AX_FALSE;
     }
 
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    for (size_t i = 0; i < mediasMap.size(); i++) {
+        if (mediasMap[i].taskInfo.nTaskStatus == 1) {
+            LOG_MM_E(MQTT_CLIENT, "init app start old preview [%ld].", i);
+            std::string key = StartPreview(i);
+            strcpy(mediasMap[i].taskInfo.szTaskKey, key.c_str());
+        }
+    }
+    // 更新配置
+    CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
+
     return AX_TRUE;
 }
 

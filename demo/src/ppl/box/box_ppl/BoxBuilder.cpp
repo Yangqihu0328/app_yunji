@@ -286,7 +286,7 @@ AX_BOOL CBoxBuilder::InitStreamer(const STREAM_CONFIG_T &streamConfig) {
 
         LOG_M_C(BOX, "stream %d: %s", i, stAttr.strPath.c_str());
 
-        if (!mediasMap[i].nMediaDelete && mediasMap[i].taskInfo.nTaskStatus == 2)
+        if (!mediasMap[i].nMediaDelete && mediasMap[i].taskInfo.nTaskStatus == 1)
             if (!m_arrStreamer[i]->Init(stAttr))
                 continue;
     }
@@ -765,7 +765,7 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
     for (AX_U32 i = 0; i < nMediaCnt; ++i) {
         if (mediasMap[i].nMediaDelete == 1) continue;
         
-        if (mediasMap[i].taskInfo.nTaskStatus == 2) {
+        if (mediasMap[i].taskInfo.nTaskStatus == 1) {
             m_arrStreamer[i]->RegObserver(m_vdec.get());
         }
     }
@@ -1003,7 +1003,7 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
             if (mediasMap[i].nMediaDelete == 1)
                 continue;
 
-            if (mediasMap[i].taskInfo.nTaskStatus == 2) {
+            if (mediasMap[i].taskInfo.nTaskStatus == 1) {
                 thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[i].get());
                 t.join();
             }
