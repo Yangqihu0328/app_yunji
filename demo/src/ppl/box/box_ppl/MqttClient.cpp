@@ -714,6 +714,85 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
     LOG_M_C(MQTT_CLIENT, "OnDelAlgoTaskInfo ----.");
 }
 
+static std::string StartPreview(AX_U32 id) {
+    LOG_M_C(MQTT_CLIENT, "StartPreview ++++.");
+
+    std::string key;
+
+    AX_CHAR szIP[64] = {0};
+    AX_CHAR mediaUrl[128] = {0};
+
+    GetIP(szIP);
+    sprintf(mediaUrl, "rtsp://%s:8554/axstream%d", szIP, id + 1);
+
+    // 通知媒体服务器主动拉流
+    AX_CHAR api[256] = {0};
+    time_t t = time(nullptr);
+    sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=%ld&url=%s", ZLM_SECRET, ZLM_IP, "live", t, mediaUrl);
+    httplib::Client httpclient(ZLM_API_URL);
+    httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
+        printf("=====================================================================\n");
+        printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
+        printf("=====================================================================\n");
+        printf("http response body=\n%s", res.body.c_str());
+        printf("=====================================================================\n"); });
+    httpclient.set_logger(logger);
+    httplib::Result result = httpclient.Get(api);
+    if (result == nullptr) {
+        LOG_M_E(MQTT_CLIENT, "=========================================");
+        LOG_M_E(MQTT_CLIENT, "http post add stream proxy failed.");
+        LOG_M_E(MQTT_CLIENT, "=========================================");
+
+        AX_CHAR szKey[32] = {0};
+        sprintf(szKey, "127.0.0.1/live/%ld", t);
+        key = szKey;
+    }
+    if (result && result->status == httplib::OK_200) {
+        auto jsonRes = nlohmann::json::parse(result->body);
+        int code = jsonRes["code"];
+        if (code == 0) {
+            key = jsonRes["data"]["key"];
+            LOG_M_C(MQTT_CLIENT, "start preview media key [%s]++++.", key.c_str());
+        }
+    }
+
+    LOG_M_C(MQTT_CLIENT, "StartPreview ----.");
+
+    return key;
+}
+
+static void StopPreview(AX_U32 id) {
+    LOG_M_C(MQTT_CLIENT, "StopPreview ++++.");
+
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    if (id < (AX_U32)mediasMap.size()) {
+        // 通知媒体服务器删除流
+        char api[256] = {0};
+        sprintf(api, "/index/api/delStreamProxy?secret=%s&key=%s", ZLM_SECRET, mediasMap[id].taskInfo.szTaskKey);
+        httplib::Client httpclient(ZLM_API_URL);
+        httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
+            printf("=====================================================================\n");
+            printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
+            printf("=====================================================================\n");
+            printf("http response body=\n%s", res.body.c_str());
+            printf("=====================================================================\n"); });
+        httpclient.set_logger(logger);
+        httplib::Result result = httpclient.Get(api);
+        if (result && result->status == httplib::OK_200) {
+            auto jsonRes = nlohmann::json::parse(result->body);
+            int code = jsonRes["code"];
+            if (code == 0) {
+                LOG_M_C(MQTT_CLIENT, "stop preview media key [%s]++++.", mediasMap[id].taskInfo.szTaskKey);
+            }
+        }
+    }
+
+    LOG_M_C(MQTT_CLIENT, "StopPreview ----.");
+}
+
 static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskControl ++++.");
 
@@ -738,39 +817,16 @@ static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
             // sleep 1 second
             sleep(1);
 
-            AX_CHAR szIP[64] = {0};
-            AX_CHAR mediaUrl[128] = {0};
+            std::string key = StartPreview(id);
+            strcpy(mediasMap[id].taskInfo.szTaskKey, key.c_str());
 
-            GetIP(szIP);
-            sprintf(mediaUrl, "rtsp://%s:8554/axstream%d", szIP, id + 1);
+            LOG_M_C(MQTT_CLIENT, "=================================.");
+            LOG_M_C(MQTT_CLIENT, "add stream proxy key is: %s", mediasMap[id].taskInfo.szTaskKey);
+            LOG_M_C(MQTT_CLIENT, "=================================.");
 
-            // 通知媒体服务器主动拉流
-            AX_CHAR api[256] = {0};
-            time_t t = time(nullptr);
-            sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=%ld&url=%s", ZLM_SECRET, ZLM_IP, "live", t, mediaUrl);
-            httplib::Client httpclient(ZLM_API_URL);
-            httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
-                printf("=====================================================================\n");
-                printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
-                printf("=====================================================================\n");
-                printf("http response body=\n%s", res.body.c_str());
-                printf("=====================================================================\n"); });
-            httpclient.set_logger(logger);
-            httplib::Result result = httpclient.Get(api);
-            if (result && result->status == httplib::OK_200) {
-                auto jsonRes = nlohmann::json::parse(result->body);
-                int code = jsonRes["code"];
-                if (code != 0) {
-                    root["result"] = -1;
-                    root["msg"] = jsonRes["msg"];
-                } else {
-                    std::string key = jsonRes["data"]["key"];
-                    strcpy(mediasMap[id].taskInfo.szTaskKey, key.c_str());
-
-                    root["result"] = 0;
-                    root["msg"] = "success";
-                }
-            }
+            root["result"] = key=="" ? -1 : 0;
+            root["msg"] = key=="" ? "failed" : "success";
+            
         } else if (controlCommand == ContrlCmd::StopAlgo || controlCommand == ContrlCmd::RemoveAlgo) {
             mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
             if (controlCommand == ContrlCmd::StopAlgo) {
@@ -778,33 +834,15 @@ static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
             }
             mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
 
-            // 通知媒体服务器删除流
-            char api[256] = {0};
-            sprintf(api, "/index/api/delStreamProxy?secret=%s&key=%s", ZLM_SECRET, mediasMap[id].taskInfo.szTaskKey);
-            httplib::Client httpclient(ZLM_API_URL);
-            httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
-                printf("=====================================================================\n");
-                printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
-                printf("=====================================================================\n");
-                printf("http response body=\n%s", res.body.c_str());
-                printf("=====================================================================\n"); });
-            httpclient.set_logger(logger);
-            httplib::Result result = httpclient.Get(api);
-            if (result && result->status == httplib::OK_200) {
-                auto jsonRes = nlohmann::json::parse(result->body);
-                int code = jsonRes["code"];
-                if (code != 0) {
-                    root["result"] = -1;
-                    root["msg"] = jsonRes["msg"];
-                } else {
-                    root["result"] = 0;
-                    root["msg"] = "success";
+            std::unique_lock<std::mutex> lock(mtx);
+            StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
+            lock.unlock();
 
-                    std::unique_lock<std::mutex> lock(mtx);
-                    StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
-                    lock.unlock();
-                }
-            }
+            // 通知媒体服务器删除流
+            StopPreview(id);
+
+            root["result"] = 0;
+            root["msg"] = "success";
         }
 
         // 更新配置
@@ -1128,11 +1166,15 @@ AX_VOID MqttClient::SendAlarmMsg() {
             std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
             json child = {
-                { "Time", currentTimeStr },
+                { "type", "alarmMsg"},
                 { "taskName", mediasMap[nChn].taskInfo.szTaskName },
-                { "pushUrl", mediasMap[nChn].taskInfo.szPushUrl },
-                { "channleId", nChn },
-                { "AlarmType", nAlgoType },
+                { "Time", currentTimeStr },
+                { "pushStatus", "等待重试" },
+                { "alarmMsg", "识别到人物" },
+                { "alarmType", "识别到人物" },
+                { "alarmId", nAlgoType },
+                { "mediaUrl", mediasMap[nChn].szMediaUrl },
+                { "mediaName", mediasMap[nChn].szMediaName },
                 { "jpgPath", jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath },
             };
 
@@ -1150,35 +1192,45 @@ AX_VOID MqttClient::SendAlarmMsg() {
             root["msg"] = "success";
             root["data"] = child;
 
-            // std::string payload = root.dump();
+            std::string payload = root.dump();
 
-            // SendMsg("web-message", payload.c_str(), payload.size());
+            SendMsg("web-message", payload.c_str(), payload.size());
         }
     }
 }
 
 static void OnAlarmControl(AX_BOOL isAudio, AX_U32 status) {
-    json root;
-
+    json child;
+    AX_BOOL ret = AX_FALSE;
     if (isAudio) {
-        root["type"] = "audio";
-        root["result"] = CBoxConfig::GetInstance()->SetAudioValue(status);
+        child["type"] = "playAudio";
+        ret = CBoxConfig::GetInstance()->SetAudioValue(status);
     } else {
-        root["type"] = "window";
-        root["result"] = CBoxConfig::GetInstance()->SetWindowValue(status);
+        child["type"] = "showWindow";
+        ret = CBoxConfig::GetInstance()->SetWindowValue(status);
     }
+
+    json root;
+    root["result"] = ret==AX_FALSE ? -1 : 0;
+    root["msg"] = ret==AX_FALSE ? "failed" : "success";
+    root["data"] = child;
 
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
 }
 
 static void OnGetAlarmStatus(void) {
-    json root;
-    root["type"] = "alarmStatus";
-
     DETECT_CONFIG_T detecConfig = CBoxConfig::GetInstance()->GetDetectConfig();
-    root["audio"] = detecConfig.bAudio;
-    root["window"] = detecConfig.bWindow;
+    
+    json child;
+    child["type"] = "getAlarmStatus";
+    child["audio"] = detecConfig.bAudio;
+    child["window"] = detecConfig.bWindow;
+
+    json root;
+    root["result"] = 0;
+    root["msg"] = "success";
+    root["data"] = child;
 
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
@@ -1187,23 +1239,30 @@ static void OnGetAlarmStatus(void) {
 static AX_VOID removeJpgFile(AX_BOOL isDir, nlohmann::json fileUrls) {
     printf("removeJpgFile ++++\n");
 
-    json root;
+    json root, child;
 
     if (isDir) {
         AX_CHAR JpgDir[128] = { 0 };
         sprintf(JpgDir, "%s%s/", GetExecPath().c_str(), ALARM_IMG_PATH);
 
-        root["type"] = "clearAllJpg";
-        root["result"] = CDiskHelper::RemoveDir(JpgDir);
+        child["type"] = "clearAllJpg";
+        AX_BOOL ret = CDiskHelper::RemoveDir(JpgDir);
+
+        root["result"] = ret==AX_FALSE ? -1 : 0;
+        root["msg"] = ret==AX_FALSE ? "failed" : "success";
     } else {
-        root["type"] = "clearJpgFile";
+        child["type"] = "clearJpgFiles";
         if (fileUrls.is_array()) {
             for (std::string path : fileUrls) {
                 CDiskHelper::RemoveFile(path.c_str());
             }
         }
-        root["result"] = 1;
+
+        root["result"] = 0;
+        root["msg"] = "success";
     }
+
+    root["data"] = child;
 
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
