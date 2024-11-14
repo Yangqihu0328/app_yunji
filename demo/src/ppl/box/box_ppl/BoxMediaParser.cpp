@@ -118,6 +118,9 @@ std::vector<MEDIA_INFO_T> CBoxMediaParser::GetMediasMap(AX_U32 *nMediaCnt, const
                     if (!GET_VALUE(valueTask, "desc", strValue)) break;
                     strcpy(devInfo.taskInfo.szTaskDesc, strValue.c_str());
 
+                    if (!GET_VALUE(valueTask, "key", strValue)) break;
+                    strcpy(devInfo.taskInfo.szTaskKey, strValue.c_str());
+
                     const picojson::value& algo_list_value = valueTask.get<picojson::object>()["algos"];
                     if (algo_list_value.is<picojson::array>()) {
                         const picojson::array& arr_algo = algo_list_value.get<picojson::array>();
@@ -161,6 +164,7 @@ AX_BOOL CBoxMediaParser::SetMediasMap(std::vector<MEDIA_INFO_T>& vecMedia) {
             objTask["url"] = picojson::value(string(info.taskInfo.szPushUrl));
             objTask["name"] = picojson::value(string(info.taskInfo.szTaskName));
             objTask["desc"] = picojson::value(string(info.taskInfo.szTaskDesc));
+            objTask["key"] = picojson::value(string(info.taskInfo.szTaskKey));
 
             picojson::array algos;
             for (auto &algo : info.taskInfo.vAlgo) {

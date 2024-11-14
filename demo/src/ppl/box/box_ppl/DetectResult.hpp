@@ -100,7 +100,7 @@ public:
 
         auto track_id_set = [](const DETECT_RESULT_T& result) {
             std::unordered_set<int> track_ids;
-            for (int i = 0; i < result.nCount; ++i) {
+            for (AX_U32 i = 0; i < result.nCount; ++i) {
                 track_ids.insert(result.item[i].nTrackId);
             }
             return track_ids;
@@ -108,7 +108,7 @@ public:
 
         // 比较两个track_id集合是否存在差异
         auto has_difference = [](const std::unordered_set<int>& set1, const DETECT_RESULT_T& result) {
-            for (int j = 0; j < result.nCount; ++j) {
+            for (AX_U32 j = 0; j < result.nCount; ++j) {
                 if (set1.find(result.item[j].nTrackId) == set1.end()) {
                     return true; // 找到不同的track_id
                 }
