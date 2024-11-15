@@ -101,6 +101,8 @@ DETECT_CONFIG_T CBoxConfig::GetDetectConfig(AX_VOID) {
     const AX_CHAR *SECT = "DETECT";
 
     conf.bEnable = (AX_BOOL)m_Ini.GetIntValue(SECT, "enable", 0);
+    conf.bAudio = (AX_BOOL)m_Ini.GetIntValue(SECT, "audio", 0);
+    conf.bWindow = (AX_BOOL)m_Ini.GetIntValue(SECT, "window", 0);
     conf.nW = m_Ini.GetIntValue(SECT, "width", 960);
     conf.nH = m_Ini.GetIntValue(SECT, "height", 640);
     conf.nSkipRate = m_Ini.GetIntValue(SECT, "skip rate", 1);
@@ -291,4 +293,16 @@ AX_BOOL CBoxConfig::RemoveAlgoTask(AX_S32 channelId) {
     } while (0);
 
     return AX_TRUE;
+}
+
+AX_BOOL CBoxConfig::SetIntValue(const std::string &SECT, const std::string &Key, AX_S32 nValue) {
+    return m_Ini.SetIntValue(SECT, Key, nValue);
+}
+
+AX_BOOL CBoxConfig::SetAudioValue(AX_S32 nValue) {
+    return SetIntValue("DETECT", "audio", nValue);
+}
+
+AX_BOOL CBoxConfig::SetWindowValue(AX_S32 nValue) {
+    return SetIntValue("DETECT", "window", nValue);
 }

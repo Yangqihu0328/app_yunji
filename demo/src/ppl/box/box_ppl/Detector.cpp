@@ -187,7 +187,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
     LOG_M_D(DETECTOR, "%s: ---", __func__);
 }
 
-AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
+AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr, std::vector<MEDIA_INFO_T>& mediasMap) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
 
     if (0 == stAttr.nGrpCount) {
@@ -250,6 +250,8 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         int all_init_fail = false;
         //很重点这里，实际上nChannelNum才是真实的路数
         for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
+            if (mediasMap[nChn].nMediaDelete == 1) continue;
+
             /* [5]: create SEKL handle */
             for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
                 /* [4]: check whether has FHVP model or not */
@@ -324,7 +326,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
                 stHandleParam.stConfig = stConfig;
 
                 //创建算法通道
-                LOG_M_C(DETECTOR, "ppl %d, depth %d, cache depth %d, %dx%d", stHandleParam.ePPL, stHandleParam.nFrameDepth,
+                LOG_M_C(DETECTOR, "chn %d, ppl %d, depth %d, cache depth %d, %dx%d", nChn, stHandleParam.ePPL, stHandleParam.nFrameDepth,
                         stHandleParam.nFrameCacheDepth, stHandleParam.nWidth, stHandleParam.nHeight);
                 ret = AX_SKEL_Create(&stHandleParam, &m_hSkel[nChn][algo_id]);
 

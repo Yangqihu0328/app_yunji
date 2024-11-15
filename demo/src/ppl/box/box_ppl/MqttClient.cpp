@@ -1,5 +1,6 @@
 #include "MqttClient.hpp"
 
+#include "ax_base_type.h"
 #include "cmdline.hpp"
 #include "AppLog.hpp"
 #include "DiskHelper.hpp"
@@ -22,7 +23,7 @@ namespace boxconf {
 #define ZLM_API_URL "http://" ZLM_IP ":80"
 #define ZLM_SECRET  "81DBE7AF-ACD5-47D8-A692-F4B27456E6FD"
 
-#define ALARM_IMG_PATH "/mnt/nfs/ZLMediaKit/www/alarm"
+#define ALARM_IMG_PATH "ZLMediaKit/www/alarm"
 
 using namespace std;
 using json = nlohmann::json;
@@ -33,6 +34,20 @@ static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
 static int arrivedcount = 0;
 static std::queue<StreamCmd> StreamQueue;
 static std::mutex mtx;
+
+static string GetExecPath(AX_VOID) {
+    string strPath;
+    AX_CHAR szPath[260] = {0};
+    ssize_t sz = readlink("/proc/self/exe", szPath, sizeof(szPath));
+    if (sz <= 0) {
+        strPath = "./";
+    } else {
+        strPath = szPath;
+        strPath = strPath.substr(0, strPath.rfind('/') + 1);
+    }
+
+    return strPath;
+}
 
 static int GetVersion(std::string& version) {
     std::ifstream temp_file("/proc/ax_proc/version");
@@ -82,55 +97,32 @@ static int GetSystime(std::string& timeString) {
     return 0;
 }
 
-int GetIP(const std::string interfaceName, std::string &ip_addr, std::string &net_type) {
-    struct ifaddrs *ifaddr, *ifa;
-    int family, s;
-    char host[NI_MAXHOST];
-
-    if (getifaddrs(&ifaddr) == -1) {
-        perror("getifaddrs");
-        return -1;
-    }
-
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (!ifa->ifa_addr)
+int GetIP(AX_CHAR* pOutIPAddress) {
+    std::string strDevPrefix = "eth";
+    for (char c = '0'; c <= '9'; ++c) {
+        std::string strDevice = strDevPrefix + c;
+        int fd;
+        struct ifreq ifr;
+        fd = socket(AF_INET, SOCK_DGRAM, 0);
+        strcpy(ifr.ifr_name, strDevice.c_str());
+        if (ioctl(fd, SIOCGIFADDR, &ifr) < 0) {
+            ::close(fd);
             continue;
+        }
 
-        family = ifa->ifa_addr->sa_family;
-
-        // Check if interface is valid and IPv4
-        if ((family == AF_INET) && (strcmp(ifa->ifa_name, interfaceName.c_str()) == 0)) {
-            s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
-            if (s != 0) {
-                LOG_M_C(MQTT_CLIENT, "getnameinfo() failed: %s\n", gai_strerror(s));
-                continue;
-            }
-
-            LOG_M_C(MQTT_CLIENT, "Interface %s has IP address: %s", interfaceName.c_str(), host);
-            ip_addr = std::string(host);
-            net_type = "WAN";
-            freeifaddrs(ifaddr);
+        char* pIP = inet_ntoa(((struct sockaddr_in*)&(ifr.ifr_addr))->sin_addr);
+        if (pIP) {
+            strcpy((char*)pOutIPAddress, pIP);
+            ::close(fd);
             return 0;
         }
     }
 
-    freeifaddrs(ifaddr);
     return -1;
 }
 
 static int GetNPUInfo(std::vector<int> &npu_utilization) {
-    static int read_flag = 0;
-    if (read_flag == 0) {
-        std::ofstream enable_file("/proc/ax_proc/npu/enable");
-        if (!enable_file) {
-            LOG_M_E(MQTT_CLIENT, "Cannot open the file.");
-            return -1;
-        }
-
-        enable_file << "1";
-        enable_file.close();
-        read_flag = 1;
-    }
+    system("echo 1 > /proc/ax_proc/npu/enable");
 
     std::ifstream temp_file("/proc/ax_proc/npu/top");
     if (!temp_file) {
@@ -266,10 +258,8 @@ static void OnGetDashBoardInfo() {
         LOG_MM_D(MQTT_CLIENT, "GetTemperature fail.");
     }
 
-    const std::string interfaceName = "eth0";
-    std::string ipAddress = "127.0.0.1";
-    std::string NetType = "LAN";
-    ret = GetIP(interfaceName, ipAddress, NetType);
+    AX_CHAR szIP[64] = {0};
+    ret = GetIP(szIP);
     if (ret == -1) {
         LOG_MM_D(MQTT_CLIENT, "GetIP fail.");
     }
@@ -295,10 +285,10 @@ static void OnGetDashBoardInfo() {
     json board_info = {
         {"type", "getDashBoardInfo"}, 
         {"BoardId", "YJ-AIBOX-001"}, 
-        {"BoardIp", ipAddress},
+        {"BoardIp", szIP},
         {"BoardPlatform", "AX650"},
         {"BoardTemp", temperature},
-        {"BoardType", NetType},
+        {"BoardType", "LAN"},
         {"BoardAuthorized", "Authorized"},
         {"Time", currentTimeStr},
         {"Version", version},
@@ -367,6 +357,8 @@ static void OnRestartAppService() {
 
     SendMsg("web-message", payload.c_str(), payload.size());
 
+    system("/usr/bin/systemctl restart yj-aibox");
+
     LOG_M_C(MQTT_CLIENT, "OnRestartAppService ----.");
 }
 
@@ -386,7 +378,7 @@ static void OnSyncSystemTime(int year, int month, int day, int hour, int minute,
     timeinfo.tm_hour = hour;
     timeinfo.tm_min = minute;
     timeinfo.tm_sec = second;
- 
+
     time_t newtime = mktime(&timeinfo);
     if (newtime == -1) {
         LOG_M_E(MQTT_CLIENT, "Failed to convert tm to time_t.");
@@ -400,11 +392,11 @@ static void OnSyncSystemTime(int year, int month, int day, int hour, int minute,
 
         return;
     }
- 
+
     struct timeval tv;
     tv.tv_sec = newtime;
     tv.tv_usec = 0;
- 
+
     if (settimeofday(&tv, nullptr) == -1) {
         root["result"] = -1;
         root["msg"] = "failed";
@@ -460,11 +452,11 @@ static void OnGetMediaChannelList() {
     json arr = nlohmann::json::array();
     for (size_t i = 0; i < mediasMap.size(); i++) {
         arr.push_back({
-            {"mediaId",     mediasMap[i].nMediaId}, 
-            {"mediaDelete", mediasMap[i].nMediaDelete}, 
-            {"mediaStatus", mediasMap[i].nMediaStatus}, 
-            {"mediaUrl",    mediasMap[i].szMediaUrl}, 
-            {"mediaName",   mediasMap[i].szMediaName}, 
+            {"mediaId",     mediasMap[i].nMediaId},
+            {"mediaDelete", mediasMap[i].nMediaDelete},
+            {"mediaStatus", mediasMap[i].nMediaStatus},
+            {"mediaUrl",    mediasMap[i].szMediaUrl},
+            {"mediaName",   mediasMap[i].szMediaName},
             {"mediaDesc",   mediasMap[i].szMediaDesc}
         });
     }
@@ -566,9 +558,9 @@ static void OnGetAiModelList() {
     json arr = nlohmann::json::array();
     for (size_t i = 0; i < modelsMap.size(); i++) {
         arr.push_back({
-            {"modelId",      modelsMap[i].nModelId}, 
-            {"modelPath",    modelsMap[i].szModelPath}, 
-            {"modelName",    modelsMap[i].szModelName}, 
+            {"modelId",      modelsMap[i].nModelId},
+            {"modelPath",    modelsMap[i].szModelPath},
+            {"modelName",    modelsMap[i].szModelName},
             {"modelDesc",    modelsMap[i].szModelDesc},
             {"modelVersion", modelsMap[i].szModelVersion}
         });
@@ -606,6 +598,7 @@ static void OnGetAlgoTaskList() {
         leaf["taskPushUrl"] = mediasMap[i].taskInfo.szPushUrl;
         leaf["taskName"]    = mediasMap[i].taskInfo.szTaskName;
         leaf["taskDesc"]    = mediasMap[i].taskInfo.szTaskDesc;
+        leaf["taskKey"]     = mediasMap[i].taskInfo.szTaskKey;
         json algos = nlohmann::json::array();
         for (size_t j = 0; j < mediasMap[i].taskInfo.vAlgo.size(); j++) {
             algos.push_back(mediasMap[i].taskInfo.vAlgo[j]);
@@ -682,6 +675,7 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
         mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
         mediasMap[id].taskInfo.nTaskDelete = 1;
         mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
+        memset(mediasMap[id].taskInfo.szTaskKey, 0, sizeof(mediasMap[id].taskInfo.szTaskKey));
 
         std::unique_lock<std::mutex> lock(mtx);
         StreamQueue.push({ContrlCmd::RemoveAlgo, id});
@@ -709,8 +703,92 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
     LOG_M_C(MQTT_CLIENT, "OnDelAlgoTaskInfo ----.");
 }
 
+static std::string StartPreview(AX_U32 id) {
+    LOG_M_C(MQTT_CLIENT, "StartPreview ++++.");
+
+    std::string key;
+
+    AX_CHAR szIP[64] = {0};
+    AX_CHAR mediaUrl[128] = {0};
+
+    GetIP(szIP);
+    sprintf(mediaUrl, "rtsp://%s:8554/axstream%d", szIP, id + 1);
+
+    // 通知媒体服务器主动拉流
+    AX_CHAR api[256] = {0};
+    time_t t = time(nullptr);
+    sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=%ld&url=%s", ZLM_SECRET, ZLM_IP, "live", t, mediaUrl);
+    httplib::Client httpclient(ZLM_API_URL);
+    httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
+        printf("=====================================================================\n");
+        printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
+        printf("=====================================================================\n");
+        printf("http response body=\n%s", res.body.c_str());
+        printf("=====================================================================\n"); });
+    httpclient.set_logger(logger);
+    httplib::Result result = httpclient.Get(api);
+    if (result == nullptr) {
+        LOG_M_E(MQTT_CLIENT, "=========================================");
+        LOG_M_E(MQTT_CLIENT, "http post add stream proxy failed.");
+        LOG_M_E(MQTT_CLIENT, "=========================================");
+
+        AX_CHAR szKey[32] = {0};
+        sprintf(szKey, "127.0.0.1/live/%ld", t);
+        key = szKey;
+    }
+    if (result && result->status == httplib::OK_200) {
+        auto jsonRes = nlohmann::json::parse(result->body);
+        int code = jsonRes["code"];
+        if (code == 0) {
+            key = jsonRes["data"]["key"];
+            LOG_M_C(MQTT_CLIENT, "start preview media key [%s]++++.", key.c_str());
+        }
+    }
+
+    LOG_M_C(MQTT_CLIENT, "StartPreview ----.");
+
+    return key;
+}
+
+static void StopPreview(AX_U32 id) {
+    LOG_M_C(MQTT_CLIENT, "StopPreview ++++.");
+
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    if (id < (AX_U32)mediasMap.size()) {
+        // 通知媒体服务器删除流
+        char api[256] = {0};
+        sprintf(api, "/index/api/delStreamProxy?secret=%s&key=%s", ZLM_SECRET, mediasMap[id].taskInfo.szTaskKey);
+        httplib::Client httpclient(ZLM_API_URL);
+        httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
+            printf("=====================================================================\n");
+            printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
+            printf("=====================================================================\n");
+            printf("http response body=\n%s", res.body.c_str());
+            printf("=====================================================================\n"); });
+        httpclient.set_logger(logger);
+        httplib::Result result = httpclient.Get(api);
+        if (result && result->status == httplib::OK_200) {
+            auto jsonRes = nlohmann::json::parse(result->body);
+            int code = jsonRes["code"];
+            if (code == 0) {
+                LOG_M_C(MQTT_CLIENT, "stop preview media key [%s]++++.", mediasMap[id].taskInfo.szTaskKey);
+            }
+        }
+    }
+
+    LOG_M_C(MQTT_CLIENT, "StopPreview ----.");
+}
+
 static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskControl ++++.");
+
+    json child;
+    child["type"] = "algoTaskControl";
+
+    json root;
 
     // 获取当前通道信息
     AX_U32 nMediaCnt = 0;
@@ -720,28 +798,46 @@ static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
         if (controlCommand == ContrlCmd::StartAlgo) {
             mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
             mediasMap[id].taskInfo.nTaskStatus = 1; // 0未运行 1运行中
-        } else if (controlCommand == ContrlCmd::RemoveAlgo) {
+
+            std::unique_lock<std::mutex> lock(mtx);
+            StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
+            lock.unlock();
+
+            // sleep 1 second
+            sleep(1);
+
+            std::string key = StartPreview(id);
+            strcpy(mediasMap[id].taskInfo.szTaskKey, key.c_str());
+
+            LOG_M_C(MQTT_CLIENT, "=================================.");
+            LOG_M_C(MQTT_CLIENT, "add stream proxy key is: %s", mediasMap[id].taskInfo.szTaskKey);
+            LOG_M_C(MQTT_CLIENT, "=================================.");
+
+            root["result"] = key=="" ? -1 : 0;
+            root["msg"] = key=="" ? "failed" : "success";
+            
+        } else if (controlCommand == ContrlCmd::StopAlgo || controlCommand == ContrlCmd::RemoveAlgo) {
             mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
+            if (controlCommand == ContrlCmd::StopAlgo) {
+                mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
+            }
             mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
-        } else if (controlCommand == ContrlCmd::StopAlgo) {
-            mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
-            mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
+
+            std::unique_lock<std::mutex> lock(mtx);
+            StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
+            lock.unlock();
+
+            // 通知媒体服务器删除流
+            StopPreview(id);
+
+            root["result"] = 0;
+            root["msg"] = "success";
         }
 
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
     }
 
-    std::unique_lock<std::mutex> lock(mtx);
-    StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
-    lock.unlock();
-
-    json child;
-    child["type"] = "algoTaskControl";
-
-    json root;
-    root["result"] = 0;
-    root["msg"] = "success";
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -772,25 +868,25 @@ static std::string macAddressToString(const char* mac) {
 static void getMacAddress(const std::string& ifname, std::string& mac) {
     int sockfd;
     struct ifreq ifr;
- 
+
     // 创建套接字
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
         return;
     }
- 
+
     // 清零ifreq结构体
     memset(&ifr, 0, sizeof(struct ifreq));
- 
+
     // 复制接口名称到ifr_name字段
     strncpy(ifr.ifr_name, ifname.c_str(), IFNAMSIZ - 1);
- 
+
     // 使用ioctl获取MAC地址
     if (ioctl(sockfd, SIOCGIFHWADDR, &ifr) < 0) {
         close(sockfd);
         return;
     }
- 
+
     // 转换MAC地址
     mac = macAddressToString(ifr.ifr_hwaddr.sa_data);
 
@@ -866,7 +962,7 @@ static void OnGetAiBoxNetwork() {
 
     json arr = nlohmann::json::array();
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (!ifa->ifa_addr) 
+        if (!ifa->ifa_addr)
             continue;
 
         family = ifa->ifa_addr->sa_family;
@@ -885,7 +981,7 @@ static void OnGetAiBoxNetwork() {
             struct sockaddr_in *sin_netmask = (struct sockaddr_in *)ifa->ifa_netmask;
             struct in_addr gw;
             if (get_gateway(&gw, ifa->ifa_name)) {
-                LOG_E("Can't get gateway");
+                LOG_E("%s can't get gateway", ifa->ifa_name);
                 continue;
             }
 
@@ -894,18 +990,20 @@ static void OnGetAiBoxNetwork() {
 
             std::string line;
             std::ifstream ifile("/etc/network/interfaces");
-            bool found = false;
-            int pos = 0;
+            AX_U32 dhcp = 0;
+            size_t pos = 0;
             while (std::getline(ifile, line)) {
-                if (line.find("static") != std::string::npos && line.find(ifa->ifa_name) != std::string::npos)
-                    found = true;
-                if (found && line.empty())
-                    found = false;
+                if (line.find("static") != std::string::npos && line.find(ifa->ifa_name) != std::string::npos) {
+                    dhcp = true;
+                    continue;
+                }
+                if (dhcp && (line.empty() || (line.find("allow-hotplug") != std::string::npos)))
+                    dhcp = false;
 
-                if (found) {
-                    if (pos = line.find("dns-nameservers") != std::string::npos) {
-                        found = false;
-                        pos += (16 + 3);
+                if (dhcp) {
+                    pos = line.find("dns-nameservers");
+                    if (pos != std::string::npos) {
+                        pos += (16);
                         line = line.substr(pos, line.length() - pos);
                         break;
                     }
@@ -914,6 +1012,7 @@ static void OnGetAiBoxNetwork() {
 
             arr.push_back({
                 {"name",    ifa->ifa_name},
+                {"dhcp",    !dhcp},
                 {"address", host},
                 {"mask",    inet_ntoa(sin_netmask->sin_addr)},
                 {"gateway", inet_ntoa(gw)},
@@ -944,42 +1043,34 @@ static void OnGetAiBoxNetwork() {
 static void OnSetAiBoxNetwork(const std::string& name, const AX_U32 dhcp, const std::string& address, const std::string& gateway, const std::string& mask, const std::string& dns) {
     LOG_M_C(MQTT_CLIENT, "OnSetAiBoxNetwork ++++.");
 
+    bool found = false;
     std::vector<std::string> lines;
     std::ifstream ifile("/etc/network/interfaces");
     std::string line;
     while (std::getline(ifile, line)) {
-        lines.push_back(line);
-    }
-
-    bool found = false;
-    std::vector<std::string> newConfig;
-    newConfig.push_back("allow-hotplug " + name);
-
-    if (dhcp)
-        newConfig.push_back("iface " + name + " inet dhcp");
-    else {
-        newConfig.push_back("iface " + name + " inet static");
-        newConfig.push_back("    address " + address);
-        newConfig.push_back("    netmask " + mask);
-        newConfig.push_back("    gateway " + gateway);
-        newConfig.push_back("    dns-nameservers " + dns);
-    }
-
-    for (auto &line : lines) {
         if (line.find("allow-hotplug " + name) != std::string::npos) {
             found = true;
             continue;
         }
-        if (found && (line.empty() || (line.find("allow-hotplug") != std::string::npos)))
+        if (found && (line.empty() || (line.find("allow-hotplug") != std::string::npos))) {
+            lines.push_back("allow-hotplug " + name);
+            if (dhcp)
+                lines.push_back("iface " + name + " inet dhcp");
+            else {
+                lines.push_back("iface " + name + " inet static");
+                lines.push_back("    address " + address);
+                lines.push_back("    netmask " + mask);
+                lines.push_back("    gateway " + gateway);
+                lines.push_back("    dns-nameservers " + dns);
+            }
             found = false;
+        }
 
         if (found)
             continue;
 
-        newConfig.push_back(line);
+        lines.push_back(line);
     }
-
-    lines = newConfig;
 
     std::ofstream ofile("/etc/network/interfaces");
     for (const auto& line : lines) {
@@ -1002,92 +1093,6 @@ static void OnSetAiBoxNetwork(const std::string& name, const AX_U32 dhcp, const 
     LOG_M_C(MQTT_CLIENT, "OnSetAiBoxNetwork ----.");
 }
 
-static void OnStartRtspPreview(std::string& streamUrl) {
-    printf("OnStartRtspPreview ++++\n");
-
-    time_t t = time(nullptr);
-
-    httplib::Client httpclient(ZLM_API_URL);
-    httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
-        printf("=====================================================================\n");
-        printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
-        printf("=====================================================================\n");
-        printf("http response body=\n%s", res.body.c_str());
-        printf("=====================================================================\n"); });
-    httpclient.set_logger(logger);
-
-    char api[128] = {0};
-    sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=%ld&url=%s", ZLM_SECRET, ZLM_IP, "live", t, streamUrl.c_str());
-
-    json child;
-    child["type"] = "startRtspPreview";
-    child["streamUrl"] = streamUrl;
-
-    json root;
-    httplib::Result result = httpclient.Get(api);
-    if (result && result->status == httplib::OK_200) {
-        auto jsonRes = nlohmann::json::parse(result->body);
-        int code = jsonRes["code"];
-        if (code == 0) {
-            std::string key = jsonRes["data"]["key"];
-            child["key"] = key;
-
-            root["result"] = 0;
-            root["msg"] = "success";
-        } else {
-            root["result"] = -1;
-            root["msg"] = jsonRes["msg"];
-        }
-    }
-    root["data"] = child;
-
-    std::string payload = root.dump();
-
-    SendMsg("web-message", payload.c_str(), payload.size());
-
-    printf("OnStartRtspPreview ----\n");
-}
-
-static void OnStopRtspPreview(std::string& key) {
-    printf("OnStopRtspPreview ++++\n");
-
-    httplib::Client httpclient(ZLM_API_URL);
-    httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
-        printf("=====================================================================\n");
-        printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
-        printf("=====================================================================\n");
-        printf("http response body=\n%s", res.body.c_str());
-        printf("=====================================================================\n"); });
-    httpclient.set_logger(logger);
-
-    char api[128] = {0};
-    sprintf(api, "/index/api/delStreamProxy?secret=%s&key=%s", ZLM_SECRET, key.c_str());
-
-    json child;
-    child["type"] = "stopRtspPreview";
-
-    json root;
-    root["data"] = child;
-    httplib::Result result = httpclient.Get(api);
-    if (result && result->status == httplib::OK_200) {
-        auto jsonRes = nlohmann::json::parse(result->body);
-        int code = jsonRes["code"];
-        if (code != 0) {
-            root["result"] = -1;
-            root["msg"] = jsonRes["msg"];
-        } else {
-            root["result"] = 0;
-            root["msg"] = "success";
-        }
-    }
-
-    std::string payload = root.dump();
-
-    SendMsg("web-message", payload.c_str(), payload.size());
-
-    printf("OnStopRtspPreview ----\n");
-}
-
 // /* TODO: need web support file copy, then show in web*/
 AX_BOOL MqttClient::SaveJpgFile(QUEUE_T *jpg_info) {
     JPEG_DATA_INFO_T *pJpegInfo = &jpg_info->tJpegInfo;
@@ -1099,7 +1104,7 @@ AX_BOOL MqttClient::SaveJpgFile(QUEUE_T *jpg_info) {
     CElapsedTimer::GetLocalDate(szDateBuf, 16, '-');
 
     AX_CHAR szDateDir[128] = {0};
-    sprintf(szDateDir, "%s/DEV_%02d/%02d/%s", ALARM_IMG_PATH, nChn, nAlgoType, szDateBuf);
+    sprintf(szDateDir, "%s%s/DEV_%02d/%02d/%s", GetExecPath().c_str(), ALARM_IMG_PATH, nChn, nAlgoType, szDateBuf);
 
     if (CDiskHelper::CreateDir(szDateDir, AX_FALSE)) {
         sprintf(pJpegInfo->tCaptureInfo.tHeaderInfo.szImgPath, "%s/%s_%02d_%02d.jpg", szDateDir, pJpegInfo->tCaptureInfo.tHeaderInfo.szTimestamp, nChn, nAlgoType);
@@ -1129,16 +1134,38 @@ AX_VOID MqttClient::SendAlarmMsg() {
         QUEUE_T jpg_info;
         if (arrjpegQ->Pop(jpg_info, 0)) {
             SaveJpgFile(&jpg_info);
+            AX_U32 nChn = jpg_info.u64UserData & 0xff;
+            AX_U32 nAlgoType = (jpg_info.u64UserData >> 8) & 0xff;
 
             std::string currentTimeStr;
             GetSystime(currentTimeStr);
 
+            // 获取当前通道信息
+            AX_U32 nMediaCnt = 0;
+            STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+            std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+
             json child = {
-                {"type", "alarmMsg"},    {"BoardId", "YJ-AIBOX-001"}, {"Time", currentTimeStr},
-                {"AlarmType", "people"}, {"AlarmStatus", "success"},  {"AlarmContent", "alarm test test ..."},
-                {"Path", jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath},
-                {"channleId", jpg_info.u64UserData},
+                { "type", "alarmMsg"},
+                { "taskName", mediasMap[nChn].taskInfo.szTaskName },
+                { "Time", currentTimeStr },
+                { "pushStatus", "等待重试" },
+                { "alarmMsg", "识别到人物" },
+                { "alarmType", "识别到人物" },
+                { "alarmId", nAlgoType },
+                { "mediaUrl", mediasMap[nChn].szMediaUrl },
+                { "mediaName", mediasMap[nChn].szMediaName },
+                { "jpgPath", jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath },
             };
+
+            AX_CHAR AudioFile[128] = { 0 };
+            sprintf(AudioFile, "%saudio/%d.wav", GetExecPath().c_str(),  nAlgoType);
+            if (access(AudioFile, F_OK) == 0) {
+                CBoxBuilder *a_builder = CBoxBuilder::GetInstance();
+                a_builder->playAudio(AudioFile);
+            } else {
+                LOG_D("AudioFile %s not exist", AudioFile);
+            }
 
             json root;
             root["result"] = 0;
@@ -1152,21 +1179,75 @@ AX_VOID MqttClient::SendAlarmMsg() {
     }
 }
 
-static void OnPlayAudio(std::string &audioUrl) {
-    json root;
-    root["result"] = 0;
-
-    if (access(audioUrl.c_str(), F_OK) == 0) {
-        CBoxBuilder *a_builder = CBoxBuilder::GetInstance();
-        a_builder->playAudio(audioUrl);
-
-        root["msg"] = "success";
+static void OnAlarmControl(AX_BOOL isAudio, AX_U32 status) {
+    json child;
+    AX_BOOL ret = AX_FALSE;
+    if (isAudio) {
+        child["type"] = "playAudio";
+        ret = CBoxConfig::GetInstance()->SetAudioValue(status);
     } else {
-        root["msg"] = "failed";
+        child["type"] = "showWindow";
+        ret = CBoxConfig::GetInstance()->SetWindowValue(status);
     }
+
+    json root;
+    root["result"] = ret==AX_FALSE ? -1 : 0;
+    root["msg"] = ret==AX_FALSE ? "failed" : "success";
+    root["data"] = child;
 
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
+}
+
+static void OnGetAlarmStatus(void) {
+    DETECT_CONFIG_T detecConfig = CBoxConfig::GetInstance()->GetDetectConfig();
+    
+    json child;
+    child["type"] = "getAlarmStatus";
+    child["audio"] = detecConfig.bAudio;
+    child["window"] = detecConfig.bWindow;
+
+    json root;
+    root["result"] = 0;
+    root["msg"] = "success";
+    root["data"] = child;
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+}
+
+static AX_VOID removeJpgFile(AX_BOOL isDir, nlohmann::json fileUrls) {
+    printf("removeJpgFile ++++\n");
+
+    json root, child;
+
+    if (isDir) {
+        AX_CHAR JpgDir[128] = { 0 };
+        sprintf(JpgDir, "%s%s/", GetExecPath().c_str(), ALARM_IMG_PATH);
+
+        child["type"] = "clearAllJpg";
+        AX_BOOL ret = CDiskHelper::RemoveDir(JpgDir);
+
+        root["result"] = ret==AX_FALSE ? -1 : 0;
+        root["msg"] = ret==AX_FALSE ? "failed" : "success";
+    } else {
+        child["type"] = "clearJpgFiles";
+        if (fileUrls.is_array()) {
+            for (std::string path : fileUrls) {
+                CDiskHelper::RemoveFile(path.c_str());
+            }
+        }
+
+        root["result"] = 0;
+        root["msg"] = "success";
+    }
+
+    root["data"] = child;
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+
+    printf("removeJpgFile ----\n");
 }
 
 /*保证回调执行的程序要简单，如果比较复杂，需要考虑要用状态机处理回调*/
@@ -1263,15 +1344,19 @@ static void messageArrived(MQTT::MessageData& md) {
         std::string mask = jsonRes["mask"];
         std::string dns = jsonRes["dns"];
         OnSetAiBoxNetwork(name, dhcp, address, gateway, mask, dns);
-    } else if (type == "startRtspPreview") { // 开始预览
-        std::string mediaUrl = jsonRes["mediaUrl"];
-        OnStartRtspPreview(mediaUrl);
-    } else if (type == "stopRtspPreview") { // 停止预览
-        std::string mediaUrl = jsonRes["mediaUrl"];
-        OnStopRtspPreview(mediaUrl);
-    } else if (type == "playAudio"){ // 播放音频
-        std::string audioUrl = jsonRes["audioUrl"];
-        OnPlayAudio(audioUrl);
+    } else if (type == "playAudio") { // 播放告警音频
+        AX_U32 status = jsonRes["status"];
+        OnAlarmControl(AX_TRUE, status);
+    } else if (type == "showWindow") { // 显示告警弹窗
+        AX_U32 status = jsonRes["status"];
+        OnAlarmControl(AX_FALSE, status);
+    } else if (type == "getAlarmStatus") { // 获取告警配置
+        OnGetAlarmStatus();
+    } else if (type == "clearAllJpg") { // 删除所有图片
+        removeJpgFile(AX_TRUE, NULL);
+    } else if (type == "clearJpgFiles") { // 删除指定图片
+        nlohmann::json fileUrls = jsonRes["fileUrls"];
+        removeJpgFile(AX_FALSE, fileUrls);
     }
 
     LOG_MM_D(MQTT_CLIENT,"messageArrived ----\n");
@@ -1375,6 +1460,20 @@ AX_BOOL MqttClient::Start(AX_VOID) {
         return AX_FALSE;
     }
 
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    for (size_t i = 0; i < mediasMap.size(); i++) {
+        if (mediasMap[i].taskInfo.nTaskStatus == 1) {
+            LOG_MM_E(MQTT_CLIENT, "init app start old preview [%ld].", i);
+            std::string key = StartPreview(i);
+            strcpy(mediasMap[i].taskInfo.szTaskKey, key.c_str());
+        }
+    }
+    // 更新配置
+    CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
+
     return AX_TRUE;
 }
 
@@ -1413,7 +1512,7 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
             }
         }
 
-        client_->yield(1 * 1000UL); // sleep 1 seconds
+        client_->yield(50UL); // sleep 50ms
     }
 
     LOG_MM_I(MQTT_CLIENT, "---");
