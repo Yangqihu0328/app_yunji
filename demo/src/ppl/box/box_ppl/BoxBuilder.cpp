@@ -1199,7 +1199,6 @@ AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
             return AX_FALSE;
         }
     }
-
     
     if (id < (AX_S32)mediasMap.size()) {
         STREAMER_ATTR_T stAttr;
@@ -1210,21 +1209,15 @@ AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
         stAttr.bLoop = AX_TRUE;
         stAttr.bSyncObs = AX_TRUE;
 
-        m_arrStreamer.resize(nMediaCnt);
-        LOG_MM_W(BOX, "play %s, +++", mediasMap[id].szMediaUrl); 
-
-        if (m_arrStreamer[id]) {
-            LOG_MM_W(BOX, "free, +++"); 
-            m_arrStreamer[id]->UnRegObserver(m_vdec.get());
-
-            m_arrStreamer[id]->DeInit();
-            m_arrStreamer[id] = nullptr;
+        if (!m_arrStreamer[id]) {
+            m_arrStreamer[id] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
         }
 
-        m_arrStreamer[id] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
         if (!m_arrStreamer[id]) {
             return AX_FALSE;
         }
+
+        LOG_M_C(BOX, "play stream %d: %s", id, stAttr.strPath.c_str());
 
         if (!m_arrStreamer[id]->Init(stAttr)) {
             return AX_FALSE;

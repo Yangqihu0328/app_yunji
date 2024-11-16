@@ -15,6 +15,9 @@
 
 #include <linux/rtnetlink.h>
 
+#include <thread>
+#include <chrono>
+
 namespace boxconf {
 
 #define MQTT_CLIENT "MQTT_CLIENT"
@@ -29,6 +32,7 @@ using namespace std;
 using json = nlohmann::json;
 
 //需要转为类成员变量，提高代码简洁性
+static bool isLogin = false;
 static std::shared_ptr<IPStack> ipstack_ = nullptr;
 static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
 static int arrivedcount = 0;
@@ -246,7 +250,28 @@ static void OnLogin(const std::string& account, const std::string& password) {
     std::string payload = root.dump();
     SendMsg("web-message", payload.c_str(), payload.size());
 
+    isLogin = true;
+
     LOG_M_C(MQTT_CLIENT, "OnLogin ----.");
+}
+
+static void OnLogout() {
+    LOG_M_C(MQTT_CLIENT, "OnLogout ++++.");
+
+    json child;
+    child["type"] = "logout";
+
+    json root;
+    root["result"] = 0;
+    root["msg"] = "success";
+    root["data"] = child;
+
+    std::string payload = root.dump();
+    SendMsg("web-message", payload.c_str(), payload.size());
+
+    isLogin = false;
+
+    LOG_M_C(MQTT_CLIENT, "OnLogout ----.");
 }
 
 static void OnGetDashBoardInfo() {
@@ -572,6 +597,7 @@ static void OnGetAiModelList() {
 
     json root;
     root["msg"] = "success";
+    root["result"] = 0;
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -614,6 +640,7 @@ static void OnGetAlgoTaskList() {
 
     json root;
     root["msg"] = "success";
+    root["result"] = 0;
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -703,54 +730,101 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
     LOG_M_C(MQTT_CLIENT, "OnDelAlgoTaskInfo ----.");
 }
 
-static std::string StartPreview(AX_U32 id) {
+#if 0
+std::unordered_map<char, std::string> url_encode_map = {
+    {' ', "%20"}, {':', "%3A"}, {'/', "%2F"}, {'?', "%3F"}, {'=', "%3D"}, {'+', "%2B"}, {'@', "%40"}, {'&', "%26"},
+};
+static std::string UrlEncode(const std::string& input) {
+    std::string encoded;
+    encoded.reserve(input.size()); // 预留空间以提高效率
+ 
+    for (char c : input) {
+        // 检查字符是否在映射表中
+        auto it = url_encode_map.find(c);
+        if (it != url_encode_map.end()) {
+            // 如果在映射表中，添加对应的编码字符串
+            encoded += it->second;
+        } else if (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || c == '.' || c == '~') {
+            // 如果字符是字母、数字、连字符、下划线、点或波浪号，则直接添加（这些字符在URL中是安全的）
+            encoded += c;
+        } else {
+            // 对于其他字符，将其转换为十六进制并添加前缀%
+            char buffer[4];
+            snprintf(buffer, sizeof(buffer), "%%%02X", static_cast<unsigned char>(c));
+            encoded += buffer;
+        }
+    }
+ 
+    return encoded;
+}
+#endif
+
+static void StartPreview(AX_U32 id) {
     LOG_M_C(MQTT_CLIENT, "StartPreview ++++.");
 
-    std::string key;
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    if (id < (AX_U32)mediasMap.size()) {
 
-    AX_CHAR szIP[64] = {0};
-    AX_CHAR mediaUrl[128] = {0};
+        std::string key;
+        AX_CHAR api[256] = {0};
 
-    GetIP(szIP);
-    sprintf(mediaUrl, "rtsp://%s:8554/axstream%d", szIP, id + 1);
+#if 0
+        // URL编码字符映射表
+        std::string encoded_url = UrlEncode(mediasMap[id].szMediaUrl);
+        sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=rtpstream%d&url=%s", ZLM_SECRET, ZLM_IP, "live", id,
+                encoded_url.c_str());
+#else
+        AX_CHAR szIP[64] = {0};
+        AX_CHAR mediaUrl[128] = {0};
 
-    // 通知媒体服务器主动拉流
-    AX_CHAR api[256] = {0};
-    time_t t = time(nullptr);
-    sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=%ld&url=%s", ZLM_SECRET, ZLM_IP, "live", t, mediaUrl);
-    httplib::Client httpclient(ZLM_API_URL);
-    httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
-        printf("=====================================================================\n");
-        printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
-        printf("=====================================================================\n");
-        printf("http response body=\n%s", res.body.c_str());
-        printf("=====================================================================\n"); });
-    httpclient.set_logger(logger);
-    httplib::Result result = httpclient.Get(api);
-    if (result == nullptr) {
-        LOG_M_E(MQTT_CLIENT, "=========================================");
-        LOG_M_E(MQTT_CLIENT, "http post add stream proxy failed.");
-        LOG_M_E(MQTT_CLIENT, "=========================================");
+        GetIP(szIP);
+        sprintf(mediaUrl, "rtsp://%s:8554/axstream%d", szIP, id + 1);
+        sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=rtpstream%d&url=%s", ZLM_SECRET, ZLM_IP, "live", id,
+                mediaUrl);
+#endif
 
-        AX_CHAR szKey[32] = {0};
-        sprintf(szKey, "127.0.0.1/live/%ld", t);
-        key = szKey;
-    }
-    if (result && result->status == httplib::OK_200) {
-        auto jsonRes = nlohmann::json::parse(result->body);
-        int code = jsonRes["code"];
-        if (code == 0) {
-            key = jsonRes["data"]["key"];
-            LOG_M_C(MQTT_CLIENT, "start preview media key [%s]++++.", key.c_str());
+        // 通知媒体服务器主动拉流
+        httplib::Client httpclient(ZLM_API_URL);
+        httplib::Logger logger([](const httplib::Request &req, const httplib::Response &res) {
+            printf("=====================================================================\n");
+            printf("http request path=%s, body=%s\n", req.path.c_str(), req.body.c_str());
+            printf("=====================================================================\n");
+            printf("http response body=\n%s", res.body.c_str());
+            printf("=====================================================================\n"); });
+        httpclient.set_logger(logger);
+        httplib::Result result = httpclient.Get(api);
+        if (result == nullptr) {
+            LOG_M_E(MQTT_CLIENT, "=========================================");
+            LOG_M_E(MQTT_CLIENT, "http post add stream proxy failed.");
+            LOG_M_E(MQTT_CLIENT, "=========================================");
+
+            AX_CHAR szKey[32] = {0};
+            sprintf(szKey, "127.0.0.1/live/rtpstream%d", id);
+            key = szKey;
         }
+        if (result && result->status == httplib::OK_200) {
+            auto jsonRes = nlohmann::json::parse(result->body);
+            int code = jsonRes["code"];
+            if (code == 0) {
+                key = jsonRes["data"]["key"];
+            }
+        }
+
+        mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
+        mediasMap[id].taskInfo.nTaskStatus = 1; // 0未运行 1运行中
+        strcpy(mediasMap[id].taskInfo.szTaskKey, key.c_str());
+
+        // 更新配置
+        CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
     }
 
     LOG_M_C(MQTT_CLIENT, "StartPreview ----.");
-
-    return key;
 }
 
-static void StopPreview(AX_U32 id) {
+static void StopPreview(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "StopPreview ++++.");
 
     // 获取当前通道信息
@@ -777,6 +851,12 @@ static void StopPreview(AX_U32 id) {
                 LOG_M_C(MQTT_CLIENT, "stop preview media key [%s]++++.", mediasMap[id].taskInfo.szTaskKey);
             }
         }
+
+        mediasMap[id].nMediaStatus = controlCommand==ContrlCmd::RemoveAlgo ? 1 : 2; // 0异常 1正常/未使用 2使用中
+        mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
+
+        // 更新配置
+        CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
     }
 
     LOG_M_C(MQTT_CLIENT, "StopPreview ----.");
@@ -785,63 +865,25 @@ static void StopPreview(AX_U32 id) {
 static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskControl ++++.");
 
+    std::unique_lock<std::mutex> lock(mtx);
+    StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
+    lock.unlock();
+
+    if (controlCommand == ContrlCmd::StartAlgo) {
+        StartPreview(id);
+    } else if (controlCommand == ContrlCmd::StopAlgo || controlCommand == ContrlCmd::RemoveAlgo) {
+        StopPreview(id, controlCommand);
+    }
+
     json child;
     child["type"] = "algoTaskControl";
 
     json root;
-
-    // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
-    if (id < (AX_U32)mediasMap.size()) {
-        if (controlCommand == ContrlCmd::StartAlgo) {
-            mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
-            mediasMap[id].taskInfo.nTaskStatus = 1; // 0未运行 1运行中
-
-            std::unique_lock<std::mutex> lock(mtx);
-            StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
-            lock.unlock();
-
-            // sleep 1 second
-            sleep(1);
-
-            std::string key = StartPreview(id);
-            strcpy(mediasMap[id].taskInfo.szTaskKey, key.c_str());
-
-            LOG_M_C(MQTT_CLIENT, "=================================.");
-            LOG_M_C(MQTT_CLIENT, "add stream proxy key is: %s", mediasMap[id].taskInfo.szTaskKey);
-            LOG_M_C(MQTT_CLIENT, "=================================.");
-
-            root["result"] = key=="" ? -1 : 0;
-            root["msg"] = key=="" ? "failed" : "success";
-            
-        } else if (controlCommand == ContrlCmd::StopAlgo || controlCommand == ContrlCmd::RemoveAlgo) {
-            mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
-            if (controlCommand == ContrlCmd::StopAlgo) {
-                mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
-            }
-            mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
-
-            std::unique_lock<std::mutex> lock(mtx);
-            StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
-            lock.unlock();
-
-            // 通知媒体服务器删除流
-            StopPreview(id);
-
-            root["result"] = 0;
-            root["msg"] = "success";
-        }
-
-        // 更新配置
-        CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
-    }
-
+    root["result"] = 0;
+    root["msg"] = "success";
     root["data"] = child;
 
     std::string payload = root.dump();
-
     SendMsg("web-message", payload.c_str(), payload.size());
 
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskControl ----.");
@@ -1133,6 +1175,8 @@ AX_VOID MqttClient::SendAlarmMsg() {
     if (nCount > 0) {
         QUEUE_T jpg_info;
         if (arrjpegQ->Pop(jpg_info, 0)) {
+            if (!isLogin) return;
+
             SaveJpgFile(&jpg_info);
             AX_U32 nChn = jpg_info.u64UserData & 0xff;
             AX_U32 nAlgoType = (jpg_info.u64UserData >> 8) & 0xff;
@@ -1276,10 +1320,33 @@ static void messageArrived(MQTT::MessageData& md) {
         std::cerr << "An error occurred: " << e.what() << std::endl;
     }
 
-    if (type == "login") { // 账号登录
+    // 账号登录
+    if (type == "login") {
         std::string account = jsonRes["account"];
         std::string password = jsonRes["password"];
         OnLogin(account, password);
+
+        return;
+    }
+
+    // 检测登录
+    if (!isLogin) {
+        json child;
+        child["type"] = type;
+
+        json root;
+        root["data"] = child;
+        root["result"] = -2;
+        root["msg"] = "please login first.";
+
+        std::string payload = root.dump();
+        SendMsg("web-message", payload.c_str(), payload.size());
+
+        return;
+    }
+
+    if (type == "logout") {
+        OnLogout();
     } else if (type == "getDashBoardInfo") { // 获取仪表盘信息
         OnGetDashBoardInfo();
     } else if (type == "rebootAiBox") { // 重启盒子
@@ -1460,19 +1527,27 @@ AX_BOOL MqttClient::Start(AX_VOID) {
         return AX_FALSE;
     }
 
-    // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
-    for (size_t i = 0; i < mediasMap.size(); i++) {
-        if (mediasMap[i].taskInfo.nTaskStatus == 1) {
-            LOG_MM_E(MQTT_CLIENT, "init app start old preview [%ld].", i);
-            std::string key = StartPreview(i);
-            strcpy(mediasMap[i].taskInfo.szTaskKey, key.c_str());
+    std::thread([] {
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(600));
+
+        // 获取当前通道信息
+        AX_U32 nMediaCnt = 0;
+        STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+        std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+        for (size_t i = 0; i < mediasMap.size(); i++) {
+            if (mediasMap[i].taskInfo.nTaskStatus == 1) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+                StartPreview(i);
+
+                LOG_MM_C(MQTT_CLIENT, "========================================");
+                LOG_MM_C(MQTT_CLIENT, "auto start preview [%ld].", i);
+                LOG_MM_C(MQTT_CLIENT, "========================================");
+            }
         }
-    }
-    // 更新配置
-    CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
+
+    }).detach();
 
     return AX_TRUE;
 }
