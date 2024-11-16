@@ -1206,26 +1206,49 @@ AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
         stAttr.nMaxWidth = streamConfig.nMaxGrpW;
         stAttr.nMaxHeight = streamConfig.nMaxGrpH;
         stAttr.nCookie = id;
-        stAttr.bLoop = AX_TRUE;
-        stAttr.bSyncObs = AX_TRUE;
 
-        if (!m_arrStreamer[id]) {
-            m_arrStreamer[id] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
-        }
-
-        if (!m_arrStreamer[id]) {
+        if (!m_arrStreamer[id] &&
+            !(m_arrStreamer[id] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath))) {
             return AX_FALSE;
         }
-
-        LOG_M_C(BOX, "play stream %d: %s", id, stAttr.strPath.c_str());
 
         if (!m_arrStreamer[id]->Init(stAttr)) {
             return AX_FALSE;
         }
 
+        //等流初始化完，RTSP回调完获取流的信息，再开启流解码，实现一个1s的超时机制
+        const auto timeout = std::chrono::milliseconds(1000); // 设置超时时间
+        auto startTime = std::chrono::steady_clock::now();
+        while (true) {
+            // 检查条件
+            const STREAMER_INFO_T &stInfo = m_arrStreamer[id]->GetStreamInfo();
+            if (stInfo.bGetInfo == AX_TRUE) {
+                VDEC_GRP_ATTR_T stGrpAttr;
+                m_vdec->GetGrpAttr(id, stGrpAttr);
+                printf("stGrpAttr.enCodecType = %d %d \n ", stGrpAttr.enCodecType, stGrpAttr.nFps);
+
+                stGrpAttr.enCodecType = stInfo.eVideoType;
+                stGrpAttr.nFps = stInfo.nFps;
+                m_vdec->SetGrpAttr(id, stGrpAttr);
+                break;
+            }
+
+            // 检查超时
+            if (std::chrono::steady_clock::now() - startTime >= timeout) {
+                LOG_MM_E(BOX, "fail get stream info");
+                return AX_FALSE;
+            }
+
+            // 避免忙等，休眠50ms
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
         m_arrStreamer[id]->RegObserver(m_vdec.get());
         thread t([](IStreamHandler *p) { p->Start(); }, m_arrStreamer[id].get());
         t.join();
+
+
+        LOG_M_C(BOX, "play stream %d: %s", id, stAttr.strPath.c_str());
     }
     LOG_MM_W(BOX, "---");
 

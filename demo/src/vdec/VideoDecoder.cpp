@@ -346,15 +346,36 @@ AX_BOOL CVideoDecoder::DeInit(AX_VOID) {
     return AX_TRUE;
 }
 
+AX_BOOL CVideoDecoder::SetGrpAttr(AX_VDEC_GRP vdGrp, VDEC_GRP_ATTR_T& stGrpAttr) {
+    if (vdGrp >= (AX_VDEC_GRP)m_arrGrpInfo.size()) {
+        LOG_M_E(VDEC, "%s: set attr invalid vdGrp %d", __func__, vdGrp);
+        return AX_FALSE;
+    }
+
+    AX_VDEC_GRP_ATTR_T ax_grp_attr;
+    AX_VDEC_GetGrpAttr(vdGrp, &ax_grp_attr);
+    ax_grp_attr.enCodecType = stGrpAttr.enCodecType;
+    ax_grp_attr.enInputMode = stGrpAttr.enInputMode;
+    ax_grp_attr.u32MaxPicWidth = stGrpAttr.nMaxWidth;
+    ax_grp_attr.u32MaxPicHeight = stGrpAttr.nMaxHeight;
+    ax_grp_attr.u32StreamBufSize = stGrpAttr.nMaxStreamBufSize;
+    ax_grp_attr.bSdkAutoFramePool = stGrpAttr.bPrivatePool;
+    AX_VDEC_SetGrpAttr(vdGrp, &ax_grp_attr);
+
+    m_arrGrpInfo[vdGrp].stAttr = stGrpAttr;
+    return AX_TRUE;
+}
+
 AX_BOOL CVideoDecoder::GetGrpAttr(AX_VDEC_GRP vdGrp, VDEC_GRP_ATTR_T& stGrpAttr) const {
     if (vdGrp >= (AX_VDEC_GRP)m_arrGrpInfo.size()) {
-        LOG_M_E(VDEC, "%s: invalid vdGrp %d", __func__, vdGrp);
+        LOG_M_E(VDEC, "%s: get attr invalid vdGrp %d", __func__, vdGrp);
         return AX_FALSE;
     }
 
     stGrpAttr = m_arrGrpInfo[vdGrp].stAttr;
     return AX_TRUE;
 }
+
 
 AX_BOOL CVideoDecoder::GetAllGrpAttr(std::vector<VDEC_GRP_ATTR_T>& vecGrpAttr) {
     for (auto& tGrpInfo : m_arrGrpInfo) {

@@ -77,6 +77,7 @@ public:
     AX_BOOL DetachPool(AX_VDEC_GRP vdGrp, AX_VDEC_CHN vdChn);
 
     AX_BOOL GetGrpAttr(AX_VDEC_GRP vdGrp, VDEC_GRP_ATTR_T &stGrpAttr) const;
+    AX_BOOL SetGrpAttr(AX_VDEC_GRP vdGrp, VDEC_GRP_ATTR_T& stGrpAttr);
     AX_BOOL GetAllGrpAttr(std::vector<VDEC_GRP_ATTR_T> &vecGrpAttr);
     AX_BOOL SetChnAttr(AX_VDEC_GRP vdGrp, AX_VDEC_CHN vdChn, const AX_VDEC_CHN_ATTR_T &stChnAttr);
 

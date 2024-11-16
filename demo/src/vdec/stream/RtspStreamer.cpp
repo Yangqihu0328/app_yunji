@@ -110,6 +110,7 @@ void CRtspStreamer::OnTracksInfo(const TRACKS_INFO_T &tracks) {
 
                 LOG_M_C(CLIENT, "%s: %s payload %d, %dx%d %dfps", tracks.url, track.control, track.rtpPayload, sps.width, sps.height,
                         sps.fps);
+                m_stInfo.bGetInfo = AX_TRUE;
             } break;
 
             default:

@@ -28,6 +28,7 @@ typedef struct STREAMER_INFO_S {
     AX_U32 nHeight;
     AX_U32 nFps;
     AX_VOID *session;
+    AX_BOOL bGetInfo;
 
     STREAMER_INFO_S(AX_VOID) {
         eStreamType = STREAM_TYPE_E::FILE;
@@ -38,6 +39,7 @@ typedef struct STREAMER_INFO_S {
         nHeight = 0;
         nFps = 0;
         session = nullptr;
+        bGetInfo = AX_FALSE;
     }
 } STREAMER_INFO_T;
 
@@ -55,7 +57,7 @@ typedef struct STREAMER_ATTR_S {
 
     STREAMER_ATTR_S(AX_VOID) {
         bLoop = AX_TRUE;
-        bSyncObs = AX_FALSE;
+        bSyncObs = AX_TRUE;
         nMaxWidth = 0;
         nMaxHeight = 0;
         nCacheTime = 0;
