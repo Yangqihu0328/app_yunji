@@ -382,7 +382,7 @@ static void OnRestartAppService() {
 
     SendMsg("web-message", payload.c_str(), payload.size());
 
-    system("/usr/bin/systemctl restart yj-aibox");
+    system("/usr/bin/bash /opt/bin/BoxDemo/restart.sh");
 
     LOG_M_C(MQTT_CLIENT, "OnRestartAppService ----.");
 }
@@ -442,26 +442,35 @@ static void OnSyncSystemTime(int year, int month, int day, int hour, int minute,
 bool check_RTSP_stream(const std::string& rtspUrl) {
     LOG_M_C(MQTT_CLIENT, "check_RTSP_stream ++++.");
 
+    if (std::string::npos == rtspUrl.find("rtsp:")) {
+        return false;
+    }
+
+    // only support local rtsp url
+    if (std::string::npos == rtspUrl.find("192.168")) {
+        return false;
+    }
+
     AVFormatContext* formatContext = avformat_alloc_context();
     if (!formatContext) {
-        LOG_M_D(MQTT_CLIENT, "avformat_alloc_context(stream %d) failed!");
+        LOG_M_E(MQTT_CLIENT, "avformat_alloc_context(stream %d) failed!");
         return false;
     }
 
     if (avformat_open_input(&formatContext, rtspUrl.c_str(), nullptr, nullptr) < 0) {
-        LOG_M_D(MQTT_CLIENT, "Failed to open RTSP stream: ", rtspUrl);
+        LOG_M_E(MQTT_CLIENT, "Failed to open RTSP stream: ", rtspUrl);
         return false;
     }
 
     if (avformat_find_stream_info(formatContext, nullptr) < 0) {
-        LOG_M_D(MQTT_CLIENT, "Failed to retrieve stream info.");
+        LOG_M_E(MQTT_CLIENT, "Failed to retrieve stream info.");
         avformat_close_input(&formatContext);
         return false;
     }
 
     avformat_close_input(&formatContext);
 
-    LOG_M_C(MQTT_CLIENT, "check_RTSP_stream ++++.");
+    LOG_M_C(MQTT_CLIENT, "check_RTSP_stream ----.");
 
     return true;
 }
@@ -504,6 +513,8 @@ static void OnGetMediaChannelList() {
 static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const std::string& mediaName, const std::string& mediaDesc) {
     LOG_M_C(MQTT_CLIENT, "OnSetMediaChannelInfo ++++.");
 
+    AX_U32 status = check_RTSP_stream(mediaUrl) ? 1 : 0;
+
     json root;
     // 获取当前通道信息
     AX_U32 nMediaCnt = 0;
@@ -512,7 +523,7 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
     if (id < (AX_U32)mediasMap.size()) {
         mediasMap[id].nMediaId = id;
         mediasMap[id].nMediaDelete = 0;
-        mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
+        mediasMap[id].nMediaStatus = status;  // 0异常 1正常/未使用 2使用中
         strcpy(mediasMap[id].szMediaUrl, mediaUrl.c_str());
         strcpy(mediasMap[id].szMediaName, mediaName.c_str());
         strcpy(mediasMap[id].szMediaDesc, mediaDesc.c_str());
@@ -520,8 +531,13 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
 
-        root["result"] = 0;
-        root["msg"] = "success";
+        if (!status) {
+            root["result"] = -1;
+            root["msg"] = "stream test failed!";
+        } else {
+            root["result"] = 0;
+            root["msg"] = "success";
+        }
     } else {
         root["result"] = -1;
         root["msg"] = "invalid stream id!";
@@ -529,7 +545,7 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
 
     json child;
     child["type"] = "setMediaChannelInfo";
-    child["status"] = 0; // 0异常 1正常
+    child["status"] = 0;  // 0异常 1正常
 
     root["data"] = child;
 
@@ -699,7 +715,9 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     if (id < (AX_U32)mediasMap.size()) {
-        mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
+        // 0异常 1正常/未使用 2使用中
+        if (mediasMap[id].nMediaStatus != 0)
+            mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
         mediasMap[id].taskInfo.nTaskDelete = 1;
         mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
         memset(mediasMap[id].taskInfo.szTaskKey, 0, sizeof(mediasMap[id].taskInfo.szTaskKey));
@@ -759,7 +777,7 @@ static std::string UrlEncode(const std::string& input) {
 }
 #endif
 
-static void StartPreview(AX_U32 id) {
+static AX_BOOL StartPreview(AX_U32 id) {
     LOG_M_C(MQTT_CLIENT, "StartPreview ++++.");
 
     // 获取当前通道信息
@@ -767,6 +785,10 @@ static void StartPreview(AX_U32 id) {
     STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
     std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     if (id < (AX_U32)mediasMap.size()) {
+
+        if (!check_RTSP_stream(mediasMap[id].szMediaUrl)) {
+            return AX_FALSE;
+        }
 
         std::string key;
         AX_CHAR api[256] = {0};
@@ -819,12 +841,16 @@ static void StartPreview(AX_U32 id) {
 
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
+
+        return AX_TRUE;
     }
 
     LOG_M_C(MQTT_CLIENT, "StartPreview ----.");
+
+    return AX_FALSE;
 }
 
-static void StopPreview(AX_U32 id, AX_U32 controlCommand) {
+static AX_BOOL StopPreview(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "StopPreview ++++.");
 
     // 获取当前通道信息
@@ -852,35 +878,49 @@ static void StopPreview(AX_U32 id, AX_U32 controlCommand) {
             }
         }
 
-        mediasMap[id].nMediaStatus = controlCommand==ContrlCmd::RemoveAlgo ? 1 : 2; // 0异常 1正常/未使用 2使用中
+        // 0异常 1正常/未使用 2使用中
+        if (mediasMap[id].nMediaStatus != 0)
+            mediasMap[id].nMediaStatus = controlCommand==ContrlCmd::RemoveAlgo ? 1 : 2; 
         mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
 
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
+
+        return AX_TRUE;
     }
 
     LOG_M_C(MQTT_CLIENT, "StopPreview ----.");
+
+    return AX_FALSE;
 }
 
 static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "OnAlgoTaskControl ++++.");
+
+    AX_BOOL ret = AX_FALSE;
 
     std::unique_lock<std::mutex> lock(mtx);
     StreamQueue.push({static_cast<ContrlCmd>(controlCommand), id});
     lock.unlock();
 
     if (controlCommand == ContrlCmd::StartAlgo) {
-        StartPreview(id);
+        ret = StartPreview(id);
     } else if (controlCommand == ContrlCmd::StopAlgo || controlCommand == ContrlCmd::RemoveAlgo) {
-        StopPreview(id, controlCommand);
+        ret = StopPreview(id, controlCommand);
     }
 
     json child;
     child["type"] = "algoTaskControl";
 
     json root;
-    root["result"] = 0;
-    root["msg"] = "success";
+    if (ret == AX_TRUE) {
+        root["result"] = 0;
+        root["msg"] = "success";
+    } else {
+        root["result"] = -1;
+        root["msg"] = "failed";
+    }
+    
     root["data"] = child;
 
     std::string payload = root.dump();
