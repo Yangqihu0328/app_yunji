@@ -356,13 +356,67 @@ AX_BOOL CVideoDecoder::SetGrpAttr(AX_VDEC_GRP vdGrp, VDEC_GRP_ATTR_T& stGrpAttr)
     AX_VDEC_GetGrpAttr(vdGrp, &ax_grp_attr);
     ax_grp_attr.enCodecType = stGrpAttr.enCodecType;
     ax_grp_attr.enInputMode = stGrpAttr.enInputMode;
-    ax_grp_attr.u32MaxPicWidth = stGrpAttr.nMaxWidth;
-    ax_grp_attr.u32MaxPicHeight = stGrpAttr.nMaxHeight;
+    ax_grp_attr.u32MaxPicWidth = 512;
+    ax_grp_attr.u32MaxPicHeight = 512;
     ax_grp_attr.u32StreamBufSize = stGrpAttr.nMaxStreamBufSize;
     ax_grp_attr.bSdkAutoFramePool = stGrpAttr.bPrivatePool;
-    AX_VDEC_SetGrpAttr(vdGrp, &ax_grp_attr);
+
+    AX_VDEC_GRP_STATUS_T vdGrpStatus;
+    memset(&vdGrpStatus, 0, sizeof(vdGrpStatus));
+    AX_S32 ret = AX_VDEC_QueryStatus(vdGrp, &vdGrpStatus);
+    if (0 != ret) {
+        LOG_M_E(VDEC, "%s: AX_VDEC_QueryStatus(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
+        return AX_FALSE;
+    } else {
+        if (vdGrpStatus.bStartRecvStream) {
+            LOG_M_C(VDEC, "stop vdGrp %d +++", vdGrp);
+
+            ret = AX_VDEC_StopRecvStream(vdGrp);
+            if (0 != ret) {
+                LOG_M_E(VDEC, "%s: AX_VDEC_StopRecvStream(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
+                return AX_FALSE;
+            }
+
+            m_arrGrpInfo[vdGrp].bStarted = AX_FALSE;
+
+            ret = AX_VDEC_ResetGrp(vdGrp);
+            if (0 != ret) {
+                LOG_M_E(VDEC, "%s: AX_VDEC_ResetGrp(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
+                return AX_FALSE;
+            }
+        }
+    }
+
+    ret = AX_VDEC_SetGrpAttr(vdGrp, &ax_grp_attr);
+    if (ret != 0) {
+        LOG_M_E(VDEC, "AX_VDEC_SetGrpAttr failed, ret = 0x%x", ret);
+        return AX_FALSE;
+    }
+
+    ret = AX_VDEC_QueryStatus(vdGrp, &vdGrpStatus);
+    printf("============================%d\n", vdGrpStatus.enCodecType);
 
     m_arrGrpInfo[vdGrp].stAttr = stGrpAttr;
+
+    AX_VDEC_RECV_PIC_PARAM_T stRecvParam;
+    memset(&stRecvParam, 0, sizeof(stRecvParam));
+    stRecvParam.s32RecvPicNum = -1;
+    ret = AX_VDEC_StartRecvStream(vdGrp, &stRecvParam);
+    if (0 != ret) {
+        LOG_M_E(VDEC, "%s: AX_VDEC_StartRecvStream(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
+        return AX_FALSE;
+    }
+
+    ret = AX_VDEC_GetGrpAttr(vdGrp, &ax_grp_attr);
+    if (0 != ret) {
+        LOG_M_E(VDEC, "%s: AX_VDEC_GetGrpAttr(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
+        return AX_FALSE;
+    }
+
+    printf("============================%d\n", ax_grp_attr.enCodecType);
+
+    m_arrGrpInfo[vdGrp].bStarted = AX_TRUE;
+    
     return AX_TRUE;
 }
 

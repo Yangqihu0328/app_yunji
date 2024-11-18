@@ -1225,11 +1225,14 @@ AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
             if (stInfo.bGetInfo == AX_TRUE) {
                 VDEC_GRP_ATTR_T stGrpAttr;
                 m_vdec->GetGrpAttr(id, stGrpAttr);
-                printf("stGrpAttr.enCodecType = %d %d \n ", stGrpAttr.enCodecType, stGrpAttr.nFps);
+                LOG_M_E(BOX, "stGrpAttr.enCodecType = %d %d", stGrpAttr.enCodecType, stGrpAttr.nFps);
 
                 stGrpAttr.enCodecType = stInfo.eVideoType;
                 stGrpAttr.nFps = stInfo.nFps;
-                m_vdec->SetGrpAttr(id, stGrpAttr);
+                if (AX_FALSE == m_vdec->SetGrpAttr(id, stGrpAttr)) {
+                    LOG_M_E(BOX, "set group [%d] attr failed", id);
+                    return AX_FALSE;
+                }
                 break;
             }
 
