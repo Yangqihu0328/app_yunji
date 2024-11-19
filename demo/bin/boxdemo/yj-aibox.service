@@ -1,0 +1,17 @@
+[Unit]
+Description=YJ AI-BOX APP
+After=rc-local.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bin/BoxDemo
+ExecStart=/bin/sh -ec '\
+    export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/opt/lib:/soc/lib:/opt/bin/BoxDemo"; \
+    /opt/bin/BoxDemo/boxdemo'
+ExecStop=/bin/kill -s TERM $MAINPID
+TimeoutStartSec=0
+RestartSec=5
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
