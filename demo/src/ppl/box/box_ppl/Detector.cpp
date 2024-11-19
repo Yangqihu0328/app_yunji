@@ -510,16 +510,6 @@ AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
             stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_COMMON_THRESHOLD_CONFIG_T);
             itemIndex++;
 
-            // // 设置3分钟不重复推送
-            // stConfig.pstItems[itemIndex].pstrType = (AX_CHAR *)"push_strategy";
-            // AX_SKEL_PUSH_STRATEGY_T strategy;
-            // strategy.ePushMode = AX_SKEL_PUSH_MODE_INTERVAL;
-            // strategy.nIntervalTimes = 60*1000*3;
-            // strategy.nPushCounts = 1;
-            // stConfig.pstItems[itemIndex].pstrValue = (AX_VOID *)&strategy;
-            // stConfig.pstItems[itemIndex].nValueSize = sizeof(AX_SKEL_PUSH_STRATEGY_T);
-            // itemIndex++;
-
             stConfig.nSize = itemIndex;
             stHandleParam.stConfig = stConfig;
 

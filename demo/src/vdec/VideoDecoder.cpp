@@ -346,77 +346,99 @@ AX_BOOL CVideoDecoder::DeInit(AX_VOID) {
     return AX_TRUE;
 }
 
-AX_BOOL CVideoDecoder::SetGrpAttr(AX_VDEC_GRP vdGrp, VDEC_GRP_ATTR_T& stGrpAttr) {
+AX_BOOL CVideoDecoder::SetGrpCodecType(AX_VDEC_GRP vdGrp, VDEC_GRP_ATTR_T &tGrpAttr) {
     if (vdGrp >= (AX_VDEC_GRP)m_arrGrpInfo.size()) {
         LOG_M_E(VDEC, "%s: set attr invalid vdGrp %d", __func__, vdGrp);
         return AX_FALSE;
     }
 
-    AX_VDEC_GRP_ATTR_T ax_grp_attr;
-    AX_VDEC_GetGrpAttr(vdGrp, &ax_grp_attr);
-    ax_grp_attr.enCodecType = stGrpAttr.enCodecType;
-    ax_grp_attr.enInputMode = stGrpAttr.enInputMode;
-    ax_grp_attr.u32MaxPicWidth = 512;
-    ax_grp_attr.u32MaxPicHeight = 512;
-    ax_grp_attr.u32StreamBufSize = stGrpAttr.nMaxStreamBufSize;
-    ax_grp_attr.bSdkAutoFramePool = stGrpAttr.bPrivatePool;
+    VDEC_GRP_INFO_T& stGrpInfo = m_arrGrpInfo[vdGrp];
+    if (!stGrpInfo.stAttr.bEnable) {
+        LOG_M_E(VDEC, "%s: not enable vdGrp %d", __func__, vdGrp);
+        return AX_FALSE;
+    }
 
-    AX_VDEC_GRP_STATUS_T vdGrpStatus;
-    memset(&vdGrpStatus, 0, sizeof(vdGrpStatus));
-    AX_S32 ret = AX_VDEC_QueryStatus(vdGrp, &vdGrpStatus);
-    if (0 != ret) {
-        LOG_M_E(VDEC, "%s: AX_VDEC_QueryStatus(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
+    AX_S32 ret = 0;
+    if (stGrpInfo.bActive) {
+        //stop recv stream fistly
+        AX_VDEC_GRP_STATUS_T vdGrpStatus;
+        memset(&vdGrpStatus, 0, sizeof(vdGrpStatus));
+        ret = AX_VDEC_QueryStatus(vdGrp, &vdGrpStatus);
+        if (0 != ret) {
+            LOG_M_E(VDEC, "%s: AX_VDEC_QueryStatus(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
+            return AX_FALSE;
+        } else {
+            if (vdGrpStatus.bStartRecvStream) {
+                LOG_M_C(VDEC, "stop vdGrp %d +++", vdGrp);
+
+                ret = AX_VDEC_StopRecvStream(vdGrp);
+                if (0 != ret) {
+                    LOG_M_E(VDEC, "%s: AX_VDEC_StopRecvStream(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
+                    return AX_FALSE;
+                }
+
+                stGrpInfo.bStarted = AX_FALSE;
+            }
+        }
+
+        // destory goup
+        for (AX_U32 i = 0; i < 3; ++i) {
+            ret = AX_VDEC_DestroyGrp(vdGrp);
+            if (0 == ret) {
+                break;
+            } else {
+                LOG_M_W(VDEC, "AX_VDEC_DestroyGrp(vdGrp %d) fail %d times", vdGrp, i + 1);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
+        if (0 != ret) {
+            LOG_M_E(VDEC, "AX_VDEC_DestroyGrp(vdGrp %d) fail, ret = 0x%x", vdGrp, ret);
+        }
+
+        stGrpInfo.bActive = AX_FALSE;
+    }
+
+    //creat decode
+    stGrpInfo.stAttr.enCodecType = tGrpAttr.enCodecType;
+    stGrpInfo.stAttr.eDecodeMode = tGrpAttr.eDecodeMode;
+    stGrpInfo.stAttr.enInputMode = tGrpAttr.enInputMode;
+    stGrpInfo.stAttr.nMaxStreamBufSize = tGrpAttr.nMaxStreamBufSize;
+
+    if (!CreateDecoder(vdGrp, stGrpInfo)) {
+        LOG_M_E(VDEC, "%s: CreateDecoder vdGrp %d", __func__, vdGrp);
         return AX_FALSE;
     } else {
-        if (vdGrpStatus.bStartRecvStream) {
-            LOG_M_C(VDEC, "stop vdGrp %d +++", vdGrp);
+        stGrpInfo.bActive = AX_TRUE;
 
-            ret = AX_VDEC_StopRecvStream(vdGrp);
-            if (0 != ret) {
-                LOG_M_E(VDEC, "%s: AX_VDEC_StopRecvStream(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
-                return AX_FALSE;
+        for (AX_VDEC_CHN i = 0; i < MAX_VDEC_CHN_NUM; ++i) {
+            if (stGrpInfo.stAttr.bChnEnable[i]) {
+                if (0 == stGrpInfo.stAttr.stChnAttr[i].u32OutputFifoDepth) {
+                    stGrpInfo.bLinked = AX_TRUE;
+                    break;
+                }
             }
+        }
 
-            m_arrGrpInfo[vdGrp].bStarted = AX_FALSE;
-
-            ret = AX_VDEC_ResetGrp(vdGrp);
-            if (0 != ret) {
-                LOG_M_E(VDEC, "%s: AX_VDEC_ResetGrp(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
-                return AX_FALSE;
-            }
+        AX_VDEC_RECV_PIC_PARAM_T stRecvParam;
+        memset(&stRecvParam, 0, sizeof(stRecvParam));
+        stRecvParam.s32RecvPicNum = -1;
+        ret = AX_VDEC_StartRecvStream(vdGrp, &stRecvParam);
+        if (0 != ret) {
+            LOG_M_E(VDEC, "%s: AX_VDEC_StartRecvStream(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
+            return AX_FALSE;
         }
     }
 
-    ret = AX_VDEC_SetGrpAttr(vdGrp, &ax_grp_attr);
-    if (ret != 0) {
-        LOG_M_E(VDEC, "AX_VDEC_SetGrpAttr failed, ret = 0x%x", ret);
-        return AX_FALSE;
-    }
+    stGrpInfo.bStarted = AX_TRUE;
 
-    ret = AX_VDEC_QueryStatus(vdGrp, &vdGrpStatus);
-    printf("============================%d\n", vdGrpStatus.enCodecType);
 
-    m_arrGrpInfo[vdGrp].stAttr = stGrpAttr;
-
-    AX_VDEC_RECV_PIC_PARAM_T stRecvParam;
-    memset(&stRecvParam, 0, sizeof(stRecvParam));
-    stRecvParam.s32RecvPicNum = -1;
-    ret = AX_VDEC_StartRecvStream(vdGrp, &stRecvParam);
-    if (0 != ret) {
-        LOG_M_E(VDEC, "%s: AX_VDEC_StartRecvStream(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
-        return AX_FALSE;
-    }
-
+    AX_VDEC_GRP_ATTR_T ax_grp_attr;
     ret = AX_VDEC_GetGrpAttr(vdGrp, &ax_grp_attr);
     if (0 != ret) {
         LOG_M_E(VDEC, "%s: AX_VDEC_GetGrpAttr(vdGrp %d) fail, ret = 0x%x", __func__, vdGrp, ret);
         return AX_FALSE;
     }
 
-    printf("============================%d\n", ax_grp_attr.enCodecType);
-
-    m_arrGrpInfo[vdGrp].bStarted = AX_TRUE;
-    
     return AX_TRUE;
 }
 

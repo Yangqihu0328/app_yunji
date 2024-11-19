@@ -250,11 +250,6 @@ AX_BOOL CRtspStreamer::Init(const STREAMER_ATTR_T &stAttr) {
 AX_BOOL CRtspStreamer::DeInit(AX_VOID) {
     LOG_M_D(CLIENT, "%s: client %d +++", __func__, m_stInfo.nCookie);
 
-    // if (m_EventThread.IsRunning()) {
-    //     LOG_M_E(CLIENT, "%s: client %d is still running", __func__, m_stInfo.nCookie);
-    //     return AX_FALSE;
-    // }
-
     Stop();
 
     if (m_env) {

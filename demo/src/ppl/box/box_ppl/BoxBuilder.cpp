@@ -812,16 +812,16 @@ AX_BOOL CBoxBuilder::InitDecoder(const STREAM_CONFIG_T &streamConfig) {
                 stPoolConfig.IsMergeMode = AX_FALSE;
                 stPoolConfig.CacheMode = POOL_CACHE_MODE_NONCACHE;
                 sprintf((AX_CHAR *)stPoolConfig.PoolName, "vdec_%d_pp%d_pool", i, j);
-                AX_POOL pool = CAXPoolManager::GetInstance()->CreatePool(stPoolConfig);
-                if (AX_INVALID_POOLID == pool) {
+                vdec_arr[i] = CAXPoolManager::GetInstance()->CreatePool(stPoolConfig);
+                if (AX_INVALID_POOLID == vdec_arr[i]) {
                     return AX_FALSE;
                 }
 
-                if (!m_vdec->AttachPool(vdGrp, (AX_VDEC_CHN)j, pool)) {
+                if (!m_vdec->AttachPool(vdGrp, (AX_VDEC_CHN)j, vdec_arr[i])) {
                     return AX_FALSE;
                 }
 
-                LOG_M_C(BOX, "pool %2d (blkSize %d blkCount %d) is attached to VDEC vdGrp %d vdChn %d", pool, stPoolConfig.BlkSize,
+                LOG_M_C(BOX, "pool %2d (blkSize %d blkCount %d) is attached to VDEC vdGrp %d vdChn %d", vdec_arr[i], stPoolConfig.BlkSize,
                         stPoolConfig.BlkCnt, vdGrp, j);
             }
         }
@@ -1207,32 +1207,78 @@ AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
         stAttr.nMaxHeight = streamConfig.nMaxGrpH;
         stAttr.nCookie = id;
 
-        if (!m_arrStreamer[id] &&
-            !(m_arrStreamer[id] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath))) {
-            return AX_FALSE;
-        }
-
+        m_arrStreamer[id] = CStreamerFactory::GetInstance()->CreateHandler(stAttr.strPath);
         if (!m_arrStreamer[id]->Init(stAttr)) {
             return AX_FALSE;
         }
 
         //等流初始化完，RTSP回调完获取流的信息，再开启流解码，实现一个1s的超时机制
-        const auto timeout = std::chrono::milliseconds(1000); // 设置超时时间
+        const auto timeout = std::chrono::milliseconds(5 * 1000); // 设置超时时间
         auto startTime = std::chrono::steady_clock::now();
         while (true) {
             // 检查条件
             const STREAMER_INFO_T &stInfo = m_arrStreamer[id]->GetStreamInfo();
             if (stInfo.bGetInfo == AX_TRUE) {
-                VDEC_GRP_ATTR_T stGrpAttr;
-                m_vdec->GetGrpAttr(id, stGrpAttr);
-                LOG_M_E(BOX, "stGrpAttr.enCodecType = %d %d", stGrpAttr.enCodecType, stGrpAttr.nFps);
+                VDEC_GRP_ATTR_T tGrpAttr;
+                auto max_h = ALIGN_UP(streamConfig.nMaxGrpH, 16); /* H264 MB 16x16 */
+                if (STREAM_TYPE_E::RTSP == stInfo.eStreamType) {
+                    /* RTSP: always preview + frame mode */
+                    tGrpAttr.eDecodeMode = AX_VDEC_DISPLAY_MODE_PREVIEW;
+                    tGrpAttr.enInputMode = AX_VDEC_INPUT_MODE_FRAME;
+                    tGrpAttr.nMaxStreamBufSize = streamConfig.nMaxGrpW * max_h * 3 / 2;
+                } else {
+                    /* FILE: playback + frame or stream mode according configuration */
+                    tGrpAttr.eDecodeMode = AX_VDEC_DISPLAY_MODE_PLAYBACK;
+                    if (0 == streamConfig.nInputMode) {
+                        tGrpAttr.enInputMode = AX_VDEC_INPUT_MODE_FRAME;
+                        tGrpAttr.nMaxStreamBufSize = streamConfig.nMaxGrpW * max_h * 3 / 2;
+                    } else {
+                        tGrpAttr.enInputMode = AX_VDEC_INPUT_MODE_STREAM;
+                        tGrpAttr.nMaxStreamBufSize = streamConfig.nMaxStreamBufSize;
+                    }
+                }
 
-                stGrpAttr.enCodecType = stInfo.eVideoType;
-                stGrpAttr.nFps = stInfo.nFps;
-                if (AX_FALSE == m_vdec->SetGrpAttr(id, stGrpAttr)) {
+                if (0 == streamConfig.nDefaultFps || STREAM_TYPE_E::RTSP == stInfo.eStreamType) {
+                    /* if default fps is 0 or RTSP, fps is parsed by streamer */
+                    tGrpAttr.nFps = stInfo.nFps;
+                } else {
+                    /* use configured fps for file streamer */
+                    tGrpAttr.nFps = streamConfig.nDefaultFps;
+                }
+                tGrpAttr.enCodecType = stInfo.eVideoType;
+                if (!m_vdec->SetGrpCodecType(id, tGrpAttr)) {
                     LOG_M_E(BOX, "set group [%d] attr failed", id);
                     return AX_FALSE;
                 }
+
+                m_vdec->GetGrpAttr(id, tGrpAttr);
+                for (AX_U32 j = 0; j < MAX_VDEC_CHN_NUM; ++j) {
+                    if (!tGrpAttr.bChnEnable[j]) {
+                        continue;
+                    }
+
+                    AX_VDEC_CHN_ATTR_T &stChn = tGrpAttr.stChnAttr[j];
+                    AX_U32 nBlkSize = CVideoDecoder::GetBlkSize(stChn.u32PicWidth, stChn.u32PicHeight, VDEC_STRIDE_ALIGN, tGrpAttr.enCodecType,
+                                                                &stChn.stCompressInfo, stChn.enImgFormat);
+
+                    if (tGrpAttr.bPrivatePool) {
+                        /* fixme: we should calculate blksize by SPS such as sps.frame_cropping_flags */
+                        stChn.u32FrameBufSize = nBlkSize;
+                        stChn.u32FrameBufCnt = streamConfig.nChnDepth[j];
+                        m_vdec->SetChnAttr(id, j, stChn);
+                        continue;
+                    }
+                    if (0 == streamConfig.nUserPool) {
+                        CAXPoolManager::GetInstance()->AddBlockToFloorPlan(nBlkSize, streamConfig.nChnDepth[j]);
+                        LOG_M_N(BOX, "VDEC vdGrp %d vdChn %d blkSize %d blkCount %d", id, j, nBlkSize, streamConfig.nChnDepth[j]);
+                    } else {
+                        if (!m_vdec->AttachPool(id, (AX_VDEC_CHN)j, vdec_arr[id])) {
+                            LOG_M_N(BOX, "AttachPool fail\n");
+                            return AX_FALSE;
+                        }
+                    }
+                }
+
                 break;
             }
 
@@ -1243,7 +1289,7 @@ AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
             }
 
             // 避免忙等，休眠50ms
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
 
         m_arrStreamer[id]->RegObserver(m_vdec.get());

@@ -84,6 +84,7 @@ protected:
 protected:
     CBoxAppSys m_sys;
     AX_U32 m_nDecodeGrpCount{0};
+    AX_POOL vdec_arr[16];
     std::unique_ptr<CVideoDecoder> m_vdec;
     std::unique_ptr<CDetector> m_detect;
     IObserverUniquePtr m_detectObserver;

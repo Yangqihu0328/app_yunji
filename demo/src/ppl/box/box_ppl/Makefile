@@ -110,6 +110,9 @@ CPPFLAGS            := --std=c++14
 CFLAGS              := $(CPPFLAGS) -Wall -Wl,-rpath-link=$(LIB_PATH):$(THIRD_PARTY_PATH)/ffmpeg/lib:-L$(THIRD_PARTY_PATH)/openssl/lib:-L$(THIRD_PARTY_PATH)/mp4/lib
 CFLAGS              += -DAPP_BUILD_VERSION=\"$(SDK_VERSION)\"
 
+# use ax algo
+# CFLAGS            += -D__USE_AX_ALGO
+
 # internal debug
 # CFLAGS            += -D__BOX_DEBUG__
 
