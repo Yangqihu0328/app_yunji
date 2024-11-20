@@ -16,13 +16,13 @@
 #include "AXSingleton.h"
 #include "ax_skel_type.h"
 
-#define MAX_DETECT_RESULT_COUNT (64)
+#define MAX_DETECT_RESULT_COUNT (32)
 #define MAX_CHANNEL_SIZE (16)
 #define MAX_RESULT_SIZE (5)
 
 //临时写一个算法列表，火焰，动物，手势，抽烟
 typedef enum {
-    DETECT_TYPE_UNKNOWN = 0,
+    DETECT_TYPE_PEOPLE = 0,
     DETECT_TYPE_FACE = 1,
     DETECT_TYPE_BODY = 2,
     DETECT_TYPE_VEHICLE = 3,
@@ -98,6 +98,7 @@ public:
             new_result = cur_result;
         }
 
+        #ifndef __USE_AX_ALGO
         auto track_id_set = [](const DETECT_RESULT_T& result) {
             std::unordered_set<int> track_ids;
             for (AX_U32 i = 0; i < result.nCount; ++i) {
@@ -135,6 +136,7 @@ public:
                 channel_result[nGrp] = new_result;
             }
         }
+        #endif
 
         m_mapRlts[nGrp] = new_result;
 

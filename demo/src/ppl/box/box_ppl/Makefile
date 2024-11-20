@@ -91,6 +91,7 @@ CINCLUDE            := -I$(SRC_PATH) \
                        -I$(3RD_PATH)/inc/live/BasicUsageEnvironment \
                        -I$(3RD_PATH)/inc/live/groupsock \
                        -I$(3RD_PATH)/inc/mqtt \
+                       -I$(3RD_PATH)/inc/ax_algo \
                        -I$(3RD_PATH)/inc/http \
                        -I$(3RD_PATH)/inc/json \
                        -I$(3RD_PATH)/inc/live/liveMedia \
@@ -111,7 +112,7 @@ CFLAGS              := $(CPPFLAGS) -Wall -Wl,-rpath-link=$(LIB_PATH):$(THIRD_PAR
 CFLAGS              += -DAPP_BUILD_VERSION=\"$(SDK_VERSION)\"
 
 # use ax algo
-# CFLAGS            += -D__USE_AX_ALGO
+CFLAGS            += -D__USE_AX_ALGO
 
 # internal debug
 # CFLAGS            += -D__BOX_DEBUG__
@@ -151,6 +152,7 @@ CLIB                += -L$(THIRD_PARTY_PATH)/ffmpeg/lib -lavcodec -lavutil -lavf
 CLIB                += -L$(THIRD_PARTY_PATH)/openssl/lib -lssl -lcrypto
 CLIB                += -L$(THIRD_PARTY_PATH)/mp4/lib -l:libmp4.a
 CLIB                += -L$(3RD_PATH)/lib/mqtt -lMQTTPacketClient
+CLIB                += -L$(3RD_PATH)/lib/ax_algo -lax_algorithm -L$(OBJ_OUT_PATH)/rootfs/usr/lib/ -lz
 #add
 CLIB                += -lax_engine
 CLIB                += -lax_dmadim

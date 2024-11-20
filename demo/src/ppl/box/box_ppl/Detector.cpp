@@ -23,6 +23,369 @@
 using namespace std;
 #define DETECTOR "SKEL"
 
+#ifdef __USE_AX_ALGO
+std::map<int, std::string> DetModelMap = {
+    {AX_PPL_PEOPLE, "20241113.model"},
+};
+
+AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
+    LOG_M_C(DETECTOR, "detect thread is running");
+
+    AX_U64 nFrameId = 0;
+    AX_U32 nCurrGrp = 0;
+    AX_U32 nNextGrp = 0;
+    const AX_U32 TOTAL_GRP_COUNT = m_stAttr.nChannelNum;
+    CAXFrame axFrame;
+    AX_U32 nSkipCount = 0;
+    while (m_DetectThread.IsRunning()) {
+        for (nCurrGrp = nNextGrp; nCurrGrp < TOTAL_GRP_COUNT; ++nCurrGrp) {
+            if (m_arrFrameQ[nCurrGrp].Pop(axFrame, 0)) {
+                nSkipCount = 0;
+                break;
+            }
+
+            if (++nSkipCount == TOTAL_GRP_COUNT) {
+                this_thread::sleep_for(chrono::microseconds(1000));
+                nSkipCount = 0;
+            }
+        }
+
+        if (nCurrGrp == TOTAL_GRP_COUNT) {
+            nNextGrp = 0;
+            continue;
+        } else {
+            nNextGrp = nCurrGrp + 1;
+            if (nNextGrp == TOTAL_GRP_COUNT) {
+                nNextGrp = 0;
+            }
+        }
+
+        LOG_M_D(DETECTOR, "runskel vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x",
+                axFrame.nGrp, axFrame.nChn,
+                axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
+                axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0], axFrame.stFrame.stVFrame.stVFrame.u32Width,
+                axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
+                axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+
+        auto &flag_vec = d_vec[nCurrGrp];
+        //遍历三种算法是否使能
+        for (int index = 0; index < 1; index++) {
+            if (flag_vec[index]) {
+                ax_image_t ax_image;
+                auto frame_info = axFrame.stFrame.stVFrame.stVFrame;
+                #if 0
+                // ax_image.pPhy = (unsigned long long int)frame_info.u64PhyAddr;
+                // ax_image.pVir = (void *)frame_info.u64VirAddr[0];
+                // ax_image.nSize = frame_info.u32FrameSize;
+                // ax_image.nWidth = frame_info.u32Width;
+                // ax_image.nHeight = frame_info.u32Height;
+                // ax_image.eDtype = ax_color_space_nv12;
+                // ax_image.tStride_W = frame_info.u32PicStride[0];
+                #else
+                if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
+                    axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] =
+                    (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+                }
+                ax_create_image(frame_info.u32Width, frame_info.u32Height, frame_info.u32PicStride[0],
+                ax_color_space_nv12, &ax_image);
+                memcpy(ax_image.pVir, (void *)axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0], ax_image.nSize);
+                #endif
+
+                #if 0
+                ofstream ofs;
+                AX_CHAR szFile[64];
+                sprintf(szFile, "./ai_dump_%d_%lld.yuv", axFrame.stFrame.stVFrame.stVFrame.u32FrameSize,
+                axFrame.stFrame.stVFrame.stVFrame.u64SeqNum);
+                ofs.open(szFile, ofstream::out | ofstream::binary | ofstream::trunc);
+                if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
+                    axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] =
+                    (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+                }
+                ofs.write((const char*)axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0],
+                                    axFrame.stFrame.stVFrame.stVFrame.u32FrameSize);
+                ofs.close();
+                #endif
+
+                ax_result_t forward_result;
+                ax_algorithm_inference(handle[nCurrGrp][index], &ax_image, &forward_result);
+
+                DETECT_RESULT_T result;
+                result.nW = frame_info.u32Width;
+                result.nH = frame_info.u32Height;
+                result.nSeqNum = frame_info.u64SeqNum;
+                result.nGrpId = axFrame.nGrp;
+                result.nAlgoType = m_stAttr.tChnAttr[axFrame.nGrp].nPPL[index];;
+                result.nCount = forward_result.n_objects;
+
+                for (AX_U32 i = 0; i < result.nCount; ++i) {
+                    result.item[i].eType = (DETECT_TYPE_E)forward_result.objects[i].label;
+                    result.item[i].nTrackId = forward_result.objects[i].track_id;
+                    result.item[i].tBox.fX = forward_result.objects[i].bbox.x;
+                    result.item[i].tBox.fY = forward_result.objects[i].bbox.y;
+                    result.item[i].tBox.fW = forward_result.objects[i].bbox.w;
+                    result.item[i].tBox.fH = forward_result.objects[i].bbox.h;
+                }
+
+                CDetectResult::GetInstance()->Set(axFrame.nGrp, result);
+            }
+        }
+        /* release frame after done */
+        axFrame.DecRef();
+    }
+
+    LOG_M_D(DETECTOR, "%s: ---", __func__);
+}
+
+AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
+    LOG_M_D(DETECTOR, "%s: +++", __func__);
+
+    if (0 == stAttr.nChannelNum) {
+        LOG_M_E(DETECTOR, "%s: 0 nChannelNum", __func__);
+        return AX_FALSE;
+    }
+
+    m_stAttr = stAttr;
+
+    if (m_stAttr.nSkipRate <= 0) {
+        m_stAttr.nSkipRate = 1;
+    }
+
+    //都是预分配16个
+    m_arrFrameQ = new (nothrow) CAXLockQ<CAXFrame>[stAttr.nChannelNum];
+    if (!m_arrFrameQ) {
+        LOG_M_E(DETECTOR, "%s: alloc queue fail", __func__);
+        return AX_FALSE;
+    } else {
+        for (AX_U32 i = 0; i < stAttr.nChannelNum; ++i) {
+            m_arrFrameQ[i].SetCapacity(-1);
+        }
+    }
+
+    d_vec.resize(stAttr.nChannelNum);
+    for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
+        if (m_stAttr.tChnAttr[nChn].disable == 1) {
+            continue;
+        }
+
+        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+            ax_algorithm_init_t init_info;
+            AX_U32 algo_config  = m_stAttr.tChnAttr[nChn].nPPL[algo_id];
+            auto it = DetModelMap.find(algo_config);
+            if (it == DetModelMap.end()) {
+                d_vec[nChn][algo_id] = false;
+                LOG_M_E(DETECTOR, "%s: Key not found in DetModelMap", __func__);
+                break;
+            }
+
+            sprintf(init_info.model_file, DetModelMap[algo_config].c_str());
+            if (ax_algorithm_init(&init_info, &handle[nChn][algo_id]) != 0) {
+                LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail", __func__);
+                d_vec[nChn][algo_id] = false;
+                break;
+            }
+            d_vec[nChn][algo_id] = true;
+        }
+    }
+
+    LOG_M_D(DETECTOR, "%s: ---", __func__);
+    return AX_TRUE;
+}
+
+AX_BOOL CDetector::DeInit(AX_VOID) {
+    LOG_M_D(DETECTOR, "%s: +++", __func__);
+
+    AX_S32 ret;
+    if (m_DetectThread.IsRunning()) {
+        LOG_M_E(DETECTOR, "%s: detect thread is running", __func__);
+        return AX_FALSE;
+    }
+
+    for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
+        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+            if (d_vec[nChn][algo_id] == true && handle[nChn][algo_id] != nullptr) {
+                ax_algorithm_deinit(handle[nChn][algo_id]);
+            }
+        }
+    }
+
+    if (m_arrFrameQ) {
+        delete[] m_arrFrameQ;
+        m_arrFrameQ = nullptr;
+    }
+
+    LOG_M_D(DETECTOR, "%s: ---", __func__);
+    return AX_TRUE;
+}
+
+AX_BOOL CDetector::Start(AX_VOID) {
+    LOG_M_D(DETECTOR, "%s: +++", __func__);
+
+    if (!m_DetectThread.Start([this](AX_VOID *pArg) -> AX_VOID { RunDetect(pArg); }, this, "AppDetect", SCHED_FIFO, 99)) {
+        LOG_M_E(DETECTOR, "%s: create detect thread fail", __func__);
+        return AX_FALSE;
+    }
+    LOG_M_D(DETECTOR, "%s: ---", __func__);
+    return AX_TRUE;
+}
+
+//指定id开始，实际上就是对m_arrFrameQ进行初始化和调用npu接口
+AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
+    LOG_M_W(DETECTOR, "%s: +++", __func__);
+    do {
+        auto &algo_type_arr = det_attr.nPPL;
+        bool has_duplicate = false;
+        std::unordered_set<int> seen;
+
+        if (det_attr.disable == 1) {
+            LOG_M_E(DETECTOR, "%s: CDetector disable", __func__);
+        }
+
+        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+            if (seen.find(algo_type_arr[algo_id]) != seen.end()) {
+                has_duplicate = true;
+                break;
+            }
+            seen.insert(algo_type_arr[algo_id]);
+
+            if (has_duplicate) {
+                continue;
+            }
+
+            ax_algorithm_init_t init_info;
+            AX_U32 algo_config  = algo_type_arr[algo_id];
+            auto it = DetModelMap.find(algo_config);
+            if (it == DetModelMap.end()) {
+                d_vec[id][algo_id] = false;
+                LOG_M_E(DETECTOR, "%s: Key not found in DetModelMap", __func__);
+                break;
+            }
+
+            sprintf(init_info.model_file, DetModelMap[algo_config].c_str());
+            if (ax_algorithm_init(&init_info, &handle[id][algo_id]) != 0) {
+                LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail", __func__);
+                d_vec[id][algo_id] = false;
+                break;
+            }
+
+            d_vec[id][algo_id] = true;
+        }
+    } while (0);
+
+    LOG_M_D(DETECTOR, "%s: ---", __func__);
+    return AX_TRUE;
+}
+
+AX_BOOL CDetector::Stop(AX_VOID) {
+    LOG_M_D(DETECTOR, "%s: +++", __func__);
+
+    m_DetectThread.Stop();
+
+    if (m_arrFrameQ) {
+        for (AX_U32 i = 0; i < m_stAttr.nChannelNum; ++i) {
+            m_arrFrameQ[i].Wakeup();
+        }
+    }
+
+    m_DetectThread.Join();
+
+    if (m_arrFrameQ) {
+        for (AX_U32 i = 0; i < m_stAttr.nChannelNum; ++i) {
+            ClearQueue(i);
+        }
+    }
+
+    LOG_M_D(DETECTOR, "%s: ---", __func__);
+    return AX_TRUE;
+}
+
+//指定id停止，但是不会停止detector主线程。
+AX_BOOL CDetector::StopId(int id) {
+    LOG_M_D(DETECTOR, "%s: +++", __func__);
+
+    //先把消息队列清空，再删除skel
+    if (m_arrFrameQ) {
+        m_arrFrameQ[id].Wakeup();
+        ClearQueue(id);
+    }
+
+    if (handle[id]) {
+        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+            if (d_vec[id][algo_id] == true && handle[id][algo_id] != nullptr) {
+                ax_algorithm_deinit(handle[id][algo_id]);
+            }
+        }
+    }
+
+    LOG_M_D(DETECTOR, "%s: ---", __func__);
+    return AX_TRUE;
+}
+
+AX_BOOL CDetector::SendFrame(const CAXFrame &axFrame) {
+    LOG_M_I(DETECTOR, "recvfrm vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x", axFrame.nGrp, axFrame.nChn,
+            axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
+            axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0], axFrame.stFrame.stVFrame.stVFrame.u32Width,
+            axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
+            axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+
+    if (SkipFrame(axFrame)) {
+        LOG_M_I(DETECTOR, "dropfrm vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x", axFrame.nGrp, axFrame.nChn,
+                axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
+                axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0], axFrame.stFrame.stVFrame.stVFrame.u32Width,
+                axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
+                axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+        return AX_TRUE;
+    }
+
+    axFrame.IncRef();
+
+#if defined(__RECORD_VB_TIMESTAMP__)
+    CTimestampHelper::RecordTimestamp(axFrame.stFrame.stVFrame.stVFrame, axFrame.nGrp, axFrame.nChn, TIMESTAMP_SKEL_PUSH_FIFO);
+#endif
+
+    if (!m_arrFrameQ[axFrame.nGrp].Push(axFrame)) {
+        LOG_M_E(DETECTOR, "%s: push frame %lld to q fail", __func__, axFrame.stFrame.stVFrame.stVFrame.u64SeqNum);
+        axFrame.DecRef();
+    }
+
+    return AX_TRUE;
+}
+
+AX_BOOL CDetector::SkipFrame(const CAXFrame &axFrame) {
+#ifdef __VDEC_PP_FRAME_CTRL__
+    return AX_FALSE;
+#else
+
+    if (m_stAttr.nSkipRate <= 1) {
+        return AX_FALSE;
+    }
+
+    return (1 == (axFrame.stFrame.stVFrame.stVFrame.u64SeqNum % m_stAttr.nSkipRate)) ? AX_FALSE : AX_TRUE;
+#endif
+}
+
+
+AX_BOOL CDetector::Clear(AX_VOID) {
+    if (m_arrFrameQ) {
+        for (AX_U32 i = 0; i < m_stAttr.nChannelNum; ++i) {
+            ClearQueue(i);
+        }
+    }
+
+    return AX_TRUE;
+}
+
+AX_VOID CDetector::ClearQueue(AX_S32 nGrp) {
+    AX_U32 nCount = m_arrFrameQ[nGrp].GetCount();
+    if (nCount > 0) {
+        CAXFrame axFrame;
+        for (AX_U32 i = 0; i < nCount; ++i) {
+            if (m_arrFrameQ[nGrp].Pop(axFrame, 0)) {
+                axFrame.DecRef();
+            }
+        }
+    }
+}
+#else
 //同一帧被多个算法推理是正常情况。那么推理的结果应该都是存在同一个结果里面。
 //考虑的问题，检测的框要一直存在，但是检测结果不要一直送。
 static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstResult, AX_VOID *pUserData) {
@@ -652,3 +1015,4 @@ AX_VOID CDetector::ClearQueue(AX_S32 nGrp) {
         }
     }
 }
+#endif

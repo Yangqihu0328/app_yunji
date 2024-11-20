@@ -16,10 +16,82 @@
 #include "AXThread.hpp"
 #include "ax_skel_api.h"
 #include "BoxMediaParser.hpp"
+#include "ax_global_type.h"
+#include "ax_algorithm_sdk.h"
 
 #define DETECTOR_MAX_CHN_NUM 16
 #define ALGO_MAX_NUM 3
 
+#ifdef __USE_AX_ALGO
+typedef enum {
+    AX_PPL_PEOPLE = 4,              /* hvcfp detection pipeline */
+    AXPPL_MAX,
+} AX_PPL_E;
+
+typedef struct DETECTOR_CHN_ATTR_S {
+    AX_U32 disable;
+    ax_color_space_e color_space;
+    AX_U32 nPPL[3];
+
+    DETECTOR_CHN_ATTR_S(AX_VOID) {
+        disable = 1;
+        color_space = ax_color_space_unknown;
+        nPPL[0] = AX_PPL_PEOPLE;
+        nPPL[1] = AX_PPL_PEOPLE;
+        nPPL[2] = AX_PPL_PEOPLE;
+    }
+} DETECTOR_CHN_ATTR_T;
+
+typedef struct DETECTOR_ATTR_S {
+    AX_U32 nW;
+    AX_U32 nH;
+    AX_S32 nDepth;
+    AX_U32 nChannelNum;
+    AX_S32 nSkipRate;
+    DETECTOR_CHN_ATTR_T tChnAttr[DETECTOR_MAX_CHN_NUM];
+    std::string strModelPath;
+    AX_IMG_FORMAT_E video_format;
+
+    DETECTOR_ATTR_S(AX_VOID) {
+        nW = 0;
+        nH = 0;
+        nDepth = 1;
+        nChannelNum = 1;
+        nSkipRate = 1;
+    }
+} DETECTOR_ATTR_T;
+
+class CDetector {
+public:
+    CDetector(AX_VOID) = default;
+
+    AX_BOOL Init(const DETECTOR_ATTR_T& stAttr);
+    AX_BOOL DeInit(AX_VOID);
+
+    AX_BOOL Start(AX_VOID);
+    AX_BOOL Stop(AX_VOID);
+
+    AX_BOOL StartId(int id, DETECTOR_CHN_ATTR_T det_attr);
+    AX_BOOL StopId(int id);
+
+    AX_BOOL Clear(AX_VOID);
+
+    AX_BOOL SendFrame(const CAXFrame& axFrame);
+
+protected:
+    AX_BOOL SkipFrame(const CAXFrame& axFrame);
+    AX_VOID RunDetect(AX_VOID* pArg);
+    AX_VOID ClearQueue(AX_S32 nGrp);
+
+protected:
+    std::vector<std::array<bool, 3>> d_vec;
+    CAXLockQ<CAXFrame>* m_arrFrameQ{nullptr};
+    DETECTOR_ATTR_T m_stAttr;
+    CAXThread m_DetectThread;
+    ax_algorithm_handle_t handle[DETECTOR_MAX_CHN_NUM][ALGO_MAX_NUM]{NULL};
+};
+
+#else
 typedef struct DETECTOR_CHN_ATTR_S {
     AX_U32 nPPL[3];
     AX_U32 nVNPU;
@@ -102,3 +174,4 @@ protected:
     std::mutex m_mtxSkel;
     CAXResource<SKEL_FRAME_PRIVATE_DATA_T> m_skelData;
 };
+#endif
