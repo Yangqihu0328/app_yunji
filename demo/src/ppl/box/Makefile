@@ -30,10 +30,7 @@ install: $(SUBDIRS_INSTALL)
 	@$(ECHO) -e $(GREEN)"\nInstall $(CURDIR) success!!\n"  $(DONE)
 	cp -rf $(CUR_PATH)/../../3rd/lib/mqtt/libMQTTPacketClient.so  $(ROOTFS_TARGET_PATH)/bin/BoxDemo
 	cp -rf $(CUR_PATH)/../../3rd/lib/ax_algo/libax_algorithm.so  $(ROOTFS_TARGET_PATH)/bin/BoxDemo
-	cp -rf $(CUR_PATH)/../../../bin/boxdemo/20241113.model  $(ROOTFS_TARGET_PATH)/bin/BoxDemo
 	cp -rf $(CUR_PATH)/../../3rd/bin/ZLMediaKit  $(ROOTFS_TARGET_PATH)/bin/BoxDemo
-
-	./app/demo/bin/boxdemo/20241113.model
 
 clean:	$(SUBDIRS_CLEAN)
 	@$(ECHO) -e $(GREEN)"\nClean $(CURDIR) success!!\n"  $(DONE)
