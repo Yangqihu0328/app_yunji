@@ -31,7 +31,7 @@ namespace boxconf {
 
 #define ALARM_IMG_PATH "ZLMediaKit/www/alarm"
 
-#define AI_BOX_VERSION "1.0.2"
+#define AI_BOX_VERSION "1.0.3"
 
 using namespace std;
 using json = nlohmann::json;
@@ -49,7 +49,6 @@ static std::shared_ptr<IPStack> ipstack_ = nullptr;
 static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
 static int arrivedcount = 0;
 static std::queue<StreamCmd> StreamQueue;
-static std::vector<MEDIA_INFO_T> MediaInfos;
 static std::mutex mtx;
 
 static string GetExecPath(AX_VOID) {
@@ -254,10 +253,10 @@ static void OnLogin(const std::string& account, const std::string& password) {
     root["data"] = child;
     if (account == "admin" && password == "admin") {
         root["result"] = 0;
-        root["msg"] = "success";
+        root["msg"] = "登录成功";
     } else {
         root["result"] = -1;
-        root["msg"] = "The account or password is incorrect";
+        root["msg"] = "账号或者密码错误";
     }
 
     std::string payload = root.dump();
@@ -276,7 +275,7 @@ static void OnLogout() {
 
     json root;
     root["result"] = 0;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -351,7 +350,7 @@ static void OnGetDashBoardInfo() {
 
     json root;
     root["result"] = 0;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["data"] = board_info;
 
     std::string payload = root.dump();
@@ -368,7 +367,7 @@ static void OnRebootAiBox() {
 
     json root;
     root["result"] = 0;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -388,7 +387,7 @@ static void OnRestartAppService() {
 
     json root;
     root["result"] = 0;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -423,7 +422,7 @@ static void OnSyncSystemTime(int year, int month, int day, int hour, int minute,
         LOG_M_E(MQTT_CLIENT, "Failed to convert tm to time_t.");
 
         root["result"] = -1;
-        root["msg"] = "failed";
+        root["msg"] = "操作失败";
         root["data"] = child;
 
         std::string payload = root.dump();
@@ -438,10 +437,10 @@ static void OnSyncSystemTime(int year, int month, int day, int hour, int minute,
 
     if (settimeofday(&tv, nullptr) == -1) {
         root["result"] = -1;
-        root["msg"] = "failed";
+        root["msg"] = "操作失败";
     } else {
         root["result"] = 0;
-        root["msg"] = "success";
+        root["msg"] = "操作成功";
     }
     root["data"] = child;
 
@@ -616,20 +615,13 @@ bool check_RTSP_stream(const std::string& rtspUrl) {
     return true;
 }
 
-static std::vector<MEDIA_INFO_T> GetMediaInfo() {
-    if (MediaInfos.empty()) {
-        AX_U32 nMediaCnt = 0;
-        STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-        MediaInfos = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
-    }
-    return MediaInfos;
-}
-
 static void OnGetMediaChannelList() {
     LOG_M_C(MQTT_CLIENT, "OnGetMediaChannelList ++++.");
 
     // 获取当前通道信息
-    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
     json arr = nlohmann::json::array();
     for (size_t i = 0; i < mediasMap.size(); i++) {
@@ -649,7 +641,7 @@ static void OnGetMediaChannelList() {
 
     json root;
     root["result"] = 0;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -666,7 +658,9 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
     json root;
 
     // 获取当前通道信息
-    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
     if (id < (AX_U32)mediasMap.size()) {
         mediasMap[id].nMediaId = id;
@@ -679,16 +673,11 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
 
-        if (!status) {
-            root["result"] = -1;
-            root["msg"] = "视频地址异常，请检查!";
-        } else {
-            root["result"] = 0;
-            root["msg"] = "success";
-        }
+        root["result"] = 0;
+        root["msg"] = "操作成功";
     } else {
         root["result"] = -1;
-        root["msg"] = "invalid stream id!";
+        root["msg"] = "无效参数";
     }
 
     json child;
@@ -709,7 +698,9 @@ static void OnDelMediaChannelInfo(AX_U32 id) {
     json root;
 
     // 获取当前通道信息
-    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
     if (id < (AX_U32)mediasMap.size()) {
         mediasMap[id].nMediaDelete = 1;
@@ -718,10 +709,10 @@ static void OnDelMediaChannelInfo(AX_U32 id) {
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
 
         root["result"] = 0;
-        root["msg"] = "success";
+        root["msg"] = "操作成功";
     } else {
         root["result"] = -1;
-        root["msg"] = "invalid stream id!";
+        root["msg"] = "无效参数";
     }
 
     json child;
@@ -760,7 +751,7 @@ static void OnGetAiModelList() {
     child["models"] = arr;
 
     json root;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["result"] = 0;
     root["data"] = child;
 
@@ -774,7 +765,9 @@ static void OnGetAlgoTaskList() {
     LOG_M_C(MQTT_CLIENT, "OnGetAlgoTaskList ++++.");
 
     // 获取当前通道信息
-    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
     json arr = nlohmann::json::array();
     for (size_t i = 0; i < mediasMap.size(); i++) {
@@ -801,7 +794,7 @@ static void OnGetAlgoTaskList() {
     child["tasks"] = arr;
 
     json root;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["result"] = 0;
     root["data"] = child;
 
@@ -817,7 +810,9 @@ static void OnSetAlgoTaskInfo(AX_U32 id, const std::string& pushUrl, const std::
     json root;
 
     // 获取当前通道信息
-    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
     if (id < (AX_U32)mediasMap.size()) {
         mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
@@ -832,10 +827,10 @@ static void OnSetAlgoTaskInfo(AX_U32 id, const std::string& pushUrl, const std::
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
 
         root["result"] = 0;
-        root["msg"] = "success";
+        root["msg"] = "操作成功";
     } else {
         root["result"] = -1;
-        root["msg"] = "invalid stream id!";
+        root["msg"] = "无效参数";
     }
 
     json child;
@@ -856,7 +851,9 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
     json root;
 
     // 获取当前通道信息
-    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
     if (id < (AX_U32)mediasMap.size()) {
         // 0异常 1正常/未使用 2使用中
@@ -875,10 +872,10 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
 
 
         root["result"] = 0;
-        root["msg"] = "success";
+        root["msg"] = "操作成功";
     } else {
         root["result"] = -1;
-        root["msg"] = "invalid stream id!";
+        root["msg"] = "无效参数";
     }
 
     json child;
@@ -925,7 +922,9 @@ static AX_BOOL StartPreview(AX_U32 id) {
     LOG_M_C(MQTT_CLIENT, "StartPreview ++++.");
 
     // 获取当前通道信息
-    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
     if (id < (AX_U32)mediasMap.size()) {
 
@@ -999,7 +998,9 @@ static AX_BOOL StopPreview(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "StopPreview ++++.");
 
     // 获取当前通道信息
-    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
 
     if (id < (AX_U32)mediasMap.size()) {
         // 通知媒体服务器删除流
@@ -1060,10 +1061,10 @@ static void OnAlgoTaskControl(AX_U32 id, AX_U32 controlCommand) {
     json root;
     if (ret == AX_TRUE) {
         root["result"] = 0;
-        root["msg"] = "success";
+        root["msg"] = "操作成功";
     } else {
         root["result"] = -1;
-        root["msg"] = "failed";
+        root["msg"] = "操作失败";
     }
     
     root["data"] = child;
@@ -1258,7 +1259,7 @@ static void OnGetAiBoxNetwork() {
 
     json root;
     root["result"] = 0;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -1309,7 +1310,7 @@ static void OnSetAiBoxNetwork(const std::string& name, const AX_U32 dhcp, const 
 
     json root;
     root["result"] = 0;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -1405,12 +1406,12 @@ AX_VOID MqttClient::SendAlarmMsg() {
                 CBoxBuilder *a_builder = CBoxBuilder::GetInstance();
                 a_builder->playAudio(AudioFile);
             } else {
-                LOG_D("AudioFile %s not exist", AudioFile);
+                LOG_M_E(MQTT_CLIENT, "AudioFile %s not exist", AudioFile);
             }
 
             json root;
             root["result"] = 0;
-            root["msg"] = "success";
+            root["msg"] = "操作成功";
             root["data"] = child;
 
             std::string payload = root.dump();
@@ -1433,7 +1434,7 @@ static void OnAlarmControl(AX_BOOL isAudio, AX_U32 status) {
 
     json root;
     root["result"] = ret==AX_FALSE ? -1 : 0;
-    root["msg"] = ret==AX_FALSE ? "failed" : "success";
+    root["msg"] = ret==AX_FALSE ? "操作失败" : "操作成功";
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -1450,7 +1451,7 @@ static void OnGetAlarmStatus(void) {
 
     json root;
     root["result"] = 0;
-    root["msg"] = "success";
+    root["msg"] = "操作成功";
     root["data"] = child;
 
     std::string payload = root.dump();
@@ -1470,7 +1471,7 @@ static AX_VOID removeJpgFile(AX_BOOL isDir, nlohmann::json fileUrls) {
         AX_BOOL ret = CDiskHelper::RemoveDir(JpgDir);
 
         root["result"] = ret==AX_FALSE ? -1 : 0;
-        root["msg"] = ret==AX_FALSE ? "failed" : "success";
+        root["msg"] = ret==AX_FALSE ? "操作失败" : "操作成功";
     } else {
         child["type"] = "clearJpgFiles";
         if (fileUrls.is_array()) {
@@ -1480,7 +1481,7 @@ static AX_VOID removeJpgFile(AX_BOOL isDir, nlohmann::json fileUrls) {
         }
 
         root["result"] = 0;
-        root["msg"] = "success";
+        root["msg"] = "操作成功";
     }
 
     root["data"] = child;
@@ -1663,11 +1664,7 @@ AX_BOOL MqttClient::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nC
 
 
 AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
-    ipstack_ = std::make_unique<IPStack>();
-    client_ = std::make_unique<MQTT::Client<IPStack, Countdown>>(*ipstack_);
-    topic = mqtt_config.topic;
-
-    // //实现加锁队列，主要是多线程
+    // 实现加锁队列，主要是多线程
     arrjpegQ = std::make_unique<CAXLockQ<QUEUE_T>>();
     if (!arrjpegQ) {
         LOG_MM_E(MQTT_CLIENT, "alloc queue fail");
@@ -1676,13 +1673,16 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
         arrjpegQ->SetCapacity(32);
     }
 
+    topic = mqtt_config.topic;
+    ipstack_ = std::make_unique<IPStack>();
+    client_ = std::make_unique<MQTT::Client<IPStack, Countdown>>(*ipstack_);
+
     LOG_M_C(MQTT_CLIENT, "Mqtt Version is %d, topic is %s", mqtt_config.version, topic.c_str());
     LOG_M_C(MQTT_CLIENT, "Connecting to %s:%d", mqtt_config.hostname.c_str(), mqtt_config.port);
 
     int rc = ipstack_->connect(mqtt_config.hostname.c_str(), mqtt_config.port);
     if (rc != 0) {
         LOG_M_E(MQTT_CLIENT, "rc from TCP connect fail, rc = %d", rc);
-        return AX_FALSE;
     } else {
         MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
         data.MQTTVersion = mqtt_config.version;
@@ -1692,13 +1692,11 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
         rc = client_->connect(data);
         if (rc != 0) {
             LOG_M_E(MQTT_CLIENT, "rc from MQTT connect fail, rc is %d\n", rc);
-            return AX_FALSE;
         } else {
             LOG_M_D(MQTT_CLIENT, "MQTT connected sucess");
             rc = client_->subscribe(topic.c_str(), MQTT::QOS0, messageArrived);
             if (rc != 0) {
                 LOG_M_E(MQTT_CLIENT, "rc from MQTT subscribe is %d\n", rc);
-                return AX_FALSE;
             }
         }
     }
@@ -1735,7 +1733,10 @@ AX_BOOL MqttClient::Start(AX_VOID) {
         std::this_thread::sleep_for(std::chrono::milliseconds(600));
 
         // 获取当前通道信息
-        std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+        AX_U32 nMediaCnt = 0;
+        STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+        std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+
         for (size_t i = 0; i < mediasMap.size(); i++) {
             if (mediasMap[i].taskInfo.nTaskStatus == 1) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));

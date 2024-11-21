@@ -39,6 +39,14 @@ AX_BOOL CAudio::Init() {
         return AX_FALSE;
     }
 
+    audio_files_ = std::make_unique<CAXLockQ<std::string>>();
+    if (!audio_files_) {
+        LOG_MM_E(AUDIO, "alloc queue fail");
+        return AX_FALSE;
+    } else {
+        audio_files_->SetCapacity(32);
+    }
+
     LOG_M_D(AUDIO, "%s: ---", __func__);
     return AX_TRUE;
 }
@@ -58,10 +66,18 @@ AX_BOOL CAudio::DeInit(AX_VOID) {
 }
 
 AX_BOOL CAudio::Start(AX_VOID) {
+    if (!m_PlayThread.Start(std::bind(&CAudio::WorkThread, this, std::placeholders::_1), nullptr, "PlayAudio")) {
+        LOG_M_E(AUDIO, "%s: create playaudio thread fail", __func__);
+        return AX_FALSE;
+    }
     return AX_TRUE;
 }
 
 AX_BOOL CAudio::Stop(AX_VOID) {
+    if (audio_files_) {
+        audio_files_->Wakeup();
+    }
+
     m_PlayThread.Stop();
     m_PlayThread.Join();
 
@@ -142,7 +158,28 @@ AX_S32 CAudio::ParseWaveHeader(uint16_t *bits_per_sample) {
 }
 
 // 播放音频
-AX_VOID CAudio::SendData(AX_VOID *pArg) {
+AX_VOID CAudio::WorkThread(AX_VOID* pArg) {
+    while (m_PlayThread.IsRunning()) {
+        while (audio_files_->GetCount()) {
+            std::string file;
+            audio_files_->Pop(file);
+            m_stAttr.audio_file = file;
+
+            if (access(m_stAttr.audio_file.c_str(), F_OK)) {
+                continue;
+            }
+
+            SendData();
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+}
+
+// 播放音频
+AX_VOID CAudio::SendData() {
+    LOG_M_C(AUDIO, "play file %s ++++", m_stAttr.audio_file.c_str());
+
     AX_S32 ret;
     std::streamsize len = 0;
 
@@ -263,23 +300,17 @@ AX_VOID CAudio::SendData(AX_VOID *pArg) {
     }
 
     m_ifs.close(); // 关闭文件
+
+    LOG_M_C(AUDIO, "play file %s ----", m_stAttr.audio_file.c_str());
 }
 
 AX_BOOL CAudio::PlayAudio(std::string file) {
-    LOG_M_D(AUDIO, "%s: +++", __func__);
+    LOG_M_C(AUDIO, "%s: +++", __func__);
 
-    if (m_PlayThread.IsRunning()) {
-        m_PlayThread.Stop();
-        m_PlayThread.Join();
+    if (!audio_files_->Push(file)) {
+        LOG_M_E(AUDIO, "push file %s failed", file.c_str());
     }
 
-    m_stAttr.audio_file = file;
-
-    if (!m_PlayThread.Start([this](AX_VOID *pArg) -> AX_VOID { SendData(pArg); }, this, "PlayAudio", SCHED_FIFO, 99)) {
-        LOG_M_E(AUDIO, "%s: create playaudio thread fail", __func__);
-        return AX_FALSE;
-    }
-
-    LOG_M_D(AUDIO, "%s: ---", __func__);
+    LOG_M_C(AUDIO, "%s: ---", __func__);
     return AX_TRUE;
 }

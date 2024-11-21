@@ -356,7 +356,6 @@ private:
 	AX_VOID SendAlarmMsg();
 
 protected:
-	std::mutex m_mtxConnStatus;
 	std::unique_ptr<CAXLockQ<QUEUE_T>> arrjpegQ;
 
     CAXThread m_threadWork;

@@ -14,6 +14,7 @@
 #include "ax_sys_api.h"
 #include "ax_global_type.h"
 #include "AXThread.hpp"
+#include "AXLockQ.hpp"
 #include <string>
 #include <fstream>
 
@@ -69,6 +70,8 @@ typedef struct AUDIO_ATTR_T_S {
     }
 } AUDIO_ATTR_T;
 
+#include <vector>
+
 class CAudio {
 public:
     CAudio(AX_VOID) = default;
@@ -85,7 +88,8 @@ private:
     AX_S32 BitsToFormat(AX_U32 bits);
     AX_S32 xfread(void *ptr, size_t size);
     AX_S32 ParseWaveHeader(uint16_t *bits_per_sample);
-    AX_VOID SendData(AX_VOID *pArg);
+    AX_VOID WorkThread(AX_VOID* pArg);
+    AX_VOID SendData();
 
 protected:
     AX_POOL_CONFIG_T m_stPoolConfig;
@@ -93,4 +97,6 @@ protected:
     AUDIO_ATTR_T m_stAttr;
     std::ifstream m_ifs;
     CAXThread m_PlayThread;
+
+    std::unique_ptr<CAXLockQ<std::string>> audio_files_;
 };
