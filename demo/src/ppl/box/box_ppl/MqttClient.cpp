@@ -15,6 +15,9 @@
 
 #include <linux/rtnetlink.h>
 
+#include <netinet/in.h>
+#include <netinet/ip_icmp.h>
+
 #include <thread>
 #include <chrono>
 
@@ -28,8 +31,17 @@ namespace boxconf {
 
 #define ALARM_IMG_PATH "ZLMediaKit/www/alarm"
 
+#define AI_BOX_VERSION "1.0.2"
+
 using namespace std;
 using json = nlohmann::json;
+
+enum {
+    DEFDATALEN = 56,
+    MAXIPLEN = 60,
+    MAXICMPLEN = 76,
+    MAXWAIT = 2,
+};
 
 //需要转为类成员变量，提高代码简洁性
 static bool isLogin = false;
@@ -37,6 +49,7 @@ static std::shared_ptr<IPStack> ipstack_ = nullptr;
 static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
 static int arrivedcount = 0;
 static std::queue<StreamCmd> StreamQueue;
+static std::vector<MEDIA_INFO_T> MediaInfos;
 static std::mutex mtx;
 
 static string GetExecPath(AX_VOID) {
@@ -311,12 +324,12 @@ static void OnGetDashBoardInfo() {
         {"type", "getDashBoardInfo"}, 
         {"BoardId", "YJ-AIBOX-001"}, 
         {"BoardIp", szIP},
-        {"BoardPlatform", "AX650"},
+        {"BoardPlatform", version},
         {"BoardTemp", temperature},
         {"BoardType", "LAN"},
-        {"BoardAuthorized", "Authorized"},
+        {"BoardAuthorized", "已授权"},
         {"Time", currentTimeStr},
-        {"Version", version},
+        {"Version", AI_BOX_VERSION},
         {"HostDisk", { // 当前设备硬盘情况 kB
             {"Available", falsh_info.free}, // 可用
             {"Total", falsh_info.total}, // 总量
@@ -382,7 +395,8 @@ static void OnRestartAppService() {
 
     SendMsg("web-message", payload.c_str(), payload.size());
 
-    system("/usr/bin/bash /opt/bin/BoxDemo/restart.sh");
+    system("/usr/bin/systemctl restart yj-mediaserver");
+    system("/usr/bin/systemctl restart yj-aibox");
 
     LOG_M_C(MQTT_CLIENT, "OnRestartAppService ----.");
 }
@@ -437,17 +451,144 @@ static void OnSyncSystemTime(int year, int month, int day, int hour, int minute,
     LOG_M_C(MQTT_CLIENT, "OnSyncSystemTime ----.");
 }
 
+static uint16_t box_inet_cksum(const void *ptr, int nleft) {
+    const uint16_t *addr = (const uint16_t *)ptr;
+
+    unsigned sum = 0;
+    while (nleft > 1) {
+        sum += *addr++;
+        nleft -= 2;
+    }
+
+    if (nleft == 1) {
+        sum += *(uint8_t *)addr;
+    }
+
+    sum = (sum >> 16) + (sum & 0xffff);
+    sum += (sum >> 16);
+
+    return (uint16_t)~sum;
+}
+
+static int __box_ping4(const char *ip, int timeout /* seconds */) {
+    int sock = socket(AF_INET, SOCK_RAW, 1 /* 1 == ICMP */);
+    if (sock < 0) {
+        LOG("create icmp socket fail, %s", strerror(errno));
+        return -1;
+    }
+
+    int c;
+    struct icmp *pkt;
+    char packet[DEFDATALEN + MAXIPLEN + MAXICMPLEN];
+    memset(&packet, 0, sizeof(packet));
+    pkt = (struct icmp *)&packet;
+
+    const uint16_t pid = getpid();
+    const uint16_t seq = 88;
+
+    struct sockaddr_in saddr;
+    memset(&saddr, 0, sizeof(struct sockaddr_in));
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = inet_addr(ip);
+
+    pkt->icmp_type = ICMP_ECHO;
+    pkt->icmp_seq = seq;
+    pkt->icmp_id = pid;
+    pkt->icmp_cksum = box_inet_cksum((unsigned short *)pkt, sizeof(packet));
+
+    c = sendto(sock, packet, sizeof(packet), 0, (struct sockaddr *)&saddr, sizeof(struct sockaddr_in));
+    if (c < 0 || c != sizeof(packet)) {
+        //LOG("sendto socket fail, %s", strerror(errno));
+        close(sock);
+        return -1;
+    }
+
+    struct sockaddr_in faddr;
+    socklen_t slen = sizeof(faddr);
+    int now = 0;
+    while (1) {
+        if (timeout >= 0) {
+            if (now > timeout) {
+                break;
+            }
+        }
+
+        struct timeval tv = {MAXWAIT, 0};
+        now += tv.tv_sec;
+
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(sock, &rfds);
+        int ret = select(sock + 1, &rfds, NULL, NULL, &tv);
+        if (ret > 0) {
+            c = recvfrom(sock, packet, sizeof(packet), 0, (struct sockaddr *)&faddr, &slen);
+            if (c >= 76) { /* ip + icmp */
+                struct iphdr *iphdr = (struct iphdr *)packet;
+                pkt = (struct icmp *)(packet + (iphdr->ihl << 2)); /* skip ip hdr */
+                if (pkt->icmp_type == ICMP_ECHOREPLY && pkt->icmp_id == pid && pkt->icmp_seq == seq) {
+                    close(sock);
+                    return 0;
+                } else {
+                    LOG("recvfrom icmp: type %d, id %d (%d), seq %d (%d)", pkt->icmp_type, pkt->icmp_id, pid, pkt->icmp_seq, seq);
+                    continue;
+                }
+            } else {
+                // LOG("recvfrom len is %d", c);
+                continue;
+            }
+        } else if (0 == ret) {
+            /* timeout */
+            continue;
+        } else {
+            LOG("select fail, %s", strerror(errno));
+            break;
+        }
+    }
+
+    close(sock);
+    return -1;
+}
+
+static int box_ping4(const char *ip, int timeout) {
+    if (!ip) {
+        LOG("nil ip addr");
+        return -1;
+    }
+
+    std::regex re("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
+    std::cmatch m;
+    if (std::regex_search(ip, m, re)) {
+        return __box_ping4(m[0].str().c_str(), timeout);
+    }
+
+    return -1;
+}
 
 // 这个函数可能会有耗时问题
 bool check_RTSP_stream(const std::string& rtspUrl) {
+
     LOG_M_C(MQTT_CLIENT, "check_RTSP_stream ++++.");
+
+    if (std::string::npos != rtspUrl.find(".mp4")) {
+        // 文件存在判断
+        std::ifstream file(rtspUrl);
+        if (!file.is_open()) {
+            return false;
+        }
+        file.close();
+        return true;
+    }
 
     if (std::string::npos == rtspUrl.find("rtsp:")) {
         return false;
     }
 
-    // only support local rtsp url
     if (std::string::npos == rtspUrl.find("192.168")) {
+        return false;
+    }
+
+    if (0 != box_ping4(rtspUrl.c_str(), 4)) {
+        printf("network to %s is down\n", rtspUrl.c_str());
         return false;
     }
 
@@ -475,13 +616,20 @@ bool check_RTSP_stream(const std::string& rtspUrl) {
     return true;
 }
 
+static std::vector<MEDIA_INFO_T> GetMediaInfo() {
+    if (MediaInfos.empty()) {
+        AX_U32 nMediaCnt = 0;
+        STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+        MediaInfos = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    }
+    return MediaInfos;
+}
+
 static void OnGetMediaChannelList() {
     LOG_M_C(MQTT_CLIENT, "OnGetMediaChannelList ++++.");
 
     // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
 
     json arr = nlohmann::json::array();
     for (size_t i = 0; i < mediasMap.size(); i++) {
@@ -516,10 +664,10 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
     AX_U32 status = check_RTSP_stream(mediaUrl) ? 1 : 0;
 
     json root;
+
     // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+
     if (id < (AX_U32)mediasMap.size()) {
         mediasMap[id].nMediaId = id;
         mediasMap[id].nMediaDelete = 0;
@@ -533,7 +681,7 @@ static void OnSetMediaChannelInfo(AX_U32 id, const std::string& mediaUrl, const 
 
         if (!status) {
             root["result"] = -1;
-            root["msg"] = "stream test failed!";
+            root["msg"] = "视频地址异常，请检查!";
         } else {
             root["result"] = 0;
             root["msg"] = "success";
@@ -561,9 +709,8 @@ static void OnDelMediaChannelInfo(AX_U32 id) {
     json root;
 
     // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+
     if (id < (AX_U32)mediasMap.size()) {
         mediasMap[id].nMediaDelete = 1;
 
@@ -603,6 +750,7 @@ static void OnGetAiModelList() {
             {"modelPath",    modelsMap[i].szModelPath},
             {"modelName",    modelsMap[i].szModelName},
             {"modelDesc",    modelsMap[i].szModelDesc},
+            {"modelWarning", modelsMap[i].szModelWarning},
             {"modelVersion", modelsMap[i].szModelVersion}
         });
     }
@@ -626,9 +774,7 @@ static void OnGetAlgoTaskList() {
     LOG_M_C(MQTT_CLIENT, "OnGetAlgoTaskList ++++.");
 
     // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
 
     json arr = nlohmann::json::array();
     for (size_t i = 0; i < mediasMap.size(); i++) {
@@ -671,9 +817,8 @@ static void OnSetAlgoTaskInfo(AX_U32 id, const std::string& pushUrl, const std::
     json root;
 
     // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+
     if (id < (AX_U32)mediasMap.size()) {
         mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
         mediasMap[id].taskInfo.nTaskDelete = 0;
@@ -711,16 +856,15 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
     json root;
 
     // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+
     if (id < (AX_U32)mediasMap.size()) {
         // 0异常 1正常/未使用 2使用中
-        if (mediasMap[id].nMediaStatus != 0)
+        if (mediasMap[id].nMediaStatus != 0) {
             mediasMap[id].nMediaStatus = 1; // 0异常 1正常/未使用 2使用中
+        }
         mediasMap[id].taskInfo.nTaskDelete = 1;
         mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
-        memset(mediasMap[id].taskInfo.szTaskKey, 0, sizeof(mediasMap[id].taskInfo.szTaskKey));
 
         std::unique_lock<std::mutex> lock(mtx);
         StreamQueue.push({ContrlCmd::RemoveAlgo, id});
@@ -781,9 +925,8 @@ static AX_BOOL StartPreview(AX_U32 id) {
     LOG_M_C(MQTT_CLIENT, "StartPreview ++++.");
 
     // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+
     if (id < (AX_U32)mediasMap.size()) {
 
         if (!check_RTSP_stream(mediasMap[id].szMediaUrl)) {
@@ -835,12 +978,14 @@ static AX_BOOL StartPreview(AX_U32 id) {
             }
         }
 
-        mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
-        mediasMap[id].taskInfo.nTaskStatus = 1; // 0未运行 1运行中
-        strcpy(mediasMap[id].taskInfo.szTaskKey, key.c_str());
+        if (key != "") {
+            mediasMap[id].nMediaStatus = 2; // 0异常 1正常/未使用 2使用中
+            mediasMap[id].taskInfo.nTaskStatus = 1; // 0未运行 1运行中
+            strcpy(mediasMap[id].taskInfo.szTaskKey, key.c_str());
 
-        // 更新配置
-        CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
+            // 更新配置
+            CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
+        }
 
         return AX_TRUE;
     }
@@ -854,9 +999,8 @@ static AX_BOOL StopPreview(AX_U32 id, AX_U32 controlCommand) {
     LOG_M_C(MQTT_CLIENT, "StopPreview ++++.");
 
     // 获取当前通道信息
-    AX_U32 nMediaCnt = 0;
-    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
+
     if (id < (AX_U32)mediasMap.size()) {
         // 通知媒体服务器删除流
         char api[256] = {0};
@@ -879,8 +1023,9 @@ static AX_BOOL StopPreview(AX_U32 id, AX_U32 controlCommand) {
         }
 
         // 0异常 1正常/未使用 2使用中
-        if (mediasMap[id].nMediaStatus != 0)
+        if (mediasMap[id].nMediaStatus != 0) {
             mediasMap[id].nMediaStatus = controlCommand==ContrlCmd::RemoveAlgo ? 1 : 2; 
+        }
         mediasMap[id].taskInfo.nTaskStatus = 0; // 0未运行 1运行中
 
         // 更新配置
@@ -1215,27 +1360,39 @@ AX_VOID MqttClient::SendAlarmMsg() {
     if (nCount > 0) {
         QUEUE_T jpg_info;
         if (arrjpegQ->Pop(jpg_info, 0)) {
-            if (!isLogin) return;
-
             SaveJpgFile(&jpg_info);
             AX_U32 nChn = jpg_info.u64UserData & 0xff;
             AX_U32 nAlgoType = (jpg_info.u64UserData >> 8) & 0xff;
+
+            // 释放内存
+            delete[] jpg_info.jpg_buf;
+            jpg_info.jpg_buf = nullptr;
 
             std::string currentTimeStr;
             GetSystime(currentTimeStr);
 
             // 获取当前通道信息
             AX_U32 nMediaCnt = 0;
+            AX_U32 nModelCnt = 0;
             STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
             std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+            std::vector<MODEL_INFO_T> modelsMap = CBoxModelParser::GetInstance()->GetModelsMap(&nModelCnt, streamConfig.strModelPath);
+
+            AX_CHAR modelWarning[32] = { 0 };
+            for (size_t i = 0; i < modelsMap.size(); i++) {
+                if (modelsMap[i].nModelId == nAlgoType) {
+                    strcpy(modelWarning, modelsMap[i].szModelWarning);
+                    break;
+                }
+            }
 
             json child = {
                 { "type", "alarmMsg"},
                 { "taskName", mediasMap[nChn].taskInfo.szTaskName },
                 { "Time", currentTimeStr },
                 { "pushStatus", "等待重试" },
-                { "alarmMsg", "识别到人物" },
-                { "alarmType", "识别到人物" },
+                { "alarmMsg", modelWarning },
+                { "alarmType", modelWarning },
                 { "alarmId", nAlgoType },
                 { "mediaUrl", mediasMap[nChn].szMediaUrl },
                 { "mediaName", mediasMap[nChn].szMediaName },
@@ -1479,20 +1636,26 @@ AX_BOOL MqttClient::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nC
             return AX_FALSE;
         }
 
-        QUEUE_T jpg_info;
-        jpg_info.jpg_buf = new AX_U8[MAX_BUF_LENGTH];
-        jpg_info.buf_length = pVencPack->u32Len;
-        memcpy(jpg_info.jpg_buf, pVencPack->pu8Addr, jpg_info.buf_length);
-        jpg_info.u64UserData = pVencPack->u64UserData;
+        if (isLogin) {
+            QUEUE_T jpg_info;
+            jpg_info.jpg_buf = new AX_U8[MAX_BUF_LENGTH];
+            jpg_info.buf_length = pVencPack->u32Len;
+            memcpy(jpg_info.jpg_buf, pVencPack->pu8Addr, jpg_info.buf_length);
+            jpg_info.u64UserData = pVencPack->u64UserData;
 
-        auto &tJpegInfo = jpg_info.tJpegInfo;
-        tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc = nGrp;
-        tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel = nChn;
-        tJpegInfo.tCaptureInfo.tHeaderInfo.nWidth = 1920;
-        tJpegInfo.tCaptureInfo.tHeaderInfo.nHeight = 1080;
-        CElapsedTimer::GetLocalTime(tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp, 16, '-', AX_FALSE);
+            auto &tJpegInfo = jpg_info.tJpegInfo;
+            tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc = nGrp;
+            tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel = nChn;
+            tJpegInfo.tCaptureInfo.tHeaderInfo.nWidth = 1920;
+            tJpegInfo.tCaptureInfo.tHeaderInfo.nHeight = 1080;
+            CElapsedTimer::GetLocalTime(tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp, 16, '-', AX_FALSE);
 
-        arrjpegQ->Push(jpg_info);
+            if (!arrjpegQ->Push(jpg_info)) {
+                // 释放内存
+                delete[] jpg_info.jpg_buf;
+                jpg_info.jpg_buf = nullptr;
+            }
+        }
     }
 
     return AX_TRUE;
@@ -1510,7 +1673,7 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
         LOG_MM_E(MQTT_CLIENT, "alloc queue fail");
         return AX_FALSE;
     } else {
-        arrjpegQ->SetCapacity(10);
+        arrjpegQ->SetCapacity(32);
     }
 
     LOG_M_C(MQTT_CLIENT, "Mqtt Version is %d, topic is %s", mqtt_config.version, topic.c_str());
@@ -1572,9 +1735,7 @@ AX_BOOL MqttClient::Start(AX_VOID) {
         std::this_thread::sleep_for(std::chrono::milliseconds(600));
 
         // 获取当前通道信息
-        AX_U32 nMediaCnt = 0;
-        STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
-        std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+        std::vector<MEDIA_INFO_T> mediasMap = GetMediaInfo();
         for (size_t i = 0; i < mediasMap.size(); i++) {
             if (mediasMap[i].taskInfo.nTaskStatus == 1) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));

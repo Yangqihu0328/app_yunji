@@ -18,7 +18,8 @@ typedef struct {
     AX_U32 nModelId;
     char szModelPath[128];
     char szModelName[32];
-    char szModelDesc[32];
+    char szModelDesc[256];
+    char szModelWarning[32];
     char szModelVersion[32];
 } MODEL_INFO_T;
 

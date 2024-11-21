@@ -92,6 +92,9 @@ std::vector<MODEL_INFO_T> CBoxModelParser::GetModelsMap(AX_U32 *nModelCnt, const
                     if (!GET_VALUE(mode_value, "desc", strValue)) break;
                     strcpy(modelInfo.szModelDesc, strValue.c_str());
 
+                    if (!GET_VALUE(mode_value, "warning", strValue)) break;
+                    strcpy(modelInfo.szModelWarning, strValue.c_str());
+
                     if (!GET_VALUE(mode_value, "version", strValue)) break;
                     strcpy(modelInfo.szModelVersion, strValue.c_str());
 
@@ -120,6 +123,7 @@ AX_BOOL CBoxModelParser::SetModelsMap(std::vector<MODEL_INFO_T>& vecModel) {
             objModel["path"] = picojson::value(string(info.szModelPath));
             objModel["name"] = picojson::value(string(info.szModelName));
             objModel["desc"] = picojson::value(string(info.szModelDesc));
+            objModel["warning"] = picojson::value(string(info.szModelWarning));
             objModel["version"] = picojson::value(string(info.szModelVersion));
 
             arr.push_back(picojson::value(objModel));
