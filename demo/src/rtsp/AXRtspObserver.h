@@ -97,7 +97,7 @@ public:
             m_stSessAttr.nChannel = nChn;
             m_stSessAttr.stVideoAttr.bEnable = AX_TRUE;
             m_stSessAttr.stVideoAttr.ePt = (AX_PAYLOAD_TYPE_E)pParams->nPayloadType;
-            m_stSessAttr.stVideoAttr.nMaxFrmSize = 300000;
+            m_stSessAttr.stVideoAttr.nMaxFrmSize = 450000;
             m_stSessAttr.stVideoAttr.nBitRate = (AX_U32)pParams->nBitRate;
 
             return m_pSink->AddSessionAttr(pParams->nChannel, m_stSessAttr);

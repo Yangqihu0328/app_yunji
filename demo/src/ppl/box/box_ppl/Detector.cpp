@@ -122,8 +122,16 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                     result.item[i].nTrackId = forward_result.objects[i].track_id;
                     result.item[i].tBox.fX = forward_result.objects[i].bbox.x;
                     result.item[i].tBox.fY = forward_result.objects[i].bbox.y;
-                    result.item[i].tBox.fW = frame_info.u32Width - forward_result.objects[i].bbox.x -1;
-                    result.item[i].tBox.fH = frame_info.u32Height - forward_result.objects[i].bbox.y -1;
+                    result.item[i].tBox.fW = forward_result.objects[i].bbox.w;
+                    result.item[i].tBox.fH = forward_result.objects[i].bbox.h;
+
+                    if ((forward_result.objects[i].bbox.x + forward_result.objects[i].bbox.w + 1) > frame_info.u32Width) {
+                        result.item[i].tBox.fW = frame_info.u32Width - forward_result.objects[i].bbox.x -1;
+                    }
+
+                    if ((forward_result.objects[i].bbox.y + forward_result.objects[i].bbox.h + 1) > frame_info.u32Height) {
+                        result.item[i].tBox.fH = frame_info.u32Height - forward_result.objects[i].bbox.y -1;
+                    }
                 }
 
                 CDetectResult::GetInstance()->Set(axFrame.nGrp, result);
