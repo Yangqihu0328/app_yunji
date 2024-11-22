@@ -83,6 +83,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         return AX_FALSE;
     }
 
+#ifndef __DISABLE_VO
     /* [4]: Init display and observer */
     AX_U32 nVoChn = m_nDecodeGrpCount;
     if (dispVoConfig_1.nDevId != -1 && dispVoConfig_1.nDispType == 1) {
@@ -101,12 +102,13 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         }
     }
 
+
     dispVoConfig_1.nChnDepth = detectConfig.nSkipRate;
     if (!InitDisplay(AX_DISPDEV_TYPE::SECONDARY, dispVoConfig_1, nVoChn)) {
         return AX_FALSE;
     }
 
-#if 0
+
     if (dispVoConfig.bOnlineMode || (dispVoConfig_1.nDevId > -1 && dispVoConfig_1.bOnlineMode)) {
         /* fixme: VO online worst cast: keep VB by 2 dispc interrupts */
         if (streamConfig.nChnDepth[DISPVO_CHN] < 6) {
@@ -152,6 +154,15 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
     }
 
     /* [9]: Init video Encoder and observer */
+    #ifdef __DISABLE_VO
+    streamConfig.nChnW[DISPVO_CHN] = detectConfig.nW;
+    streamConfig.nChnH[DISPVO_CHN] = detectConfig.nH;
+    #else
+    streamConfig.nChnW[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Width;
+    streamConfig.nChnH[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Height;
+    #endif
+    streamConfig.nChnW[DETECT_CHN] = detectConfig.nW;
+    streamConfig.nChnH[DETECT_CHN] = detectConfig.nH;
     if (!InitEncoder(streamConfig)) {
         return AX_FALSE;
     }
@@ -172,10 +183,6 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
     }
 
     /* [8]: Init video decoder */
-    streamConfig.nChnW[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Width;
-    streamConfig.nChnH[DISPVO_CHN] = m_disp->GetVideoLayout()[0].u32Height;
-    streamConfig.nChnW[DETECT_CHN] = detectConfig.nW;
-    streamConfig.nChnH[DETECT_CHN] = detectConfig.nH;
     if (!InitDecoder(streamConfig)) {
         return AX_FALSE;
     }
@@ -186,6 +193,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
 
         AX_U32 nFps = (AX_VDEC_DISPLAY_MODE_PREVIEW == tGrpAttr.eDecodeMode) ? 0 : tGrpAttr.nFps;
 
+        #ifndef __DISABLE_VO
         if (m_dispSecondary) {
             if (1 /* DIFF */ == nDispType) {
                 if ((i % 2) == 0) {
@@ -200,8 +208,10 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
         } else {
             m_disp->SetChnFrameRate(m_disp->GetVideoChn(i), nFps);
         }
+        #endif
     }
 
+    #ifndef __DISABLE_VO
     /* [9]: vo link vdec */
     if (streamConfig.nLinkMode) {
         if (dispVoConfig_1.nDevId != -1) {
@@ -249,6 +259,7 @@ AX_BOOL CBoxBuilder::Init(AX_VOID) {
             }
         }
     }
+    #endif
 
     if(!InitAudio()) {
         return AX_FALSE;
@@ -397,8 +408,14 @@ AX_BOOL CBoxBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
             tConfig.ePayloadType = PT_H264;
             tConfig.nGOP = 30;
             tConfig.fFramerate = (AX_F32)30;
+            #ifdef __DISABLE_VO
+            //编码的宽高应该跟随检测结果
+            tConfig.nWidth = streamConfig.nChnW[DISPVO_CHN];
+            tConfig.nHeight = streamConfig.nChnH[DISPVO_CHN];
+            #else
             tConfig.nWidth = m_disp->GetVideoLayout()[0].u32Width;
             tConfig.nHeight = m_disp->GetVideoLayout()[0].u32Height;
+            #endif
             tConfig.nBufSize = ENC_MAX_BUF_SIZE;
             tConfig.nBitrate =  8192;
             tConfig.bFBC = AX_FALSE;
@@ -541,6 +558,7 @@ AX_BOOL CBoxBuilder::InitDispatcher(const string &strFontPath, AX_U32 nDispType)
             LOG_M_E(BOX, "%s: create dispatcher %d instance fail", __func__, i);
             return AX_FALSE;
         } else {
+            #ifndef __DISABLE_VO
             if (m_dispObserverSecondary) {
                 m_arrDispatcher[i]->RegObserver(m_dispObserverSecondary.get());
             }
@@ -548,6 +566,7 @@ AX_BOOL CBoxBuilder::InitDispatcher(const string &strFontPath, AX_U32 nDispType)
             if (m_dispObserver) {
                 m_arrDispatcher[i]->RegObserver(m_dispObserver.get());
             }
+            #endif
 
             //显示之后推流
             if (m_vencObservers.size() && i < MAX_VENC_CHANNEL_NUM) {
@@ -953,6 +972,7 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
     }
 
     do {
+        #ifndef __DISABLE_VO
         if (m_dispRecorder) {
             if (!m_dispRecorder->Start()) {
                 return AX_FALSE;
@@ -972,6 +992,7 @@ AX_BOOL CBoxBuilder::Start(AX_VOID) {
                 return AX_FALSE;
             }
         }
+        #endif
 
         /* Start video Encoder module */
         for (auto& pInstance : m_vecVencInstance) {
@@ -1098,6 +1119,7 @@ AX_BOOL CBoxBuilder::WaitDone(AX_VOID) {
         m_jenc->Stop();
     }
 
+    #ifndef __DISABLE_VO
     if (m_dispRecorder) {
         m_dispRecorder->Stop();
     }
@@ -1109,6 +1131,7 @@ AX_BOOL CBoxBuilder::WaitDone(AX_VOID) {
     if (m_dispSecondary) {
         m_dispSecondary->Stop();
     }
+    #endif
 
     for (auto &&m : m_arrDispatcher) {
         m->Stop();
@@ -1157,6 +1180,7 @@ AX_BOOL CBoxBuilder::StopAllStreams(AX_VOID) {
     m_vdec->UnRegAllObservers();
 
     for (auto &&m : m_arrDispatcher) {
+        #ifndef __DISABLE_VO
         if (m_dispObserver) {
             m->UnRegObserver(m_dispObserver.get());
         }
@@ -1164,6 +1188,7 @@ AX_BOOL CBoxBuilder::StopAllStreams(AX_VOID) {
         if (m_dispObserverSecondary) {
             m->UnRegObserver(m_dispObserverSecondary.get());
         }
+        #endif
 
         m->Clear();
     }

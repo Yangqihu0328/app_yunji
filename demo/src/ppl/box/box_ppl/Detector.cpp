@@ -91,7 +91,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 memcpy(ax_image.pVir, (void *)axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0], ax_image.nSize);
                 #endif
 
-                #if 0
+                #ifdef __BOX_DEBUG__
                 ofstream ofs;
                 AX_CHAR szFile[64];
                 sprintf(szFile, "./ai_dump_%d_%lld.yuv", axFrame.stFrame.stVFrame.stVFrame.u32FrameSize,
@@ -114,7 +114,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 result.nH = frame_info.u32Height;
                 result.nSeqNum = frame_info.u64SeqNum;
                 result.nGrpId = axFrame.nGrp;
-                result.nAlgoType = m_stAttr.tChnAttr[axFrame.nGrp].nPPL[index];;
+                result.nAlgoType = m_stAttr.tChnAttr[axFrame.nGrp].nPPL[index];
                 result.nCount = forward_result.n_objects;
 
                 for (AX_U32 i = 0; i < result.nCount; ++i) {
@@ -122,8 +122,8 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                     result.item[i].nTrackId = forward_result.objects[i].track_id;
                     result.item[i].tBox.fX = forward_result.objects[i].bbox.x;
                     result.item[i].tBox.fY = forward_result.objects[i].bbox.y;
-                    result.item[i].tBox.fW = forward_result.objects[i].bbox.w;
-                    result.item[i].tBox.fH = forward_result.objects[i].bbox.h;
+                    result.item[i].tBox.fW = frame_info.u32Width - forward_result.objects[i].bbox.x -1;
+                    result.item[i].tBox.fH = frame_info.u32Height - forward_result.objects[i].bbox.y -1;
                 }
 
                 CDetectResult::GetInstance()->Set(axFrame.nGrp, result);

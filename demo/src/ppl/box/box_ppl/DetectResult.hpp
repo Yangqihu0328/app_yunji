@@ -98,7 +98,7 @@ public:
             new_result = cur_result;
         }
 
-        #ifndef __USE_AX_ALGO
+
         auto track_id_set = [](const DETECT_RESULT_T& result) {
             std::unordered_set<int> track_ids;
             for (AX_U32 i = 0; i < result.nCount; ++i) {
@@ -116,7 +116,12 @@ public:
             }
             return false; // 所有track_id都匹配
         };
-
+        #ifdef __USE_AX_ALGO
+        if (last_result.nCount == new_result.nCount) {
+            std::unordered_set<int> last_track_ids = track_id_set(last_result);
+            new_result.result_diff = has_difference(last_track_ids, new_result);
+        }
+        #else
         //现在的问题：检测容易漏检，导致跟踪算法容易跟丢,容易出现新的track id
         //如果某一帧跟丢的话，判断上一帧的结果，下一帧肯定找不到上一帧的track id
         //两次的数量相同，说明当前是较稳定的,把这个结果保存起来。

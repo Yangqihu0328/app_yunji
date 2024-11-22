@@ -113,6 +113,7 @@ CFLAGS              += -DAPP_BUILD_VERSION=\"$(SDK_VERSION)\"
 
 # use ax algo
 CFLAGS            += -D__USE_AX_ALGO
+CFLAGS            += -D__DISABLE_VO
 
 # internal debug
 # CFLAGS            += -D__BOX_DEBUG__
