@@ -12,6 +12,7 @@
 
 #include "httplib.h"
 #include "nlohmann/json.hpp"
+#include "curl.h"
 
 #include <linux/rtnetlink.h>
 

@@ -86,10 +86,11 @@ CINCLUDE            := -I$(SRC_PATH) \
                        -I$(DEMO_SRC_PATH)/config/ini \
                        -I$(DEMO_SRC_PATH)/ppl/nvr/hal \
                        -I$(THIRD_PARTY_PATH)/ffmpeg/include \
-                       -I$(THIRD_PARTY_PATH)/openssl/include \
                        -I$(THIRD_PARTY_PATH)/mp4/include \
                        -I$(3RD_PATH)/inc/live/BasicUsageEnvironment \
                        -I$(3RD_PATH)/inc/live/groupsock \
+                       -I$(3RD_PATH)/inc/openssl/include \
+                       -I$(3RD_PATH)/inc/curl \
                        -I$(3RD_PATH)/inc/mqtt \
                        -I$(3RD_PATH)/inc/ax_algo \
                        -I$(3RD_PATH)/inc/http \
@@ -150,9 +151,10 @@ CLIB                += -lax_skel
 CLIB                += -lax_vo
 CLIB                += -L$(THIRD_PARTY_PATH)/drm/lib -ldrm
 CLIB                += -L$(THIRD_PARTY_PATH)/ffmpeg/lib -lavcodec -lavutil -lavformat
-CLIB                += -L$(THIRD_PARTY_PATH)/openssl/lib -lssl -lcrypto
 CLIB                += -L$(THIRD_PARTY_PATH)/mp4/lib -l:libmp4.a
+CLIB                += -L$(3RD_PATH)/lib/openssl-1.1.1a -lssl -lcrypto
 CLIB                += -L$(3RD_PATH)/lib/mqtt -lMQTTPacketClient
+CLIB                += -L$(3RD_PATH)/lib/curl -lcurl
 CLIB                += -L$(3RD_PATH)/lib/ax_algo -lax_algorithm -L$(OBJ_OUT_PATH)/rootfs/usr/lib/ -lz
 #add
 CLIB                += -lax_engine
