@@ -31,7 +31,7 @@ namespace boxconf {
 
 #define ALARM_IMG_PATH "ZLMediaKit/www/alarm"
 
-#define AI_BOX_VERSION "1.0.3"
+#define AI_BOX_VERSION "1.0.4"
 
 using namespace std;
 using json = nlohmann::json;
@@ -587,7 +587,7 @@ bool check_RTSP_stream(const std::string& rtspUrl) {
     }
 
     if (0 != box_ping4(rtspUrl.c_str(), 4)) {
-        printf("network to %s is down\n", rtspUrl.c_str());
+        LOG_M_D(MQTT_CLIENT, "network to %s is down");
         return false;
     }
 

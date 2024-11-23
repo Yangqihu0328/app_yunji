@@ -86,8 +86,12 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                     axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] =
                     (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
                 }
-                ax_create_image(frame_info.u32Width, frame_info.u32Height, frame_info.u32PicStride[0],
+                int ret = ax_create_image(frame_info.u32Width, frame_info.u32Height, frame_info.u32PicStride[0],
                 ax_color_space_nv12, &ax_image);
+                if (ret != 0) {
+                    LOG_M_E(DETECTOR, "alloc image fail\n");
+                    break;
+                }
                 memcpy(ax_image.pVir, (void *)axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0], ax_image.nSize);
                 #endif
 
@@ -108,6 +112,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
 
                 ax_result_t forward_result;
                 ax_algorithm_inference(handle[nCurrGrp][index], &ax_image, &forward_result);
+                ax_release_image(&ax_image);
 
                 DETECT_RESULT_T result;
                 result.nW = frame_info.u32Width;
@@ -118,23 +123,36 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 result.nCount = forward_result.n_objects;
 
                 for (AX_U32 i = 0; i < result.nCount; ++i) {
-                    result.item[i].eType = (DETECT_TYPE_E)forward_result.objects[i].label;
-                    result.item[i].nTrackId = forward_result.objects[i].track_id;
-                    result.item[i].tBox.fX = forward_result.objects[i].bbox.x;
-                    result.item[i].tBox.fY = forward_result.objects[i].bbox.y;
-                    result.item[i].tBox.fW = forward_result.objects[i].bbox.w;
-                    result.item[i].tBox.fH = forward_result.objects[i].bbox.h;
+                    const auto& obj = forward_result.objects[i];
+                    auto& item = result.item[i];
+                    auto& tBox = item.tBox;
 
-                    if ((forward_result.objects[i].bbox.x + forward_result.objects[i].bbox.w + 1) > frame_info.u32Width) {
-                        result.item[i].tBox.fW = frame_info.u32Width - forward_result.objects[i].bbox.x -1;
+                    item.eType = static_cast<DETECT_TYPE_E>(obj.label);
+                    item.nTrackId = obj.track_id;
+
+                    // 提取边界框并校验宽度和高度
+                    float x = obj.bbox.x;
+                    float y = obj.bbox.y;
+                    float w = obj.bbox.w;
+                    float h = obj.bbox.h;
+
+                    if (x + w + 1 > frame_info.u32Width) {
+                        w = frame_info.u32Width - x - 1;
                     }
 
-                    if ((forward_result.objects[i].bbox.y + forward_result.objects[i].bbox.h + 1) > frame_info.u32Height) {
-                        result.item[i].tBox.fH = frame_info.u32Height - forward_result.objects[i].bbox.y -1;
+                    if (y + h + 1 > frame_info.u32Height) {
+                        h = frame_info.u32Height - y - 1;
                     }
+
+                    tBox.fX = x;
+                    tBox.fY = y;
+                    tBox.fW = std::max(0.0f, w);
+                    tBox.fH = std::max(0.0f, h); // 确保宽高不会为负
                 }
 
-                CDetectResult::GetInstance()->Set(axFrame.nGrp, result);
+                if (result.nCount > 0) {
+                    CDetectResult::GetInstance()->Set(axFrame.nGrp, result);
+                }
             }
         }
         /* release frame after done */

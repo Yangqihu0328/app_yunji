@@ -18,6 +18,9 @@
 #include "ax_ivps_api.h"
 #include "ax_venc_api.h"
 #include "ax_vo_api.h"
+#include <iostream>
+#include <dirent.h>
+#include <cstring>
 
 #define AUDIO "audio"
 using namespace std;
@@ -182,6 +185,28 @@ AX_VOID CAudio::SendData() {
 
     AX_S32 ret;
     std::streamsize len = 0;
+    const char* device_path = "/dev/snd/";
+    bool device_found = false;
+
+    DIR* dir = opendir(device_path);
+    if (dir == nullptr) {
+        LOG_M_E(AUDIO, "Failed to open directory: %s", device_path);
+        return;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        // 检查文件名是否包含 "pcm"
+        if (strstr(entry->d_name, "pcm") != nullptr) {
+            device_found = true;
+            break;
+        }
+    }
+    closedir(dir);
+
+    if (!device_found) {
+        LOG_M_E(AUDIO, "No /dev/snd/pcm* device found. Exiting...");
+    }
 
     // 打开音频文件
     m_ifs.open(m_stAttr.audio_file.c_str(), std::ifstream::binary);
@@ -189,6 +214,9 @@ AX_VOID CAudio::SendData() {
         LOG_M_E(AUDIO, "%s: open %s file fail, %s", __func__, m_stAttr.audio_file.c_str(), strerror(errno));
         return;
     }
+
+    m_ifs.clear();             // 清除EOF或错误状态
+    m_ifs.seekg(0, std::ios::beg); // 定位到文件头
 
     uint16_t bits_per_sample;
 
