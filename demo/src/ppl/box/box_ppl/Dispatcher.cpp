@@ -33,7 +33,7 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
             if (0 == fbc.nMode) { /* if no compress, draw box because AX_IVPS_DrawRect not support FBC */
                 //这个地方检测出来肯定会有结果
                 if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
-                    //这个地方+1的原因：存在跳帧处理，ai推理速度慢，当前帧只能获取上一帧ai结果
+                    //这个地方+1的原因：存在跳帧处理，ai推理速度慢，当前帧只能获取上一帧ai结果，因此框只能画在下一帧的结果
                     if (fhvp.nSeqNum+1 == axFrame.stFrame.stVFrame.stVFrame.u64SeqNum) {
                         /* CPU draw rectange, needs virtual address */
                         if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
@@ -42,7 +42,6 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
 
                         DrawBox(axFrame, fhvp);
 
-                        //有差别才送去
                         if (fhvp.result_diff == true) {
                             axFrame.nAlgoType = fhvp.nAlgoType;
                             for (auto &m : s_lstObs) {

@@ -347,21 +347,19 @@ AX_BOOL CDetector::StopId(int id) {
 }
 
 AX_BOOL CDetector::SendFrame(const CAXFrame &axFrame) {
-    LOG_M_I(DETECTOR, "recvfrm vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x", axFrame.nGrp, axFrame.nChn,
+    LOG_MM_I(DETECTOR, "recvfrm vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x\n", axFrame.nGrp, axFrame.nChn,
             axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
             axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0], axFrame.stFrame.stVFrame.stVFrame.u32Width,
             axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
             axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
-
     if (SkipFrame(axFrame)) {
-        LOG_M_I(DETECTOR, "dropfrm vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x", axFrame.nGrp, axFrame.nChn,
+        LOG_MM_I(DETECTOR, "dropfrm vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x\n", axFrame.nGrp, axFrame.nChn,
                 axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
                 axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0], axFrame.stFrame.stVFrame.stVFrame.u32Width,
                 axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
                 axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
         return AX_TRUE;
     }
-
     axFrame.IncRef();
 
 #if defined(__RECORD_VB_TIMESTAMP__)
@@ -380,9 +378,12 @@ AX_BOOL CDetector::SkipFrame(const CAXFrame &axFrame) {
 #ifdef __VDEC_PP_FRAME_CTRL__
     return AX_FALSE;
 #else
-
     if (m_stAttr.nSkipRate <= 1) {
         return AX_FALSE;
+    }
+
+    if (axFrame.stFrame.stVFrame.stVFrame.u64SeqNum < 3) {
+        return AX_TRUE;
     }
 
     return (1 == (axFrame.stFrame.stVFrame.stVFrame.u64SeqNum % m_stAttr.nSkipRate)) ? AX_FALSE : AX_TRUE;

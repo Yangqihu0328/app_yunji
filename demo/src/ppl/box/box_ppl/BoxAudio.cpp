@@ -205,13 +205,14 @@ AX_VOID CAudio::SendData() {
     closedir(dir);
 
     if (!device_found) {
-        LOG_M_E(AUDIO, "No /dev/snd/pcm* device found. Exiting...");
+        LOG_M_W(AUDIO, "No /dev/snd/pcm* device found.");
+        return;
     }
 
     // 打开音频文件
     m_ifs.open(m_stAttr.audio_file.c_str(), std::ifstream::binary);
     if (!m_ifs.is_open()) {
-        LOG_M_E(AUDIO, "%s: open %s file fail, %s", __func__, m_stAttr.audio_file.c_str(), strerror(errno));
+        LOG_M_W(AUDIO, "%s: open %s file fail, %s", __func__, m_stAttr.audio_file.c_str(), strerror(errno));
         return;
     }
 

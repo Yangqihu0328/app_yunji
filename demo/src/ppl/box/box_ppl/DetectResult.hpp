@@ -12,6 +12,9 @@
 #include <string.h>
 #include <map>
 #include <mutex>
+#include <iostream>
+#include <set>
+#include <vector>
 #include <unordered_set>
 #include "AXSingleton.h"
 #include "ax_skel_type.h"
@@ -98,28 +101,19 @@ public:
             new_result = cur_result;
         }
 
-
-        auto track_id_set = [](const DETECT_RESULT_T& result) {
-            std::unordered_set<int> track_ids;
-            for (AX_U32 i = 0; i < result.nCount; ++i) {
-                track_ids.insert(result.item[i].nTrackId);
-            }
-            return track_ids;
-        };
-
-        // 比较两个track_id集合是否存在差异
-        auto has_difference = [](const std::unordered_set<int>& set1, const DETECT_RESULT_T& result) {
-            for (AX_U32 j = 0; j < result.nCount; ++j) {
-                if (set1.find(result.item[j].nTrackId) == set1.end()) {
-                    return true; // 找到不同的track_id
-                }
-            }
-            return false; // 所有track_id都匹配
-        };
         #ifdef __USE_AX_ALGO
-        if (last_result.nCount == new_result.nCount) {
-            std::unordered_set<int> last_track_ids = track_id_set(last_result);
-            new_result.result_diff = has_difference(last_track_ids, new_result);
+        for (AX_U32 i = 0; i < new_result.nCount; ++i) {
+            auto id = new_result.item[i].nTrackId;
+            if (last_tracked_ids.find(id) == last_tracked_ids.end()) {
+                new_result.result_diff = true;
+            }
+            last_tracked_ids.insert(id);
+        }
+        count++;
+
+        while (last_tracked_ids.size() > 50) {
+            // 删除最小的元素（set.begin() 指向最小的元素）
+            last_tracked_ids.erase(last_tracked_ids.begin());
         }
         #else
         //现在的问题：检测容易漏检，导致跟踪算法容易跟丢,容易出现新的track id
@@ -161,6 +155,7 @@ public:
         }
 
         result = m_mapRlts[nGrp];
+        m_mapRlts.erase(nGrp);
         return AX_TRUE;
     }
 
@@ -176,13 +171,13 @@ public:
     }
 
 protected:
-    CDetectResult(AX_VOID) noexcept : channel_result(16){};
+    CDetectResult(AX_VOID)  = default;
     virtual ~CDetectResult(AX_VOID) = default;
 
 private:
     std::mutex m_mtx;
     std::map<AX_S32, DETECT_RESULT_T> m_mapRlts;
-    std::vector<DETECT_RESULT_T> channel_result;
+    std::set<int> last_tracked_ids;
 
     AX_U64 m_arrCount[DETECT_TYPE_BUTT] = {0};
 };

@@ -127,7 +127,7 @@ CFLAGS            += -D__DISABLE_VO
 # dump nalu before send to vdec
 # CFLAGS            += -D__DUMP_VDEC_NALU__
 
-CFLAGS              += -D__VDEC_PP_FRAME_CTRL__
+# CFLAGS              += -D__VDEC_PP_FRAME_CTRL__
 
 CFLAGS  += -D__LINUX_IO_API__
 CFLAGS  += -D__RECORD_VB_TIMESTAMP__

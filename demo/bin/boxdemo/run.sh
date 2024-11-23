@@ -16,12 +16,11 @@ fi
 #
 # ----------------------------------------------------------------------------------------------#
 
-# Check whether config coredump path (Only "-q 0" to disable config)
-if [[ $(expr match "$*" ".*-q 0.*") != 0 ]]
-then
-  core_dump=0
-else
+# Check whether config coredump path (Only "-q 1" to enable config)
+if [[ "$*" == *"-q 1"* ]]; then
   core_dump=1
+else
+  core_dump=0
 fi
 
 # mount video
@@ -46,7 +45,7 @@ export APP_LOG_TARGET=4
 # 5: INFORMATION
 # 6: VERBOSE
 # 7: DATA
-export APP_LOG_LEVEL=3
+export APP_LOG_LEVEL=4
 
 # VB debug
 export TIMESTAMP_APP_BUF_NUM=20
@@ -131,18 +130,26 @@ if ! command -v emqx &> /dev/null; then
     fi
 
     # 启动 emqx 服务并检查是否成功
+    sudo systemctl stop emqx
     if ! sudo systemctl start emqx; then
         echo "启动 emqx 服务失败，退出。"
         exit 1
     fi
 
     echo "emqx 已成功安装并启动。"
+fi
+
+# 检查 emqx 服务是否已启动
+if systemctl is-active --quiet emqx; then
+    echo "emqx 服务已经在运行，无需重复启动。"
 else
-    # 启动 emqx 服务并检查是否成功
+    echo "启动 emqx 服务..."
+    sudo systemctl stop emqx
     if ! sudo systemctl start emqx; then
         echo "启动 emqx 服务失败，退出。"
         exit 1
     fi
+    echo "emqx 服务已成功启动。"
 fi
 
 pid=$(pgrep MediaServer)
