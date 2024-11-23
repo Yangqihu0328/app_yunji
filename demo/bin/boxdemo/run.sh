@@ -145,6 +145,21 @@ else
     fi
 fi
 
+pid=$(pgrep MediaServer)
+
+if [ -z "$pid" ]; then
+    echo "MediaServer process not found."
+else
+    echo "MediaServer process found with PID: $pid"
+    # 杀死进程
+    kill -9 "$pid"
+    if [ $? -eq 0 ]; then
+        echo "MediaServer process (PID: $pid) killed successfully."
+    else
+        echo "Failed to kill MediaServer process."
+    fi
+fi
+
 export LD_LIBRARY_PATH=$PWD:/soc/lib:/usr/local/lib:/usr/lib:/opt/lib:$LD_LIBRARY_PATH
 cd ZLMediaKit && ./MediaServer &
 md5=`md5sum ${process} | awk '{ print $1 }'`
