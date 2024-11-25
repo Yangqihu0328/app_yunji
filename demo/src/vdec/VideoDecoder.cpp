@@ -210,7 +210,7 @@ AX_VOID CVideoDecoder::RecvThread(AX_VOID* pArg) {
                 axFrame.stFrame.stVFrame = stVFrame;
                 axFrame.stFrame.stVFrame.stVFrame.u64PTS = tChnInfo.nPTS;
 
-                LOG_M_N(VDEC, "decoded vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x size %d", axFrame.nGrp,
+                LOG_M_D(VDEC, "decoded vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x size %d", axFrame.nGrp,
                         axFrame.nChn, axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
                         axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0], axFrame.stFrame.stVFrame.stVFrame.u32Width,
                         axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
