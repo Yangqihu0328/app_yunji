@@ -127,7 +127,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                     auto& item = result.item[i];
                     auto& tBox = item.tBox;
 
-                    item.eType = static_cast<DETECT_TYPE_E>(obj.label);
+                    item.eType = static_cast<DETECT_TYPE_E>(obj.status);
                     item.nTrackId = obj.track_id;
 
                     // 提取边界框并校验宽度和高度
