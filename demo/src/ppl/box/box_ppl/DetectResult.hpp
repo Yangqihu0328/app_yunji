@@ -109,7 +109,6 @@ public:
             }
             last_tracked_ids.insert(id);
         }
-        count++;
 
         while (last_tracked_ids.size() > 50) {
             // 删除最小的元素（set.begin() 指向最小的元素）
