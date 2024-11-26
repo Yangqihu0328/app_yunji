@@ -132,6 +132,7 @@ AX_BOOL CFileStreamer::Init(const STREAMER_ATTR_T& stAttr) {
     m_stInfo.nWidth = stAttr.nMaxWidth;
     m_stInfo.nHeight = stAttr.nMaxHeight;
     m_stInfo.nFps = 30; /* default fps */
+    m_stInfo.bGetInfo = AX_TRUE;
 
     m_stStat.bStarted = AX_FALSE;
     m_stStat.nCount = 0;
