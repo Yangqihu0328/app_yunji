@@ -37,6 +37,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
     const AX_U32 TOTAL_GRP_COUNT = m_stAttr.nChannelNum;
     CAXFrame axFrame;
     AX_U32 nSkipCount = 0;
+    ax_image_t ax_image{0};
     while (m_DetectThread.IsRunning()) {
         for (nCurrGrp = nNextGrp; nCurrGrp < TOTAL_GRP_COUNT; ++nCurrGrp) {
             if (m_arrFrameQ[nCurrGrp].Pop(axFrame, 0)) {
@@ -67,12 +68,32 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
                 axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
 
+        auto &frame_info = axFrame.stFrame.stVFrame.stVFrame;
+        if (ax_image.pVir == nullptr) {
+            int ret = ax_create_image(frame_info.u32Width, frame_info.u32Height, frame_info.u32PicStride[0],
+                ax_color_space_nv12, &ax_image);
+            if (ret != 0) {
+                LOG_M_E(DETECTOR, "alloc image fail\n");
+                continue;;
+            }
+        } else if (frame_info.u32FrameSize != ax_image.nSize) {
+            ax_release_image(&ax_image);
+            int ret = ax_create_image(frame_info.u32Width, frame_info.u32Height, frame_info.u32PicStride[0],
+                ax_color_space_nv12, &ax_image);
+            if (ret != 0) {
+                LOG_M_E(DETECTOR, "alloc image fail\n");
+                continue;
+            }
+        }
+
+        if (0 == frame_info.u64VirAddr[0]) {
+            frame_info.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(frame_info.u32BlkId[0]);
+        }
+        memcpy(ax_image.pVir, (void *)frame_info.u64VirAddr[0], ax_image.nSize);
+
         auto &flag_vec = d_vec[nCurrGrp];
-        //遍历三种算法是否使能
         for (int index = 0; index < 1; index++) {
             if (flag_vec[index]) {
-                ax_image_t ax_image;
-                auto frame_info = axFrame.stFrame.stVFrame.stVFrame;
                 #if 0
                 // ax_image.pPhy = (unsigned long long int)frame_info.u64PhyAddr;
                 // ax_image.pVir = (void *)frame_info.u64VirAddr[0];
@@ -81,38 +102,25 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 // ax_image.nHeight = frame_info.u32Height;
                 // ax_image.eDtype = ax_color_space_nv12;
                 // ax_image.tStride_W = frame_info.u32PicStride[0];
-                #else
-                if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
-                    axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] =
-                    (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
-                }
-                int ret = ax_create_image(frame_info.u32Width, frame_info.u32Height, frame_info.u32PicStride[0],
-                ax_color_space_nv12, &ax_image);
-                if (ret != 0) {
-                    LOG_M_E(DETECTOR, "alloc image fail\n");
-                    break;
-                }
-                memcpy(ax_image.pVir, (void *)axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0], ax_image.nSize);
                 #endif
 
                 #ifdef __BOX_DEBUG__
                 ofstream ofs;
                 AX_CHAR szFile[64];
-                sprintf(szFile, "./ai_dump_%d_%lld.yuv", axFrame.stFrame.stVFrame.stVFrame.u32FrameSize,
-                axFrame.stFrame.stVFrame.stVFrame.u64SeqNum);
+                sprintf(szFile, "./ai_dump_%d_%lld.yuv", frame_info.u32FrameSize,
+                frame_info.u64SeqNum);
                 ofs.open(szFile, ofstream::out | ofstream::binary | ofstream::trunc);
-                if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
-                    axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] =
-                    (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+                if (0 == frame_info.u64VirAddr[0]) {
+                    frame_info.u64VirAddr[0] =
+                    (AX_U64)AX_POOL_GetBlockVirAddr(frame_info.u32BlkId[0]);
                 }
-                ofs.write((const char*)axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0],
-                                    axFrame.stFrame.stVFrame.stVFrame.u32FrameSize);
+                ofs.write((const char*)frame_info.u64VirAddr[0],
+                                    frame_info.u32FrameSize);
                 ofs.close();
                 #endif
 
                 ax_result_t forward_result;
                 ax_algorithm_inference(handle[nCurrGrp][index], &ax_image, &forward_result);
-                ax_release_image(&ax_image);
 
                 DETECT_RESULT_T result;
                 result.nW = frame_info.u32Width;
@@ -155,6 +163,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 }
             }
         }
+        ax_release_image(&ax_image);
         /* release frame after done */
         axFrame.DecRef();
     }
