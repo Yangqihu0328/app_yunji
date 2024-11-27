@@ -26,15 +26,17 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
 
     CAXFrame axFrame;
     DETECT_RESULT_T fhvp;
-    const boxconf::COMPRESS_CONFIG_T fbc = boxconf::CBoxConfig::GetInstance()->GetCompressConfig();
-    //每一路视频都有一个显示线程。
+    const COMPRESS_CONFIG_T fbc = CBoxConfig::GetInstance()->GetCompressConfig();
+    // 每一路视频都有一个显示线程。
     while (m_DispatchThread.IsRunning()) {
         if (m_qFrame.Pop(axFrame, -1)) {
             if (0 == fbc.nMode) { /* if no compress, draw box because AX_IVPS_DrawRect not support FBC */
-                //这个地方检测出来肯定会有结果
+                // 这个地方检测出来肯定会有结果
                 if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
-                    //这个地方+1的原因：存在跳帧处理，ai推理速度慢，当前帧只能获取上一帧ai结果，因此框只能画在下一帧的结果
-                    if (fhvp.nSeqNum+1 == axFrame.stFrame.stVFrame.stVFrame.u64SeqNum) {
+                    // LOG_M_C(DISPATCHER, ">>>>>>>>>>>>>>>>>>>>>>>>>>>> %lld, %lld", fhvp.nSeqNum, axFrame.stFrame.stVFrame.stVFrame.u64SeqNum);
+
+                    // 这个地方+1的原因：存在跳帧处理，ai推理速度慢，当前帧只能获取上一帧ai结果，因此框只能画在下一帧的结果
+                    // if (fhvp.nSeqNum+1 == axFrame.stFrame.stVFrame.stVFrame.u64SeqNum) {
                         /* CPU draw rectange, needs virtual address */
                         if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
                             axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
@@ -48,7 +50,7 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
                                 m->ProcessFrame(&axFrame);
                             }
                         }
-                    }
+                    // }
                 }
             }
 
@@ -351,7 +353,7 @@ AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhv
 #endif
         // PRINT_ELAPSED_USEC("cpu draw rect");
         AX_CHAR track_id[32] = {0};
-        snprintf(track_id, sizeof(track_id), "TRACK:%02d ", fhvp.item[i].nTrackId);
+        snprintf(track_id, sizeof(track_id), "TRACK:%02lld ", fhvp.item[i].nTrackId);
         m_font.FillString(track_id, rc.nX, rc.nY, &yuv, canvas.nW, canvas.nH);
     }
     

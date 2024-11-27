@@ -1,21 +1,13 @@
 {
-    "count": 3,
+    "count": 1,
     "models":[
         {
             "id": 4,
-            "path": "/opt/etc/skelModels/1024x576/part/ax_ax650_hvcfp_algo_model_V1.0.2.axmodel",
-            "name": "人车非",
-            "desc": "人物,机动车,非机动车检测",
+            "path": "/opt/bin/BoxDemo/20241113.model",
+            "name": "人物检测",
+            "desc": "人物检测",
             "warning": "识别到人物",
-            "version": "1.0.2"
-        },
-        {
-            "id": 6,
-            "path": "/opt/etc/skelModels/1024x576/part/ax_ax650_hvcfp_algo_model_V1.0.2.axmodel",
-            "name": "火焰",
-            "desc": "火焰检测",
-            "warning": "识别到火焰",
-            "version": "1.0.2"
+            "version": "1.0.1"
         }
     ]
 }

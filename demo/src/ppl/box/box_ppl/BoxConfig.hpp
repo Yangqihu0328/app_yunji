@@ -15,8 +15,6 @@
 #include "IniWrapper.hpp"
 #include "ax_base_type.h"
 
-namespace boxconf {
-
 typedef struct {
     AX_U32 nUserPool;
     AX_U32 nMaxGrpW;
@@ -148,5 +146,3 @@ private:
 private:
     CIniWrapper m_Ini;
 };
-
-}  // namespace boxconf
