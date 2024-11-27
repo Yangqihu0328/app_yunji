@@ -57,12 +57,19 @@ typedef struct {
 } DETECT_CONFIG_T;
 
 typedef struct {
-    std::string topic;
-    std::string hostname;
-    std::string name;
-    std::string passwd;
     AX_S32 version;
-    AX_S32 port;
+
+    std::string localTopic;
+    std::string localHostname;
+    std::string localName;
+    std::string localPasswd;
+    AX_S32 localPort;
+
+    std::string cloudTopic;
+    std::string cloudHostname;
+    std::string cloudName;
+    std::string cloudPasswd;
+    AX_S32 cloudPort;
 } MQTT_CONFIG_T;
 
 typedef struct {

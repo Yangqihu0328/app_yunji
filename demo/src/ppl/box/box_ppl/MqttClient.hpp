@@ -351,14 +351,19 @@ public:
     }
 
 private:
-    AX_VOID WorkThread(AX_VOID* pArg);
+    AX_VOID LocalWorkThread(AX_VOID* pArg);
+    AX_VOID CloudWorkThread(AX_VOID* pArg);
 	AX_BOOL SaveJpgFile(QUEUE_T* jpg_info);
-	AX_VOID SendAlarmMsg();
+	AX_VOID SendLocalAlarmMsg();
+    AX_VOID SendCloudAlarmMsg();
 
 protected:
-	std::unique_ptr<CAXLockQ<QUEUE_T>> arrjpegQ;
+	std::unique_ptr<CAXLockQ<QUEUE_T>> local_jpeg_queue_;
 
-    CAXThread m_threadWork;
-	std::string topic;
+	std::string local_topic_;
+    std::string cloud_topic_;
+
+    CAXThread local_work_thread_;
+    CAXThread cloud_work_thread_;
 };
 };

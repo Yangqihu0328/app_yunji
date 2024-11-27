@@ -9,9 +9,11 @@
 #include "EncoderOptionHelper.h"
 #include "BoxMediaParser.hpp"
 #include "BoxModelParser.hpp"
+#include "BoxHttpRequest.hpp"
 
 #include "httplib.h"
 #include "nlohmann/json.hpp"
+#include "curl.h"
 
 #include <linux/rtnetlink.h>
 
@@ -43,10 +45,13 @@ enum {
     MAXWAIT = 2,
 };
 
-//需要转为类成员变量，提高代码简洁性
+static std::shared_ptr<IPStack> local_ipstack_ = nullptr;
+static std::shared_ptr<MQTT::Client<IPStack, Countdown>> local_client_ = nullptr;
+
+static std::shared_ptr<IPStack> cloud_ipstack_ = nullptr;
+static std::shared_ptr<MQTT::Client<IPStack, Countdown>> cloud_client_ = nullptr;
+
 static bool isLogin = false;
-static std::shared_ptr<IPStack> ipstack_ = nullptr;
-static std::shared_ptr<MQTT::Client<IPStack, Countdown>> client_ = nullptr;
 static int arrivedcount = 0;
 static std::queue<StreamCmd> StreamQueue;
 static std::mutex mtx;
@@ -229,8 +234,8 @@ static bool SendMsg(const char *topic, const char *msg, size_t len) {
     message.id = 0;
     message.payload = (void *)msg;
     message.payloadlen = len;
-    if (client_) {
-        int ret = client_->publish(topic, message);
+    if (local_client_) {
+        int ret = local_client_->publish(topic, message);
         if (ret != 0) {
             LOG_M_E(MQTT_CLIENT, "publish message len %ld failed %d...\n", len, ret);
         }
@@ -936,18 +941,18 @@ static AX_BOOL StartPreview(AX_U32 id) {
         AX_CHAR api[256] = {0};
 
 #if 0
-        // URL编码字符映射表
-        std::string encoded_url = UrlEncode(mediasMap[id].szMediaUrl);
-        sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=rtpstream%d&url=%s", ZLM_SECRET, ZLM_IP, "live", id,
-                encoded_url.c_str());
+            // URL编码字符映射表
+            std::string encoded_url = UrlEncode(mediasMap[id].szMediaUrl);
+            sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=rtpstream%d&url=%s", ZLM_SECRET, ZLM_IP, "live", id,
+                    encoded_url.c_str());
 #else
-        AX_CHAR szIP[64] = {0};
-        AX_CHAR mediaUrl[128] = {0};
+            AX_CHAR szIP[64] = {0};
+            AX_CHAR mediaUrl[128] = {0};
 
-        GetIP(szIP);
-        sprintf(mediaUrl, "rtsp://%s:8554/axstream%d", szIP, id + 1);
-        sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=rtpstream%d&url=%s", ZLM_SECRET, ZLM_IP, "live", id,
-                mediaUrl);
+            GetIP(szIP);
+            sprintf(mediaUrl, "rtsp://%s:8554/axstream%d", szIP, id + 1);
+            sprintf(api, "/index/api/addStreamProxy?secret=%s&vhost=%s&app=%s&stream=rtpstream%d&url=%s", ZLM_SECRET, ZLM_IP, "live", id,
+                    mediaUrl);
 #endif
 
         // 通知媒体服务器主动拉流
@@ -1356,11 +1361,11 @@ AX_BOOL MqttClient::SaveJpgFile(QUEUE_T *jpg_info) {
     return AX_TRUE;
 }
 
-AX_VOID MqttClient::SendAlarmMsg() {
-    AX_U32 nCount = arrjpegQ->GetCount();
+AX_VOID MqttClient::SendLocalAlarmMsg() {
+    AX_U32 nCount = local_jpeg_queue_->GetCount();
     if (nCount > 0) {
         QUEUE_T jpg_info;
-        if (arrjpegQ->Pop(jpg_info, 0)) {
+        if (local_jpeg_queue_->Pop(jpg_info, 0)) {
             SaveJpgFile(&jpg_info);
             AX_U32 nChn = jpg_info.u64UserData & 0xff;
             AX_U32 nAlgoType = (jpg_info.u64UserData >> 8) & 0xff;
@@ -1386,7 +1391,6 @@ AX_VOID MqttClient::SendAlarmMsg() {
                     break;
                 }
             }
-
             json child = {
                 { "type", "alarmMsg"},
                 { "taskName", mediasMap[nChn].taskInfo.szTaskName },
@@ -1399,7 +1403,14 @@ AX_VOID MqttClient::SendAlarmMsg() {
                 { "mediaName", mediasMap[nChn].szMediaName },
                 { "jpgPath", jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath },
             };
+            json root;
+            root["result"] = 0;
+            root["msg"] = "操作成功";
+            root["data"] = child;
+            std::string payload = root.dump();
+            SendMsg("web-message", payload.c_str(), payload.size());
 
+            // 播放声音
             AX_CHAR AudioFile[128] = { 0 };
             sprintf(AudioFile, "%saudio/%d.wav", GetExecPath().c_str(),  nAlgoType);
             if (access(AudioFile, F_OK) == 0) {
@@ -1409,16 +1420,84 @@ AX_VOID MqttClient::SendAlarmMsg() {
                 LOG_M_E(MQTT_CLIENT, "AudioFile %s not exist", AudioFile);
             }
 
-            json root;
-            root["result"] = 0;
-            root["msg"] = "操作成功";
-            root["data"] = child;
-
-            std::string payload = root.dump();
-
-            SendMsg("web-message", payload.c_str(), payload.size());
+            // // 短信告警推送
+            // json message = {
+            //     { "alarmDescribe", modelWarning },
+            //     { "alarmTime", currentTimeStr },
+            //     { "channelName", mediasMap[nChn].szMediaName },
+            //     { "deviceSymbol", "06C38B59-EB2D-4B7D-B67E-56E01228574F" },
+            //     { "flowStatus", "1" },
+            //     { "imageData", "#" },
+            //     { "reportInfo", modelWarning },
+            //     { "reportStatus", "1" },
+            //     { "taskDescribe", mediasMap[nChn].taskInfo.szTaskName },
+            //     { "tenantId", "1" },
+            // };
+            // auto params = message.dump();
+            // auto res = BoxHttpRequest::Send("post", 
+            //                     "http://192.168.0.196:8010/devices/admin/deviceAlarm/save", 
+            //                     "Content-Type: application/json;",
+            //                     params,
+            //                     5000);
+            // LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
         }
     }
+}
+
+AX_VOID MqttClient::SendCloudAlarmMsg() {
+    // AX_U32 nCount = local_jpeg_queue_->GetCount();
+    // if (nCount > 0) {
+    //     QUEUE_T jpg_info;
+    //     if (local_jpeg_queue_->Pop(jpg_info, 0)) {
+    //         SaveJpgFile(&jpg_info);
+    //         AX_U32 nChn = jpg_info.u64UserData & 0xff;
+    //         AX_U32 nAlgoType = (jpg_info.u64UserData >> 8) & 0xff;
+
+    //         // 释放内存
+    //         delete[] jpg_info.jpg_buf;
+    //         jpg_info.jpg_buf = nullptr;
+
+    //         std::string currentTimeStr;
+    //         GetSystime(currentTimeStr);
+
+    //         // 获取当前通道信息
+    //         AX_U32 nMediaCnt = 0;
+    //         AX_U32 nModelCnt = 0;
+    //         STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    //         std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    //         std::vector<MODEL_INFO_T> modelsMap = CBoxModelParser::GetInstance()->GetModelsMap(&nModelCnt, streamConfig.strModelPath);
+
+    //         AX_CHAR modelWarning[32] = { 0 };
+    //         for (size_t i = 0; i < modelsMap.size(); i++) {
+    //             if (modelsMap[i].nModelId == nAlgoType) {
+    //                 strcpy(modelWarning, modelsMap[i].szModelWarning);
+    //                 break;
+    //             }
+    //         }
+
+    //         // 短信告警推送
+    //         json message = {
+    //             { "alarmDescribe", modelWarning },
+    //             { "alarmTime", currentTimeStr },
+    //             { "channelName", mediasMap[nChn].szMediaName },
+    //             { "deviceSymbol", "06C38B59-EB2D-4B7D-B67E-56E01228574F" },
+    //             { "flowStatus", "1" },
+    //             { "imageData", "" },
+    //             { "reportInfo", modelWarning },
+    //             { "reportStatus", "1" },
+    //             { "taskDescribe", mediasMap[nChn].taskInfo.szTaskName },
+    //             { "tenantId", "1" },
+    //         };
+
+    //         auto params = message.dump();
+    //         auto res = BoxHttpRequest::Send("post", 
+    //                             "http://192.168.0.196:8010/devices/admin/deviceAlarm/save", 
+    //                             "Content-Type: application/json;",
+    //                             params,
+    //                             5000);
+    //         LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
+    //     }
+    // }
 }
 
 static void OnAlarmControl(AX_BOOL isAudio, AX_U32 status) {
@@ -1492,9 +1571,8 @@ static AX_VOID removeJpgFile(AX_BOOL isDir, nlohmann::json fileUrls) {
     printf("removeJpgFile ----\n");
 }
 
-/*保证回调执行的程序要简单，如果比较复杂，需要考虑要用状态机处理回调*/
-static void messageArrived(MQTT::MessageData& md) {
-    LOG_MM_D(MQTT_CLIENT,"messageArrived ++++\n");
+static void MQTTLocalMessage(MQTT::MessageData& md) {
+    LOG_MM_D(MQTT_CLIENT,"MQTTLocalMessage ++++\n");
 
     MQTT::Message &message = md.message;
     LOG_MM_D(MQTT_CLIENT, "Message %d arrived: qos %d, retained %d, dup %d, packetid %d.",
@@ -1624,9 +1702,113 @@ static void messageArrived(MQTT::MessageData& md) {
         removeJpgFile(AX_FALSE, fileUrls);
     }
 
-    LOG_MM_D(MQTT_CLIENT,"messageArrived ----\n");
+    LOG_MM_D(MQTT_CLIENT,"MQTTLocalMessage ----\n");
 }
 
+// static void MQTTCloudMessage(MQTT::MessageData& md) {
+//     LOG_MM_D(MQTT_CLIENT,"MQTTCloudMessage ++++\n");
+
+//     MQTT::Message &message = md.message;
+//     LOG_MM_D(MQTT_CLIENT, "Message %d arrived: qos %d, retained %d, dup %d, packetid %d.",
+//             ++arrivedcount, message.qos, message.retained, message.dup, message.id);
+//     LOG_MM_D(MQTT_CLIENT, "Payload %.*s.", (int)message.payloadlen, (char*)message.payload);
+
+//     std::string recv_msg((char *)message.payload, message.payloadlen);
+//     LOG_M_C(MQTT_CLIENT, "=============================================================");
+//     LOG_M_C(MQTT_CLIENT, "recv msg: %s", recv_msg.c_str());
+//     LOG_M_C(MQTT_CLIENT, "=============================================================");
+
+//     std::string type;
+//     nlohmann::json jsonRes;
+//     try {
+//         jsonRes = nlohmann::json::parse(recv_msg);
+//         type = jsonRes["type"];
+//     } catch (const nlohmann::json::parse_error& e) {
+//         std::cerr << "JSON parse error: " << e.what() << std::endl;
+//         std::cerr << "Received message: " << recv_msg << std::endl;
+//     } catch (const std::exception& e) {
+//         std::cerr << "An error occurred: " << e.what() << std::endl;
+//     }
+
+//     if (type == "rebootAiBox") { // 重启盒子
+//         OnRebootAiBox();
+//     } else if (type == "restartAppService") { // 重启应用服务
+//         OnRestartAppService();
+//     } else if (type == "syncSystemTime") { // 同步系统时间
+//         AX_S32 year = jsonRes["year"];
+//         AX_S32 month = jsonRes["month"];
+//         AX_S32 day = jsonRes["day"];
+//         AX_S32 hour = jsonRes["hour"];
+//         AX_S32 minute = jsonRes["minute"];
+//         AX_S32 second = jsonRes["second"];
+//         OnSyncSystemTime(year, month, day, hour, minute, second);
+//     } else if (type == "getMediaChannelList") { // 获取通道列表
+//         OnGetMediaChannelList();
+//     } else if (type == "setMediaChannelInfo") { // 设置通道信息
+//         AX_U32 mediaId = jsonRes["mediaId"];
+//         std::string mediaUrl = jsonRes["mediaUrl"];
+//         std::string mediaName = jsonRes["mediaName"];
+//         std::string mediaDesc = jsonRes["mediaDesc"];
+//         OnSetMediaChannelInfo(mediaId, mediaUrl, mediaName, mediaDesc);
+//     } else if (type == "delMediaChannelInfo") { // 删除通道信息
+//         AX_U32 mediaId = jsonRes["mediaId"];
+//         OnDelMediaChannelInfo(mediaId);
+//     } else if (type == "getAiModelList") { // 算法模型列表
+//         OnGetAiModelList();
+//     } else if (type == "getAlgoTaskList") { // 算法任务列表
+//         OnGetAlgoTaskList();
+//     } else if (type == "setAlgoTaskInfo") { // 配置算法任务
+//         AX_U32 mediaId = jsonRes["mediaId"];
+//         std::string pushUrl  = jsonRes["taskPushUrl"];
+//         std::string taskName = jsonRes["taskName"];
+//         std::string taskDesc = jsonRes["taskDesc"];
+
+//         std::vector<AX_U32> vAlgo;
+//         nlohmann::json algos = jsonRes["taskAlgos"];
+//         if (algos.is_array()) {
+//             for (auto algo : algos) {
+//                 vAlgo.push_back((AX_U32)algo);
+//             }
+//         }
+
+//         OnSetAlgoTaskInfo(mediaId, pushUrl, taskName, taskDesc, vAlgo);
+//     } else if (type == "delAlgoTaskInfo") { // 删除算法任务
+//         AX_U32 mediaId = jsonRes["mediaId"];
+//         OnDelAlgoTaskInfo(mediaId);
+//     } else if (type == "algoTaskControl") { // 控制算法启停
+//         AX_U32 mediaId = jsonRes["mediaId"];
+//         AX_U32 controlCommand = jsonRes["controlCommand"];
+//         OnAlgoTaskControl(mediaId, controlCommand);
+//     } else if (type == "algoTaskSnapshot") { // 参考标底图
+//         AX_U32 mediaId = jsonRes["mediaId"];
+//         OnAlgoTaskSnapshot(mediaId);
+//     } else if (type == "getAiBoxNetwork") { // 盒子网络信息
+//         OnGetAiBoxNetwork();
+//     } else if (type == "setAiBoxNetwork") { // 设置盒子网络
+//         std::string name = jsonRes["name"];
+//         AX_U32 dhcp = jsonRes["dhcp"];
+//         std::string address = jsonRes["address"];
+//         std::string gateway = jsonRes["gateway"];
+//         std::string mask = jsonRes["mask"];
+//         std::string dns = jsonRes["dns"];
+//         OnSetAiBoxNetwork(name, dhcp, address, gateway, mask, dns);
+//     } else if (type == "playAudio") { // 播放告警音频
+//         AX_U32 status = jsonRes["status"];
+//         OnAlarmControl(AX_TRUE, status);
+//     } else if (type == "showWindow") { // 显示告警弹窗
+//         AX_U32 status = jsonRes["status"];
+//         OnAlarmControl(AX_FALSE, status);
+//     } else if (type == "getAlarmStatus") { // 获取告警配置
+//         OnGetAlarmStatus();
+//     } else if (type == "clearAllJpg") { // 删除所有图片
+//         removeJpgFile(AX_TRUE, NULL);
+//     } else if (type == "clearJpgFiles") { // 删除指定图片
+//         nlohmann::json fileUrls = jsonRes["fileUrls"];
+//         removeJpgFile(AX_FALSE, fileUrls);
+//     }
+
+//     LOG_MM_D(MQTT_CLIENT,"MQTTCloudMessage ----\n");
+// }
 
 //回调不能出现耗时过久
 AX_BOOL MqttClient::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nChn, AX_VOID* pData) {
@@ -1651,7 +1833,7 @@ AX_BOOL MqttClient::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nC
             tJpegInfo.tCaptureInfo.tHeaderInfo.nHeight = 1080;
             CElapsedTimer::GetLocalTime(tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp, 16, '-', AX_FALSE);
 
-            if (!arrjpegQ->Push(jpg_info)) {
+            if (!local_jpeg_queue_->Push(jpg_info)) {
                 // 释放内存
                 delete[] jpg_info.jpg_buf;
                 jpg_info.jpg_buf = nullptr;
@@ -1665,56 +1847,143 @@ AX_BOOL MqttClient::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nC
 
 AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
     // 实现加锁队列，主要是多线程
-    arrjpegQ = std::make_unique<CAXLockQ<QUEUE_T>>();
-    if (!arrjpegQ) {
+    local_jpeg_queue_ = std::make_unique<CAXLockQ<QUEUE_T>>();
+    if (!local_jpeg_queue_) {
         LOG_MM_E(MQTT_CLIENT, "alloc queue fail");
         return AX_FALSE;
     } else {
-        arrjpegQ->SetCapacity(32);
+        local_jpeg_queue_->SetCapacity(32);
     }
 
-    topic = mqtt_config.topic;
-    ipstack_ = std::make_unique<IPStack>();
-    client_ = std::make_unique<MQTT::Client<IPStack, Countdown>>(*ipstack_);
+    local_topic_ = mqtt_config.localTopic;
+    local_ipstack_ = std::make_unique<IPStack>();
+    local_client_ = std::make_unique<MQTT::Client<IPStack, Countdown>>(*local_ipstack_);
 
-    LOG_M_C(MQTT_CLIENT, "Mqtt Version is %d, topic is %s", mqtt_config.version, topic.c_str());
-    LOG_M_C(MQTT_CLIENT, "Connecting to %s:%d", mqtt_config.hostname.c_str(), mqtt_config.port);
+    LOG_M_C(MQTT_CLIENT, "Mqtt Version is %d, local topic is %s", mqtt_config.version, local_topic_.c_str());
+    LOG_M_C(MQTT_CLIENT, "Connecting to %s:%d", mqtt_config.localHostname.c_str(), mqtt_config.localPort);
 
-    int rc = ipstack_->connect(mqtt_config.hostname.c_str(), mqtt_config.port);
+    int rc = local_ipstack_->connect(mqtt_config.localHostname.c_str(), mqtt_config.localPort);
     if (rc != 0) {
-        LOG_M_E(MQTT_CLIENT, "rc from TCP connect fail, rc = %d", rc);
+        LOG_M_E(MQTT_CLIENT, "connect local mqtt fail, rc is %d", rc);
+        return AX_FALSE;
     } else {
         MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
         data.MQTTVersion = mqtt_config.version;
-        data.clientID.cstring = mqtt_config.name.c_str();
-        data.username.cstring = mqtt_config.name.c_str();
-        data.password.cstring = mqtt_config.passwd.c_str();
-        rc = client_->connect(data);
+        data.clientID.cstring = mqtt_config.localName.c_str();
+        data.username.cstring = mqtt_config.localName.c_str();
+        data.password.cstring = mqtt_config.localPasswd.c_str();
+        rc = local_client_->connect(data);
         if (rc != 0) {
-            LOG_M_E(MQTT_CLIENT, "rc from MQTT connect fail, rc is %d\n", rc);
+            LOG_M_E(MQTT_CLIENT, "connect local mqtt fail, rc is %d\n", rc);
+            return AX_FALSE;
         } else {
-            LOG_M_D(MQTT_CLIENT, "MQTT connected sucess");
-            rc = client_->subscribe(topic.c_str(), MQTT::QOS0, messageArrived);
+            LOG_M_C(MQTT_CLIENT, "local mqtt connected success");
+            rc = local_client_->subscribe(local_topic_.c_str(), MQTT::QOS0, MQTTLocalMessage);
             if (rc != 0) {
-                LOG_M_E(MQTT_CLIENT, "rc from MQTT subscribe is %d\n", rc);
+                LOG_M_E(MQTT_CLIENT, "local mqtt subscribe failed, rc is %d\n", rc);
+                return AX_FALSE;
             }
+
+            LOG_M_C(MQTT_CLIENT, "local mqtt subscribe [%s] success", local_topic_.c_str());
         }
     }
+
+    // cloud_topic_ = mqtt_config.cloudTopic;
+    // cloud_ipstack_ = std::make_unique<IPStack>();
+    // cloud_client_ = std::make_unique<MQTT::Client<IPStack, Countdown>>(*cloud_ipstack_);
+    // rc = cloud_ipstack_->connect(mqtt_config.cloudHostname.c_str(), mqtt_config.cloudPort);
+    // if (rc != 0) {
+    //     LOG_M_E(MQTT_CLIENT, "connect cloud mqtt fail, rc is %d", rc);
+    // } else {
+    //     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
+    //     data.MQTTVersion = mqtt_config.version;
+    //     data.clientID.cstring = mqtt_config.cloudName.c_str();
+    //     data.username.cstring = mqtt_config.cloudName.c_str();
+    //     data.password.cstring = mqtt_config.cloudPasswd.c_str();
+    //     rc = cloud_client_->connect(data);
+    //     if (rc != 0) {
+    //         LOG_M_E(MQTT_CLIENT, "connect cloud mqtt fail, rc is %d\n", rc);
+    //     } else {
+    //         LOG_M_C(MQTT_CLIENT, "cloud mqtt connected sucess");
+    //         rc = cloud_client_->subscribe(mqtt_config.cloudTopic.c_str(), MQTT::QOS0, MQTTCloudMessage);
+    //         if (rc != 0) {
+    //             LOG_M_E(MQTT_CLIENT, "cloud mqtt subscribe failed, rc is %d\n", rc);
+    //         }
+    //     }
+    // }
+
+    int temperature = -1;
+    int ret = GetTemperature(temperature);
+    if (ret == -1) {
+        LOG_MM_D(MQTT_CLIENT, "GetTemperature fail.");
+    }
+
+    AX_CHAR szIP[64] = {0};
+    ret = GetIP(szIP);
+    if (ret == -1) {
+        LOG_MM_D(MQTT_CLIENT, "GetIP fail.");
+    }
+
+    MemoryInfo memInfo = {0};
+    ret = GetMemoryInfo(memInfo);
+    if (ret == -1) {
+        LOG_MM_D(MQTT_CLIENT, "GetMemoryInfo fail.");
+    }
+
+    FlashInfo falsh_info = {0};
+    ret = GetDiskUsage("/", falsh_info);
+    if (ret == -1) {
+        LOG_MM_D(MQTT_CLIENT, "GetDiskUsage fail.");
+    }
+
+    std::string version;
+    GetVersion(version);
+
+    // // 云端设备注册
+    // json message = {
+    //     { "authorizationStatus", "已授权"},
+    //     { "deviceIp", szIP },
+    //     { "deviceSymbol", "06C38B59EB2D4B7DB67E56E01228574F" },
+    //     { "memory", memInfo.totalMem },
+    //     { "softwareVersion", AI_BOX_VERSION },
+    //     { "status", "正常" },
+    //     { "storage", falsh_info.total },
+    //     { "systemVersion", version },
+    //     { "tenantId", "1" },
+    // };
+
+    // auto params = message.dump();
+    // std::string res = BoxHttpRequest::Send("post", 
+    //                       "http://192.168.0.196:8010/devices/admin/deviceInfo/save", 
+    //                       "Content-Type: application/json;",
+    //                       params,
+    //                       5000);
+    // LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
 
     return AX_TRUE;
 }
 
 AX_BOOL MqttClient::DeInit(AX_VOID) {
 
-    int rc = client_->unsubscribe(topic.c_str());
+    int rc = local_client_->unsubscribe(local_topic_.c_str());
     if (rc != 0)
         LOG_M_E(MQTT_CLIENT, "rc from unsubscribe was %d", rc);
 
-    rc = client_->disconnect();
+    rc = local_client_->disconnect();
     if (rc != 0)
         LOG_M_E(MQTT_CLIENT, "rc from disconnect was %d", rc);
 
-    ipstack_->disconnect();
+    local_ipstack_->disconnect();
+
+    rc = cloud_client_->unsubscribe(cloud_topic_.c_str());
+    if (rc != 0)
+        LOG_M_E(MQTT_CLIENT, "rc from unsubscribe was %d", rc);
+
+    rc = cloud_client_->disconnect();
+    if (rc != 0)
+        LOG_M_E(MQTT_CLIENT, "rc from disconnect was %d", rc);
+
+    cloud_ipstack_->disconnect();
 
     LOG_M_C(MQTT_CLIENT, "Finishing with messages received");
 
@@ -1723,10 +1992,15 @@ AX_BOOL MqttClient::DeInit(AX_VOID) {
 
 AX_BOOL MqttClient::Start(AX_VOID) {
 
-    if (!m_threadWork.Start([this](AX_VOID* pArg) -> AX_VOID { WorkThread(pArg); }, nullptr, "MQTT_CLIENT")) {
+    if (!local_work_thread_.Start([this](AX_VOID* pArg) -> AX_VOID { LocalWorkThread(pArg); }, nullptr, "MQTT_LOCAL_CLIENT")) {
         LOG_MM_E(MQTT_CLIENT, "Create ai switch thread fail.");
         return AX_FALSE;
     }
+
+    // if (!cloud_work_thread_.Start([this](AX_VOID* pArg) -> AX_VOID { CloudWorkThread(pArg); }, nullptr, "MQTT_CLOUD_CLIENT")) {
+    //     LOG_MM_E(MQTT_CLIENT, "Create ai switch thread fail.");
+    //     return AX_FALSE;
+    // }
 
     std::thread([] {
 
@@ -1755,23 +2029,26 @@ AX_BOOL MqttClient::Start(AX_VOID) {
 }
 
 AX_BOOL MqttClient::Stop(AX_VOID) {
-    if (arrjpegQ) {
-        arrjpegQ->Wakeup();
+    if (local_jpeg_queue_) {
+        local_jpeg_queue_->Wakeup();
     }
 
-    m_threadWork.Stop();
-    m_threadWork.Join();
+    local_work_thread_.Stop();
+    local_work_thread_.Join();
+
+    cloud_work_thread_.Stop();
+    cloud_work_thread_.Join();
 
     return AX_TRUE;
 }
 
-AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
-    LOG_MM_I(MQTT_CLIENT, "+++");
+AX_VOID MqttClient::LocalWorkThread(AX_VOID* pArg) {
+    LOG_M_C(MQTT_CLIENT, "LocalWorkThread +++");
 
     CBoxBuilder *p_builder = CBoxBuilder::GetInstance();
-    while (m_threadWork.IsRunning()) {
+    while (local_work_thread_.IsRunning()) {
         // process alarm message
-        SendAlarmMsg();
+        SendLocalAlarmMsg();
 
         if (!StreamQueue.empty()) {
             std::unique_lock<std::mutex> lock(mtx);
@@ -1789,10 +2066,40 @@ AX_VOID MqttClient::WorkThread(AX_VOID* pArg) {
             }
         }
 
-        client_->yield(50UL); // sleep 50ms
+        local_client_->yield(50UL); // sleep 50ms
     }
 
-    LOG_MM_I(MQTT_CLIENT, "---");
+    LOG_M_C(MQTT_CLIENT, "LocalWorkThread ---");
 }
+
+// AX_VOID MqttClient::CloudWorkThread(AX_VOID* pArg) {
+//     LOG_M_C(MQTT_CLIENT, "CloudWorkThread +++");
+
+//     CBoxBuilder *p_builder = CBoxBuilder::GetInstance();
+//     while (cloud_work_thread_.IsRunning()) {
+//         // process alarm message
+//         SendCloudAlarmMsg();
+
+//         if (!StreamQueue.empty()) {
+//             std::unique_lock<std::mutex> lock(mtx);
+//             StreamCmd stream_cmd = StreamQueue.front();
+//             StreamQueue.pop();
+//             lock.unlock();
+
+//             if (stream_cmd.cmd == ContrlCmd::StartAlgo) {
+//                 p_builder->RemoveStream(stream_cmd.id);
+//                 p_builder->AddStream(stream_cmd.id);
+//             } else if (stream_cmd.cmd == ContrlCmd::RemoveAlgo) {
+//                 p_builder->RemoveStream(stream_cmd.id);
+//             } else if (stream_cmd.cmd == ContrlCmd::StopAlgo) {
+//                 p_builder->RemoveStream(stream_cmd.id);
+//             }
+//         }
+
+//         local_client_->yield(50UL); // sleep 50ms
+//     }
+
+//     LOG_M_C(MQTT_CLIENT, "CloudWorkThread ---");
+// }
 
 };
