@@ -70,15 +70,15 @@ class CDetectResult : public CAXSingleton<CDetectResult> {
     friend class CAXSingleton<CDetectResult>;
 
 public:
-    //需要在这里进行组合
+    // 需要在这里进行组合
     AX_BOOL Set(AX_S32 nGrp, const DETECT_RESULT_T& cur_result) {
         std::lock_guard<std::mutex> lck(m_mtx);
         auto &last_result = m_mapRlts[nGrp];
 
         DETECT_RESULT_T new_result, few_result;
-        //说明是推理当前帧的多个算法
+        // 说明是推理当前帧的多个算法
         if (last_result.nSeqNum == cur_result.nSeqNum && last_result.nAlgoType != cur_result.nAlgoType) {
-            //先判断差异，找到最多的，从最多的增加。
+            // 先判断差异，找到最多的，从最多的增加。
             if (cur_result.nCount >= last_result.nCount) {
                 new_result = cur_result;
                 few_result = last_result;
@@ -101,7 +101,7 @@ public:
             new_result = cur_result;
         }
 
-        #ifdef __USE_AX_ALGO
+#ifdef __USE_AX_ALGO
         for (AX_U32 i = 0; i < new_result.nCount; ++i) {
             auto id = new_result.item[i].nTrackId;
             if (last_tracked_ids.find(id) == last_tracked_ids.end()) {
@@ -114,7 +114,7 @@ public:
             // 删除最小的元素（set.begin() 指向最小的元素）
             last_tracked_ids.erase(last_tracked_ids.begin());
         }
-        #else
+#else
         //现在的问题：检测容易漏检，导致跟踪算法容易跟丢,容易出现新的track id
         //如果某一帧跟丢的话，判断上一帧的结果，下一帧肯定找不到上一帧的track id
         //两次的数量相同，说明当前是较稳定的,把这个结果保存起来。
@@ -134,11 +134,11 @@ public:
                 channel_result[nGrp] = new_result;
             }
         }
-        #endif
+#endif
 
         m_mapRlts[nGrp] = new_result;
 
-        //统计每个类型的总数量
+        // 统计每个类型的总数量
         for (AX_U32 i = 0; i < new_result.nCount; ++i) {
             ++m_arrCount[new_result.item[i].eType];
         }

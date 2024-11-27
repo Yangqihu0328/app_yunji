@@ -15,7 +15,10 @@
 #include <exception>
 #include "AXException.hpp"
 #include "AppLogApi.h"
+#include "BoxConfig.hpp"
 #include "DetectResult.hpp"
+#include "BoxMediaParser.hpp"
+#include "BoxModelParser.hpp"
 #if defined(__RECORD_VB_TIMESTAMP__)
 #include "TimestampHelper.hpp"
 #endif
@@ -24,14 +27,9 @@ using namespace std;
 #define DETECTOR "SKEL"
 
 #ifdef __USE_AX_ALGO
-std::map<int, std::string> DetModelMap = {
-    {AX_PPL_PEOPLE, "20241113.model"},
-};
-
 AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
     LOG_M_C(DETECTOR, "detect thread is running");
 
-    AX_U64 nFrameId = 0;
     AX_U32 nCurrGrp = 0;
     AX_U32 nNextGrp = 0;
     const AX_U32 TOTAL_GRP_COUNT = m_stAttr.nChannelNum;
@@ -39,6 +37,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
     AX_U32 nSkipCount = 0;
     ax_image_t ax_image{0};
     while (m_DetectThread.IsRunning()) {
+
         for (nCurrGrp = nNextGrp; nCurrGrp < TOTAL_GRP_COUNT; ++nCurrGrp) {
             if (m_arrFrameQ[nCurrGrp].Pop(axFrame, 0)) {
                 nSkipCount = 0;
@@ -91,20 +90,19 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
         }
         memcpy(ax_image.pVir, (void *)frame_info.u64VirAddr[0], ax_image.nSize);
 
-        auto &flag_vec = d_vec[nCurrGrp];
-        for (int index = 0; index < 1; index++) {
-            if (flag_vec[index]) {
-                #if 0
-                // ax_image.pPhy = (unsigned long long int)frame_info.u64PhyAddr;
-                // ax_image.pVir = (void *)frame_info.u64VirAddr[0];
-                // ax_image.nSize = frame_info.u32FrameSize;
-                // ax_image.nWidth = frame_info.u32Width;
-                // ax_image.nHeight = frame_info.u32Height;
-                // ax_image.eDtype = ax_color_space_nv12;
-                // ax_image.tStride_W = frame_info.u32PicStride[0];
-                #endif
+        for (int index = 0; index < ALGO_MAX_NUM; index++) {
+            if (handle_[nCurrGrp][index] != NULL) {
+#if 0
+                ax_image.pPhy = (unsigned long long int)frame_info.u64PhyAddr;
+                ax_image.pVir = (void *)frame_info.u64VirAddr[0];
+                ax_image.nSize = frame_info.u32FrameSize;
+                ax_image.nWidth = frame_info.u32Width;
+                ax_image.nHeight = frame_info.u32Height;
+                ax_image.eDtype = ax_color_space_nv12;
+                ax_image.tStride_W = frame_info.u32PicStride[0];
+#endif
 
-                #ifdef __BOX_DEBUG__
+#ifdef __BOX_DEBUG__
                 ofstream ofs;
                 AX_CHAR szFile[64];
                 sprintf(szFile, "./ai_dump_%d_%lld.yuv", frame_info.u32FrameSize,
@@ -114,13 +112,12 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                     frame_info.u64VirAddr[0] =
                     (AX_U64)AX_POOL_GetBlockVirAddr(frame_info.u32BlkId[0]);
                 }
-                ofs.write((const char*)frame_info.u64VirAddr[0],
-                                    frame_info.u32FrameSize);
+                ofs.write((const char*)frame_info.u64VirAddr[0], frame_info.u32FrameSize);
                 ofs.close();
-                #endif
+#endif
 
                 ax_result_t forward_result;
-                ax_algorithm_inference(handle[nCurrGrp][index], &ax_image, &forward_result);
+                ax_algorithm_inference(handle_[nCurrGrp][index], &ax_image, &forward_result);
 
                 DETECT_RESULT_T result;
                 result.nW = frame_info.u32Width;
@@ -185,7 +182,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         m_stAttr.nSkipRate = 1;
     }
 
-    //都是预分配16个
+    // 解码后的帧队列
     m_arrFrameQ = new (nothrow) CAXLockQ<CAXFrame>[stAttr.nChannelNum];
     if (!m_arrFrameQ) {
         LOG_M_E(DETECTOR, "%s: alloc queue fail", __func__);
@@ -196,30 +193,39 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         }
     }
 
-    d_vec.resize(stAttr.nChannelNum);
-    for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
-        if (m_stAttr.tChnAttr[nChn].disable == 1) {
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    AX_U32 nModelCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
+    std::vector<MODEL_INFO_T> modelsMap = CBoxModelParser::GetInstance()->GetModelsMap(&nModelCnt, streamConfig.strModelPath);
+    for (AX_U32 nChn = 0; nChn < stAttr.nChannelNum; ++nChn) {
+        if (mediasMap[nChn].nMediaDelete == 1) {
             continue;
         }
 
-        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
-            ax_algorithm_init_t init_info;
-            AX_U32 algo_config  = m_stAttr.tChnAttr[nChn].nPPL[algo_id];
-            auto it = DetModelMap.find(algo_config);
-            if (it == DetModelMap.end()) {
-                d_vec[nChn][algo_id] = false;
-                LOG_M_E(DETECTOR, "%s: Key not found in DetModelMap", __func__);
-                break;
+        LOG_M_C(DETECTOR, "=======================================================");
+        for (size_t i = 0; i < ALGO_MAX_NUM && i < mediasMap[nChn].taskInfo.vAlgo.size(); ++i) {
+            if (mediasMap[nChn].taskInfo.nTaskDelete == 1) {
+                continue;
             }
 
-            sprintf(init_info.model_file, DetModelMap[algo_config].c_str());
-            if (ax_algorithm_init(&init_info, &handle[nChn][algo_id]) != 0) {
-                LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail", __func__);
-                d_vec[nChn][algo_id] = false;
-                break;
+            AX_U32 algo = mediasMap[nChn].taskInfo.vAlgo[i];
+
+            ax_algorithm_init_t init_info;
+            for (size_t j = 0; j < modelsMap.size(); ++j) {
+                if (algo == modelsMap[j].nModelId) {
+                    strcpy(init_info.model_file, modelsMap[j].szModelPath);
+                    break;
+                }
             }
-            d_vec[nChn][algo_id] = true;
+
+            if (ax_algorithm_init(&init_info, &handle_[nChn][i]) != 0) {
+                LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail", __func__);
+                return AX_FALSE;
+            }
         }
+        LOG_M_C(DETECTOR, "=======================================================");
     }
 
     LOG_M_D(DETECTOR, "%s: ---", __func__);
@@ -229,19 +235,38 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
 AX_BOOL CDetector::DeInit(AX_VOID) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
 
-    AX_S32 ret;
     if (m_DetectThread.IsRunning()) {
         LOG_M_E(DETECTOR, "%s: detect thread is running", __func__);
         return AX_FALSE;
     }
 
+    // 获取当前通道信息
+    AX_U32 nMediaCnt = 0;
+    STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+    std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
     for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
-        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
-            if (d_vec[nChn][algo_id] == true && handle[nChn][algo_id] != nullptr) {
-                ax_algorithm_deinit(handle[nChn][algo_id]);
+        if (mediasMap[nChn].nMediaDelete == 1) {
+            continue;
+        }
+
+        for (size_t i = 0; i < ALGO_MAX_NUM && i < mediasMap[nChn].taskInfo.vAlgo.size(); ++i) {
+            if (mediasMap[nChn].taskInfo.nTaskDelete == 1) {
+                continue;
+            }
+
+            if (handle_[nChn][i] != nullptr) {
+                ax_algorithm_deinit(handle_[nChn][i]);
             }
         }
     }
+
+    // for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
+    //     for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+    //         if (d_vec[nChn][algo_id] == true && handle_[nChn][algo_id] != nullptr) {
+    //             ax_algorithm_deinit(handle_[nChn][algo_id]);
+    //         }
+    //     }
+    // }
 
     if (m_arrFrameQ) {
         delete[] m_arrFrameQ;
@@ -267,43 +292,64 @@ AX_BOOL CDetector::Start(AX_VOID) {
 AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
     LOG_M_W(DETECTOR, "%s: +++", __func__);
     do {
-        auto &algo_type_arr = det_attr.nPPL;
-        bool has_duplicate = false;
-        std::unordered_set<int> seen;
+        AX_U32 nModelCnt = 0;
+        STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+        std::vector<MODEL_INFO_T> modelsMap = CBoxModelParser::GetInstance()->GetModelsMap(&nModelCnt, streamConfig.strModelPath);
 
-        if (det_attr.disable == 1) {
-            LOG_M_E(DETECTOR, "%s: CDetector disable", __func__);
-        }
-
-        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
-            if (seen.find(algo_type_arr[algo_id]) != seen.end()) {
-                has_duplicate = true;
-                break;
-            }
-            seen.insert(algo_type_arr[algo_id]);
-
-            if (has_duplicate) {
+        for (size_t i = 0; i < ALGO_MAX_NUM; ++i) {
+            if (det_attr.nPPL[i] == 0) {
                 continue;
             }
 
+            AX_U32 algo = det_attr.nPPL[i];
+
             ax_algorithm_init_t init_info;
-            AX_U32 algo_config  = algo_type_arr[algo_id];
-            auto it = DetModelMap.find(algo_config);
-            if (it == DetModelMap.end()) {
-                d_vec[id][algo_id] = false;
-                LOG_M_E(DETECTOR, "%s: Key not found in DetModelMap", __func__);
-                break;
+            for (size_t j = 0; j < modelsMap.size(); ++j) {
+                if (algo == modelsMap[j].nModelId) {
+                    strcpy(init_info.model_file, modelsMap[j].szModelPath);
+                    break;
+                }
             }
 
-            sprintf(init_info.model_file, DetModelMap[algo_config].c_str());
-            if (ax_algorithm_init(&init_info, &handle[id][algo_id]) != 0) {
+            if (ax_algorithm_init(&init_info, &handle_[id][i]) != 0) {
                 LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail", __func__);
-                d_vec[id][algo_id] = false;
-                break;
+                return AX_FALSE;
             }
-
-            d_vec[id][algo_id] = true;
         }
+
+        // auto &algo_type_arr = det_attr.nPPL;
+        // bool has_duplicate = false;
+        // std::unordered_set<int> seen;
+
+        // for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
+        //     if (seen.find(algo_type_arr[algo_id]) != seen.end()) {
+        //         has_duplicate = true;
+        //         break;
+        //     }
+        //     seen.insert(algo_type_arr[algo_id]);
+
+        //     if (has_duplicate) {
+        //         continue;
+        //     }
+
+        //     ax_algorithm_init_t init_info;
+        //     AX_U32 algo_config  = algo_type_arr[algo_id];
+        //     auto it = DetModelMap.find(algo_config);
+        //     if (it == DetModelMap.end()) {
+        //         d_vec[id][algo_id] = false;
+        //         LOG_M_E(DETECTOR, "%s: Key not found in DetModelMap", __func__);
+        //         break;
+        //     }
+
+        //     sprintf(init_info.model_file, DetModelMap[algo_config].c_str());
+        //     if (ax_algorithm_init(&init_info, &handle_[id][algo_id]) != 0) {
+        //         LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail", __func__);
+        //         d_vec[id][algo_id] = false;
+        //         break;
+        //     }
+
+        //     d_vec[id][algo_id] = true;
+        // }
     } while (0);
 
     LOG_M_D(DETECTOR, "%s: ---", __func__);
@@ -343,10 +389,10 @@ AX_BOOL CDetector::StopId(int id) {
         ClearQueue(id);
     }
 
-    if (handle[id]) {
-        for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
-            if (d_vec[id][algo_id] == true && handle[id][algo_id] != nullptr) {
-                ax_algorithm_deinit(handle[id][algo_id]);
+    if (handle_[id]) {
+        for (AX_U32 i = 0; i < ALGO_MAX_NUM; ++i) {
+            if (handle_[id][i] != nullptr) {
+                ax_algorithm_deinit(handle_[id][i]);
             }
         }
     }

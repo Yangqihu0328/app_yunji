@@ -25,7 +25,6 @@
 #include "ax_ao_api.h"
 
 using namespace std;
-using namespace boxconf;
 
 AX_BOOL CBoxAppSys::Init(const BOX_APP_SYS_ATTR_T& stAttr) {
     if (0 == stAttr.nMaxGrp) {

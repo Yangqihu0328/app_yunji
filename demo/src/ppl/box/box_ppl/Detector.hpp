@@ -15,7 +15,6 @@
 #include "AXResource.hpp"
 #include "AXThread.hpp"
 #include "ax_skel_api.h"
-#include "BoxMediaParser.hpp"
 #include "ax_global_type.h"
 #include "ax_algorithm_sdk.h"
 
@@ -29,12 +28,10 @@ typedef enum {
 } AX_PPL_E;
 
 typedef struct DETECTOR_CHN_ATTR_S {
-    AX_U32 disable;
     ax_color_space_e color_space;
     AX_U32 nPPL[3];
 
     DETECTOR_CHN_ATTR_S(AX_VOID) {
-        disable = 1;
         color_space = ax_color_space_unknown;
         nPPL[0] = AX_PPL_PEOPLE;
         nPPL[1] = AX_PPL_PEOPLE;
@@ -84,11 +81,11 @@ protected:
     AX_VOID ClearQueue(AX_S32 nGrp);
 
 protected:
-    std::vector<std::array<bool, 3>> d_vec;
+    CAXThread m_DetectThread;
     CAXLockQ<CAXFrame>* m_arrFrameQ{nullptr};
     DETECTOR_ATTR_T m_stAttr;
-    CAXThread m_DetectThread;
-    ax_algorithm_handle_t handle[DETECTOR_MAX_CHN_NUM][ALGO_MAX_NUM]{NULL};
+    
+    ax_algorithm_handle_t handle_[DETECTOR_MAX_CHN_NUM][ALGO_MAX_NUM]{NULL};
 };
 
 #else

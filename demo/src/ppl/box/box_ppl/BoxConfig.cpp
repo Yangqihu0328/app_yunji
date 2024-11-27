@@ -14,8 +14,8 @@
 #include "GlobalDef.h"
 #include "ax_global_type.h"
 #include "ax_venc_rc.h"
+
 using namespace std;
-using namespace boxconf;
 
 #ifdef __SLT__
 #define BOX_RES_PATH "res/boxdemo/"

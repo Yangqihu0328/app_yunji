@@ -643,9 +643,12 @@ AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
     tDetectAttr.video_format = AX_FORMAT_YUV420_SEMIPLANAR;
     tDetectAttr.nChannelNum = AX_MIN(m_nDecodeGrpCount, DETECTOR_MAX_CHN_NUM);
     for (AX_U32 i = 0; i < tDetectAttr.nChannelNum; ++i) {
-        tDetectAttr.tChnAttr[i].disable = mediasMap[i].nMediaDelete;
         for (AX_U32 j = 0; j < ALGO_MAX_NUM; j++) {
-            tDetectAttr.tChnAttr[i].nPPL[j] = mediasMap[i].taskInfo.vAlgo[j];
+            tDetectAttr.tChnAttr[i].nPPL[j] = 0;
+
+            if (i < mediasMap[i].taskInfo.vAlgo.size()) {
+                tDetectAttr.tChnAttr[i].nPPL[j] = mediasMap[i].taskInfo.vAlgo[j];
+            }
         }
     }
 
@@ -687,7 +690,10 @@ AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
     tDetectAttr.nChannelNum = AX_MIN(m_nDecodeGrpCount, DETECTOR_MAX_CHN_NUM);
     for (AX_U32 i = 0; i < tDetectAttr.nChannelNum; ++i) {
         for (AX_U32 j = 0; j < ALGO_MAX_NUM; j++) {
-            tDetectAttr.tChnAttr[i].nPPL[j] = mediasMap[i].taskInfo.vAlgo[j];
+            tDetectAttr.tChnAttr[i].nPPL[j] = 0;
+            if (i < mediasMap[i].taskInfo.vAlgo.size()) {
+                tDetectAttr.tChnAttr[i].nPPL[j] = mediasMap[i].taskInfo.vAlgo[j];
+            }
         }
         tDetectAttr.tChnAttr[i].nVNPU = 1;
         tDetectAttr.tChnAttr[i].bTrackEnable = AX_TRUE;
@@ -1260,10 +1266,13 @@ AX_BOOL CBoxBuilder::AddStream(AX_S32 id) {
 
     if (m_detect) {
         DETECTOR_CHN_ATTR_T det_attr;
-        for (size_t i = 0; i < mediasMap[id].taskInfo.vAlgo.size(); i++) {
-            det_attr.nPPL[i] = mediasMap[id].taskInfo.vAlgo[i];
+        for (size_t i = 0; i < ALGO_MAX_NUM; i++) {
+            det_attr.nPPL[i] = 0;
+
+            if (i < mediasMap[id].taskInfo.vAlgo.size()) {
+                det_attr.nPPL[i] = mediasMap[id].taskInfo.vAlgo[i];
+            }
         }
-        det_attr.disable = mediasMap[id].nMediaDelete;;
         if (!m_detect->StartId(id, det_attr)) {
             return AX_FALSE;
         }
