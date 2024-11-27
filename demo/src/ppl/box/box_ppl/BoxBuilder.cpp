@@ -646,7 +646,7 @@ AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
         for (AX_U32 j = 0; j < ALGO_MAX_NUM; j++) {
             tDetectAttr.tChnAttr[i].nPPL[j] = 0;
 
-            if (i < mediasMap[i].taskInfo.vAlgo.size()) {
+            if (j < mediasMap[i].taskInfo.vAlgo.size()) {
                 tDetectAttr.tChnAttr[i].nPPL[j] = mediasMap[i].taskInfo.vAlgo[j];
             }
         }
@@ -691,7 +691,7 @@ AX_BOOL CBoxBuilder::InitDetector(const DETECT_CONFIG_T &detectConfig) {
     for (AX_U32 i = 0; i < tDetectAttr.nChannelNum; ++i) {
         for (AX_U32 j = 0; j < ALGO_MAX_NUM; j++) {
             tDetectAttr.tChnAttr[i].nPPL[j] = 0;
-            if (i < mediasMap[i].taskInfo.vAlgo.size()) {
+            if (j < mediasMap[i].taskInfo.vAlgo.size()) {
                 tDetectAttr.tChnAttr[i].nPPL[j] = mediasMap[i].taskInfo.vAlgo[j];
             }
         }
