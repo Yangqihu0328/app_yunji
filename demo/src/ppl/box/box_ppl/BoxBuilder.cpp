@@ -404,28 +404,30 @@ AX_BOOL CBoxBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
     for (AX_U8 i = 0; i < encoding_num; i++) {    
         VIDEO_CONFIG_T tConfig;
         do {
+            const STREAMER_INFO_T &stInfo = m_arrStreamer[i]->GetStreamInfo();
+
             tConfig.nChannel = i+1;
             tConfig.ePayloadType = PT_H264;
-            tConfig.nGOP = 30;
-            tConfig.fFramerate = (AX_F32)30;
-            #ifdef __DISABLE_VO
+            tConfig.nGOP = stInfo.nFps;
+            tConfig.fFramerate = (AX_F32)stInfo.nFps;
+#ifdef __DISABLE_VO
             //编码的宽高应该跟随检测结果
             tConfig.nWidth = streamConfig.nChnW[DISPVO_CHN];
             tConfig.nHeight = streamConfig.nChnH[DISPVO_CHN];
-            #else
+#else
             tConfig.nWidth = m_disp->GetVideoLayout()[0].u32Width;
             tConfig.nHeight = m_disp->GetVideoLayout()[0].u32Height;
-            #endif
+#endif
             tConfig.nBufSize = ENC_MAX_BUF_SIZE;
             tConfig.nBitrate =  8192;
             tConfig.bFBC = AX_FALSE;
             tConfig.nInFifoDepth = 1;
             tConfig.nOutFifoDepth = 1;
             tConfig.bLink = AX_FALSE;
-            tConfig.eRcType = AX_VENC_RC_MODE_H264CBR;
+            tConfig.eRcType = AX_VENC_RC_MODE_H264VBR;
             tConfig.eMemSource = AX_MEMORY_SOURCE_CMM;
             tConfig.stEncodeCfg[0].ePayloadType = tConfig.ePayloadType;
-            tConfig.stEncodeCfg[0].stRCInfo[0].eRcType = AX_VENC_RC_MODE_H264CBR;
+            tConfig.stEncodeCfg[0].stRCInfo[0].eRcType = AX_VENC_RC_MODE_H264VBR;
             tConfig.stEncodeCfg[0].stRCInfo[0].nMinQp = 0;
             tConfig.stEncodeCfg[0].stRCInfo[0].nMaxQp = 51;
             tConfig.stEncodeCfg[0].stRCInfo[0].nMinIQp = 0;
@@ -462,7 +464,7 @@ AX_BOOL CBoxBuilder::InitEncoder(STREAM_CONFIG_T& streamConfig) {
 }
 
 AX_BOOL CBoxBuilder::InitDispRecorder(const string &strRecordPath, AX_S32 nMaxRecordSize, AX_BOOL bMP4) {
-    LOG_M_C(BOX, "InitEncoder +++++.");
+    LOG_M_C(BOX, "InitDispRecorder +++++.");
 
     m_dispRecorder = make_unique<CBoxRecorder>();
     if (!m_dispRecorder) {
@@ -502,7 +504,7 @@ AX_BOOL CBoxBuilder::InitDispRecorder(const string &strRecordPath, AX_S32 nMaxRe
     m_linker.Link({AX_ID_VO, (AX_S32)m_disp->GetVideoLayer(), 0}, {AX_ID_VENC, (AX_S32)conf.veChn, 0});
     LOG_M_N(BOX, "enable recording, save path %s", strRecordPath.c_str());
 
-    LOG_M_C(BOX, "InitEncoder -----.");
+    LOG_M_C(BOX, "InitDispRecorder -----.");
 
     return AX_TRUE;
 }

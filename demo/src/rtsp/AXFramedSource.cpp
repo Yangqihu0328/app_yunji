@@ -30,9 +30,8 @@ AXFramedSource::AXFramedSource(UsageEnvironment& env, AX_U32 nMaxFrmSize) : Fram
     ++referenceCount;
 
     m_nTriggerID = envir().taskScheduler().createEventTrigger(deliverFrame);
-    m_pRingBuf = new CAXRingBuffer(nMaxFrmSize, 2, "RTSP");
+    m_pRingBuf = new CAXRingBuffer(nMaxFrmSize, 10, "RTSP");
     m_nMaxFrmSize = nMaxFrmSize;
-    // m_pFile = fopen("/opt/data/frm_src_recv_venc_out.h264", "wb");
 }
 
 AXFramedSource::~AXFramedSource() {
@@ -43,11 +42,17 @@ AXFramedSource::~AXFramedSource() {
     delete (m_pRingBuf);
     m_pRingBuf = nullptr;
 
-    // fflush(m_pFile);
-    // fclose(m_pFile);
+    if (m_pFile) {
+        fflush(m_pFile);
+        fclose(m_pFile);
+    }
 }
 
 void AXFramedSource::AddFrameBuff(AX_U8 nChn, const AX_U8* pBuf, AX_U32 nLen, AX_U64 nPts /*=0*/, AX_BOOL bIFrame /*=AX_FALSE*/) {
+    // if (m_pFile == nullptr && nChn == 1) {
+    //     m_pFile = fopen("/opt/data/frm_src_recv_venc_out.h264", "wb");
+    // }
+    
     CAXRingElement ele((AX_U8*)pBuf, nLen, nPts, bIFrame);
     m_pRingBuf->Put(ele);
 
@@ -98,7 +103,7 @@ void AXFramedSource::_deliverFrame() {
 
     m_pRingBuf->Pop();
 
-    LOG_M_D(LIVE, "Send data to rtsp client, size=%d.", fFrameSize);
+    LOG_M_D(LIVE, "Send data to rtsp client, size=%d, time=%lld.", fFrameSize, fPresentationTimeSpecified.tv_usec);
 
     // After delivering the data, inform the reader that it is now available:
     FramedSource::afterGetting(this);
