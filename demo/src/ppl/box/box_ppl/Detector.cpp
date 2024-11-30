@@ -379,7 +379,7 @@ AX_BOOL CDetector::SendFrame(const CAXFrame &axFrame) {
 #endif
 
     if (!m_arrFrameQ[axFrame.nGrp].Push(axFrame)) {
-        LOG_M_E(DETECTOR, "%s: push frame %lld to q fail", __func__, axFrame.stFrame.stVFrame.stVFrame.u64SeqNum);
+        // LOG_M_E(DETECTOR, "%s: push frame %lld to q fail", __func__, axFrame.stFrame.stVFrame.stVFrame.u64SeqNum);
         axFrame.DecRef();
     }
 
