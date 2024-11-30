@@ -74,30 +74,36 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
 
         auto &frame_info = axFrame.stFrame.stVFrame.stVFrame;
         if (ax_image.pVir == nullptr) {
-            int ret = ax_create_image(frame_info.u32Width, frame_info.u32Height, frame_info.u32PicStride[0],
-                ax_color_space_nv12, &ax_image);
+            ax_image.nSize = frame_info.u32FrameSize;
+            ax_image.nWidth = frame_info.u32Width;
+            ax_image.nHeight = frame_info.u32Height;
+            ax_image.eDtype = ax_color_space_nv12;
+            ax_image.tStride_W = frame_info.u32PicStride[0];
+            AX_U32 nImgSize = ALIGN_UP(ax_image.nSize, 65536);
+            AX_SYS_MemAlloc(&ax_image.pPhy, &ax_image.pVir, nImgSize, 0x100, (const AX_S8 *)"ax_algo");
+
+            int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
             if (ret != 0) {
                 LOG_M_E(DETECTOR, "alloc image fail\n");
-                continue;;
+                continue;
             }
         } else if (frame_info.u32FrameSize != ax_image.nSize) {
             ax_release_image(&ax_image);
-            int ret = ax_create_image(frame_info.u32Width, frame_info.u32Height, frame_info.u32PicStride[0],
-                ax_color_space_nv12, &ax_image);
+
+            ax_image.nSize = frame_info.u32FrameSize;
+            ax_image.nWidth = frame_info.u32Width;
+            ax_image.nHeight = frame_info.u32Height;
+            ax_image.eDtype = ax_color_space_nv12;
+            ax_image.tStride_W = frame_info.u32PicStride[0];
+            AX_U32 nImgSize = ALIGN_UP(ax_image.nSize, 65536);
+            AX_SYS_MemAlloc(&ax_image.pPhy, &ax_image.pVir, nImgSize, 0x100, (const AX_S8 *)"ax_algo");
+
+            int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
             if (ret != 0) {
                 LOG_M_E(DETECTOR, "alloc image fail\n");
                 continue;
             }
         }
-
-        if (0 == frame_info.u64VirAddr[0]) {
-            frame_info.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(frame_info.u32BlkId[0]);
-        }
-        memcpy(ax_image.pVir, (void *)frame_info.u64VirAddr[0], ax_image.nSize);
-
-        // AX_U64 addr = (AX_U64)AX_POOL_GetBlockVirAddr(ax_image.pPhy);
-        // AX_U32 nImgSize = ALIGN_UP(ax_image.nSize, 65536);
-        // int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
 
         for (int index = 0; index < ALGO_MAX_NUM; index++) {
             if (handle_[nCurrGrp][index] != NULL) {
@@ -190,7 +196,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         return AX_FALSE;
     } else {
         for (AX_U32 i = 0; i < stAttr.nChannelNum; ++i) {
-            m_arrFrameQ[i].SetCapacity(1);
+            m_arrFrameQ[i].SetCapacity(2);
         }
     }
 
