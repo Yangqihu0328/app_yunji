@@ -19,12 +19,16 @@
 #include "DetectResult.hpp"
 #include "BoxMediaParser.hpp"
 #include "BoxModelParser.hpp"
+#include "ElapsedTimer.hpp"
+#include "ax_ivps_api.h"
 #if defined(__RECORD_VB_TIMESTAMP__)
 #include "TimestampHelper.hpp"
 #endif
 
 using namespace std;
 #define DETECTOR "SKEL"
+
+#define ALIGN_UP(x, align) (((x) + ((align)-1)) & ~((align)-1))
 
 #ifdef __USE_AX_ALGO
 AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
@@ -36,6 +40,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
     CAXFrame axFrame;
     AX_U32 nSkipCount = 0;
     ax_image_t ax_image{0};
+
     while (m_DetectThread.IsRunning()) {
 
         for (nCurrGrp = nNextGrp; nCurrGrp < TOTAL_GRP_COUNT; ++nCurrGrp) {
@@ -90,17 +95,12 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
         }
         memcpy(ax_image.pVir, (void *)frame_info.u64VirAddr[0], ax_image.nSize);
 
+        // AX_U64 addr = (AX_U64)AX_POOL_GetBlockVirAddr(ax_image.pPhy);
+        // AX_U32 nImgSize = ALIGN_UP(ax_image.nSize, 65536);
+        // int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
+
         for (int index = 0; index < ALGO_MAX_NUM; index++) {
             if (handle_[nCurrGrp][index] != NULL) {
-#if 0
-                ax_image.pPhy = (unsigned long long int)frame_info.u64PhyAddr;
-                ax_image.pVir = (void *)frame_info.u64VirAddr[0];
-                ax_image.nSize = frame_info.u32FrameSize;
-                ax_image.nWidth = frame_info.u32Width;
-                ax_image.nHeight = frame_info.u32Height;
-                ax_image.eDtype = ax_color_space_nv12;
-                ax_image.tStride_W = frame_info.u32PicStride[0];
-#endif
 
 #ifdef __BOX_DEBUG__
                 ofstream ofs;
@@ -160,6 +160,7 @@ AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
                 }
             }
         }
+
         ax_release_image(&ax_image);
         /* release frame after done */
         axFrame.DecRef();
@@ -189,7 +190,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         return AX_FALSE;
     } else {
         for (AX_U32 i = 0; i < stAttr.nChannelNum; ++i) {
-            m_arrFrameQ[i].SetCapacity(-1);
+            m_arrFrameQ[i].SetCapacity(1);
         }
     }
 
@@ -204,7 +205,6 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
             continue;
         }
 
-        LOG_M_C(DETECTOR, "=======================================================");
         for (size_t i = 0; i < ALGO_MAX_NUM && i < mediasMap[nChn].taskInfo.vAlgo.size(); ++i) {
             if (mediasMap[nChn].taskInfo.nTaskDelete == 1) {
                 continue;
@@ -225,7 +225,6 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
                 return AX_FALSE;
             }
         }
-        LOG_M_C(DETECTOR, "=======================================================");
     }
 
     LOG_M_D(DETECTOR, "%s: ---", __func__);
@@ -259,14 +258,6 @@ AX_BOOL CDetector::DeInit(AX_VOID) {
             }
         }
     }
-
-    // for (AX_U32 nChn = 0; nChn < m_stAttr.nChannelNum; ++nChn) {
-    //     for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
-    //         if (d_vec[nChn][algo_id] == true && handle_[nChn][algo_id] != nullptr) {
-    //             ax_algorithm_deinit(handle_[nChn][algo_id]);
-    //         }
-    //     }
-    // }
 
     if (m_arrFrameQ) {
         delete[] m_arrFrameQ;
@@ -316,40 +307,6 @@ AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
                 return AX_FALSE;
             }
         }
-
-        // auto &algo_type_arr = det_attr.nPPL;
-        // bool has_duplicate = false;
-        // std::unordered_set<int> seen;
-
-        // for (AX_U32 algo_id = 0; algo_id < ALGO_MAX_NUM; ++algo_id) {
-        //     if (seen.find(algo_type_arr[algo_id]) != seen.end()) {
-        //         has_duplicate = true;
-        //         break;
-        //     }
-        //     seen.insert(algo_type_arr[algo_id]);
-
-        //     if (has_duplicate) {
-        //         continue;
-        //     }
-
-        //     ax_algorithm_init_t init_info;
-        //     AX_U32 algo_config  = algo_type_arr[algo_id];
-        //     auto it = DetModelMap.find(algo_config);
-        //     if (it == DetModelMap.end()) {
-        //         d_vec[id][algo_id] = false;
-        //         LOG_M_E(DETECTOR, "%s: Key not found in DetModelMap", __func__);
-        //         break;
-        //     }
-
-        //     sprintf(init_info.model_file, DetModelMap[algo_config].c_str());
-        //     if (ax_algorithm_init(&init_info, &handle_[id][algo_id]) != 0) {
-        //         LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail", __func__);
-        //         d_vec[id][algo_id] = false;
-        //         break;
-        //     }
-
-        //     d_vec[id][algo_id] = true;
-        // }
     } while (0);
 
     LOG_M_D(DETECTOR, "%s: ---", __func__);
@@ -515,7 +472,7 @@ static AX_VOID SkelResultCallback(AX_SKEL_HANDLE pHandle, AX_SKEL_RESULT_T *pstR
         } else {
             LOG_M_W(DETECTOR, "unknown detect result %s of vdGrp %d frame %lld (skel %lld)",
                     pstResult->pstObjectItems[i].pstrObjectCategory, fhvp.nGrpId, fhvp.nSeqNum, pstResult->nFrameId);
-            fhvp.item[index].eType = DETECT_TYPE_UNKNOWN;
+            fhvp.item[index].eType = DETECT_TYPE_BUTT;
         }
         
         fhvp.item[index].nTrackId = pstResult->pstObjectItems[i].nTrackId;

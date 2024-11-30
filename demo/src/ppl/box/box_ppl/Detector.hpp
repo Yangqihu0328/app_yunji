@@ -17,6 +17,7 @@
 #include "ax_skel_api.h"
 #include "ax_global_type.h"
 #include "ax_algorithm_sdk.h"
+#include "BoxMediaParser.hpp"
 
 #define DETECTOR_MAX_CHN_NUM 16
 #define ALGO_MAX_NUM 3
