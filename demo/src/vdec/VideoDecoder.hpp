@@ -128,6 +128,8 @@ protected:
 
     std::vector<std::unique_ptr<CStreamCacheBuf>> m_arrCacheBuf;
     std::mutex m_mtxStop;
+
+    FILE* m_pFile {nullptr};
 };
 
 class CStreamCacheBuf {

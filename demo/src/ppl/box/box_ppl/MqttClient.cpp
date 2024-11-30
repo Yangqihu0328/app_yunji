@@ -1819,26 +1819,26 @@ AX_BOOL MqttClient::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nC
             return AX_FALSE;
         }
 
-        if (isLogin) {
-            QUEUE_T jpg_info;
-            jpg_info.jpg_buf = new AX_U8[MAX_BUF_LENGTH];
-            jpg_info.buf_length = pVencPack->u32Len;
-            memcpy(jpg_info.jpg_buf, pVencPack->pu8Addr, jpg_info.buf_length);
-            jpg_info.u64UserData = pVencPack->u64UserData;
+        // if (isLogin) {
+        //     QUEUE_T jpg_info;
+        //     jpg_info.jpg_buf = new AX_U8[MAX_BUF_LENGTH];
+        //     jpg_info.buf_length = pVencPack->u32Len;
+        //     memcpy(jpg_info.jpg_buf, pVencPack->pu8Addr, jpg_info.buf_length);
+        //     jpg_info.u64UserData = pVencPack->u64UserData;
 
-            auto &tJpegInfo = jpg_info.tJpegInfo;
-            tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc = nGrp;
-            tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel = nChn;
-            tJpegInfo.tCaptureInfo.tHeaderInfo.nWidth = 1920;
-            tJpegInfo.tCaptureInfo.tHeaderInfo.nHeight = 1080;
-            CElapsedTimer::GetLocalTime(tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp, 16, '-', AX_FALSE);
+        //     auto &tJpegInfo = jpg_info.tJpegInfo;
+        //     tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc = nGrp;
+        //     tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel = nChn;
+        //     tJpegInfo.tCaptureInfo.tHeaderInfo.nWidth = 1920;
+        //     tJpegInfo.tCaptureInfo.tHeaderInfo.nHeight = 1080;
+        //     CElapsedTimer::GetLocalTime(tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp, 16, '-', AX_FALSE);
 
-            if (!local_jpeg_queue_->Push(jpg_info)) {
-                // 释放内存
-                delete[] jpg_info.jpg_buf;
-                jpg_info.jpg_buf = nullptr;
-            }
-        }
+        //     if (!local_jpeg_queue_->Push(jpg_info)) {
+        //         // 释放内存
+        //         delete[] jpg_info.jpg_buf;
+        //         jpg_info.jpg_buf = nullptr;
+        //     }
+        // }
     }
 
     return AX_TRUE;

@@ -524,6 +524,11 @@ AX_BOOL CVideoDecoder::Stop(AX_VOID) {
     {
         std::lock_guard<std::mutex> lckStop(m_mtxStop);
 
+        if (m_pFile) {
+            fflush(m_pFile);
+            fclose(m_pFile);
+        }
+
         const AX_U32 VDEC_GRP_NUM = m_arrGrpInfo.size();
         for (AX_VDEC_GRP vdGrp = 0; vdGrp < (AX_VDEC_GRP)VDEC_GRP_NUM; ++vdGrp) {
             if (!m_arrGrpInfo[vdGrp].bActive || !m_arrGrpInfo[vdGrp].stAttr.bEnable) {
@@ -751,14 +756,25 @@ AX_BOOL CVideoDecoder::CreateDecoder(AX_VDEC_GRP vdGrp, const VDEC_GRP_INFO_T& s
 
 AX_BOOL CVideoDecoder::OnRecvVideoData(AX_S32 nCookie, const AX_U8* pData, AX_U32 nLen, AX_U64 nPTS) {
     AX_VDEC_GRP vdGrp = nCookie;
+
 #ifdef __DUMP_VDEC_NALU__
-    AX_CHAR szFile[64];
-    sprintf(szFile, "./vdGrp%d_%08d_len%d.nalu", vdGrp, ++m_arrGrpInfo[vdGrp].nNaluCount, nLen);
-    ofstream ofs(szFile, ofstream::out | ofstream::binary | ofstream::trunc);
-    if (ofs.is_open()) {
-        ofs.write((const char*)pData, nLen);
-        ofs.close();
+    if (m_pFile == nullptr && vdGrp == 0) {
+        m_pFile = fopen("/opt/data/frm_src_recv_rtsp_out.h264", "wb");
     }
+
+    if (m_pFile && vdGrp == 0) {
+        fwrite((const char*)pData, 1, nLen, m_pFile);
+    }
+
+    // AX_CHAR szFile[64];
+    // if (vdGrp == 0) {
+    //     sprintf(szFile, "./vdGrp%d_%08d_len%d.nalu", vdGrp, ++m_arrGrpInfo[vdGrp].nNaluCount, nLen);
+    //     ofstream ofs(szFile, ofstream::out | ofstream::binary | ofstream::trunc);
+    //     if (ofs.is_open()) {
+    //         ofs.write((const char*)pData, nLen);
+    //         ofs.close();
+    //     }
+    // }
 #endif
 
     if (m_arrCacheBuf[vdGrp]) {
@@ -778,7 +794,7 @@ AX_BOOL CVideoDecoder::OnRecvVideoData(AX_S32 nCookie, const AX_U8* pData, AX_U3
             return m_arrCacheBuf[vdGrp]->Insert(pData, nLen);
         }
     } else {
-        return Send(vdGrp, pData, nLen, nPTS);
+       return Send(vdGrp, pData, nLen, nPTS);
     }
 }
 

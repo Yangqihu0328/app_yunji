@@ -33,24 +33,21 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
             if (0 == fbc.nMode) { /* if no compress, draw box because AX_IVPS_DrawRect not support FBC */
                 // 这个地方检测出来肯定会有结果
                 if (CDetectResult::GetInstance()->Get(axFrame.nGrp, fhvp)) {
-                    // LOG_M_C(DISPATCHER, ">>>>>>>>>>>>>>>>>>>>>>>>>>>> %lld, %lld", fhvp.nSeqNum, axFrame.stFrame.stVFrame.stVFrame.u64SeqNum);
+        
+                    /* CPU draw rectange, needs virtual address */
+                    if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
+                        axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] =
+                            (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+                    }
 
-                    // 这个地方+1的原因：存在跳帧处理，ai推理速度慢，当前帧只能获取上一帧ai结果，因此框只能画在下一帧的结果
-                    // if (fhvp.nSeqNum+1 == axFrame.stFrame.stVFrame.stVFrame.u64SeqNum) {
-                        /* CPU draw rectange, needs virtual address */
-                        if (0 == axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0]) {
-                            axFrame.stFrame.stVFrame.stVFrame.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+                    DrawBox(axFrame, fhvp);
+
+                    if (fhvp.result_diff == true) {
+                        axFrame.nAlgoType = fhvp.nAlgoType;
+                        for (auto& m : s_lstObs) {
+                            m->ProcessFrame(&axFrame);
                         }
-
-                        DrawBox(axFrame, fhvp);
-
-                        if (fhvp.result_diff == true) {
-                            axFrame.nAlgoType = fhvp.nAlgoType;
-                            for (auto &m : s_lstObs) {
-                                m->ProcessFrame(&axFrame);
-                            }
-                        }
-                    // }
+                    }
                 }
             }
 
