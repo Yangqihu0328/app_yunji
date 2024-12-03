@@ -26,24 +26,40 @@
 //临时写一个算法列表，火焰，动物，手势，抽烟
 typedef enum {
     DETECT_TYPE_PEOPLE = 0,
-    DETECT_TYPE_FACE = 1,
-    DETECT_TYPE_BODY = 2,
-    DETECT_TYPE_VEHICLE = 3,
-    DETECT_TYPE_PLATE = 4,
-    DETECT_TYPE_CYCLE = 5,
-    DETECT_TYPE_FIRE = 6,
-    DETECT_TYPE_CAT = 7,
-    DETECT_TYPE_DOG = 8,
-    DETECT_TYPE_HAND_OK = 9,
-    DETECT_TYPE_HAND_NO = 10,
-    DETECT_TYPE_HAND_SMOKING = 11,
-    DETECT_TYPE_BUTT
+    DETECT_TYPE_VEHICLE = 1,
+    DETECT_TYPE_FACE = 2,
+    DETECT_TYPE_FIRE = 3,
+    DETECT_TYPE_TOTAL
 } DETECT_TYPE_E;
 
 typedef struct {
     DETECT_TYPE_E eType;
     AX_U64 nTrackId;
     AX_SKEL_RECT_T tBox;
+
+    /*
+    0到1之间的值，表示人脸质量，越高越好
+    */
+    AX_F32 quality;
+
+    /*
+    人体状态： 0：正面， 1：侧面，2：背面， 3：非人
+    */
+    AX_S32 status;
+
+    /*
+    车辆类型: 0：UNKNOWN 1：SEDAN 2：SUV 3：BUS 4：MICROBUS 5：TRUCK
+    */
+    AX_S32 cartype;
+    /*
+    如果 b_is_track_plate = 1，则表示当前帧没有识别到车牌，返回的是历史上 track_id 上一次识别到的车牌结果
+    如果 b_is_track_plate = 0，且 len_plate_id > 0, 则表示当前帧识别到了车牌
+    如果 b_is_track_plate = 0，且 len_plate_id = 0, 则表示当前帧没有识别到车牌，且是历史上 track_id 也没有结果
+    */
+    AX_S32 b_is_track_plate;
+    AX_S32 len_plate_id;
+    AX_S32 plate_id[16];
+
 } DETECT_RESULT_ITEM_T;
 
 typedef struct DETECT_RESULT_S {
@@ -75,7 +91,8 @@ public:
         std::lock_guard<std::mutex> lck(m_mtx);
         auto &last_result = m_mapRlts[nGrp];
 
-        DETECT_RESULT_T new_result, few_result;
+        DETECT_RESULT_T new_result;
+        DETECT_RESULT_T few_result;
         // 说明是推理当前帧的多个算法
         if (last_result.nSeqNum == cur_result.nSeqNum && last_result.nAlgoType != cur_result.nAlgoType) {
             // 先判断差异，找到最多的，从最多的增加。
@@ -140,7 +157,7 @@ public:
 
         // 统计每个类型的总数量
         for (AX_U32 i = 0; i < new_result.nCount; ++i) {
-            ++m_arrCount[new_result.item[i].eType];
+            ++m_arrCount[new_result.nAlgoType];
         }
 
         return AX_TRUE;
@@ -178,5 +195,5 @@ private:
     std::map<AX_S32, DETECT_RESULT_T> m_mapRlts;
     std::set<int> last_tracked_ids;
 
-    AX_U64 m_arrCount[DETECT_TYPE_BUTT] = {0};
+    AX_U64 m_arrCount[DETECT_TYPE_TOTAL] = {0};
 };

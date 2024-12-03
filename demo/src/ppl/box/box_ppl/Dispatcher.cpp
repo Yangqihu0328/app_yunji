@@ -274,7 +274,7 @@ AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhv
 
 #ifdef DRAW_FHVP_LABEL
     CYuvHandler yuv((const AX_U8*)canvas.pVirAddr, canvas.nW, canvas.nH, canvas.eFormat, canvas.nStride, AX_FALSE);
-    AX_U32 arrCount[DETECT_TYPE_BUTT] = {0};
+    AX_U32 arrCount[DETECT_TYPE_TOTAL] = {0};
 #endif
 
     for (AX_U32 i = 0; i < fhvp.nCount; ++i) {
@@ -299,9 +299,8 @@ AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhv
 
         switch (fhvp.item[i].eType) {
             case DETECT_TYPE_FACE:
-            case DETECT_TYPE_BODY:
+            case DETECT_TYPE_PEOPLE:
             case DETECT_TYPE_VEHICLE:
-            case DETECT_TYPE_CYCLE:
                 if (fhvp.item[i].nTrackId == 0) {
                     gdi.nColor = 0xFF8080; /* YYUUVV white */
                 } else {
@@ -313,23 +312,11 @@ AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhv
                 ++arrCount[fhvp.item[i].eType];
 #endif
                 break;
-            case DETECT_TYPE_PLATE:
-                gdi.nColor = 0x00FFFF; /* YYUUVV purple */
-#ifdef DRAW_FHVP_LABEL
-                ++arrCount[fhvp.item[i].eType];
-#endif
-                break;
             case DETECT_TYPE_FIRE:
                 //确定火的框颜色
                 gdi.nColor = 0XAABBCC;
 #ifdef DRAW_FHVP_LABEL
                 //确定类型的数量，后面预览
-                ++arrCount[fhvp.item[i].eType];
-#endif
-                break;
-            case DETECT_TYPE_CAT:
-                gdi.nColor = 0X112233; /* YYUUVV purple */
-#ifdef DRAW_FHVP_LABEL
                 ++arrCount[fhvp.item[i].eType];
 #endif
                 break;
@@ -358,8 +345,8 @@ AX_VOID CDispatcher::DrawBox(const CAXFrame& axFrame, const DETECT_RESULT_T& fhv
 #ifdef DRAW_FHVP_LABEL
     //这里只是统计最终数量
     AX_CHAR szLabel[64]{0};
-    snprintf(szLabel, sizeof(szLabel), "H:%02d V:%02d C:%02d P:%02d F:%02d CAT:%2d", arrCount[DETECT_TYPE_BODY], arrCount[DETECT_TYPE_VEHICLE],
-             arrCount[DETECT_TYPE_CYCLE], arrCount[DETECT_TYPE_PLATE], arrCount[DETECT_TYPE_FIRE], arrCount[DETECT_TYPE_CAT]);
+    snprintf(szLabel, sizeof(szLabel), "PEOPLE:%02d VEHICLE:%02d FACE:%02d FIRE:%02d", arrCount[DETECT_TYPE_PEOPLE], arrCount[DETECT_TYPE_VEHICLE],
+             arrCount[DETECT_TYPE_FACE], arrCount[DETECT_TYPE_FIRE]);
     m_font.FillString(szLabel, 8, canvas.nH - 12, &yuv, canvas.nW, canvas.nH);
 #endif
 }

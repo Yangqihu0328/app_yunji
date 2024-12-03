@@ -979,6 +979,10 @@ static AX_BOOL StartPreview(AX_U32 id) {
             int code = jsonRes["code"];
             if (code == 0) {
                 key = jsonRes["data"]["key"];
+            } else {
+                AX_CHAR szKey[32] = {0};
+                sprintf(szKey, "127.0.0.1/live/rtpstream%d", id);
+                key = szKey;
             }
         }
 
@@ -1416,33 +1420,31 @@ AX_VOID MqttClient::SendLocalAlarmMsg() {
             // 播放声音
             AX_CHAR AudioFile[128] = { 0 };
             sprintf(AudioFile, "%saudio/%d.wav", GetExecPath().c_str(),  nAlgoType);
-            if (access(AudioFile, F_OK) == 0) {
+            if (!access(AudioFile, F_OK)) {
                 CBoxBuilder *a_builder = CBoxBuilder::GetInstance();
                 a_builder->playAudio(AudioFile);
-            } else {
-                LOG_M_E(MQTT_CLIENT, "AudioFile %s not exist", AudioFile);
             }
 
-            // 短信告警推送
-            json message = {
-                { "alarmDescribe", modelWarning },
-                { "alarmTime", currentTimeStr },
-                { "channelName", mediasMap[nChn].szMediaName },
-                { "deviceSymbol", "06C38B59-EB2D-4B7D-B67E-56E01228574F" },
-                { "flowStatus", "1" },
-                { "imageData", "#" },
-                { "reportInfo", modelWarning },
-                { "reportStatus", "1" },
-                { "taskDescribe", mediasMap[nChn].taskInfo.szTaskName },
-                { "tenantId", "1" },
-            };
-            auto params = message.dump();
-            auto res = BoxHttpRequest::Send("post", 
-                                "http://192.168.0.196:8010/devices/admin/deviceAlarm/save", 
-                                "Content-Type: application/json;",
-                                params,
-                                5000);
-            LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
+            // // 短信告警推送
+            // json message = {
+            //     { "alarmDescribe", modelWarning },
+            //     { "alarmTime", currentTimeStr },
+            //     { "channelName", mediasMap[nChn].szMediaName },
+            //     { "deviceSymbol", "06C38B59-EB2D-4B7D-B67E-56E01228574F" },
+            //     { "flowStatus", "1" },
+            //     { "imageData", "#" },
+            //     { "reportInfo", modelWarning },
+            //     { "reportStatus", "1" },
+            //     { "taskDescribe", mediasMap[nChn].taskInfo.szTaskName },
+            //     { "tenantId", "1" },
+            // };
+            // auto params = message.dump();
+            // auto res = BoxHttpRequest::Send("post", 
+            //                     "http://192.168.0.196:8010/devices/admin/deviceAlarm/save", 
+            //                     "Content-Type: application/json;",
+            //                     params,
+            //                     5000);
+            // LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
         }
     }
 }
@@ -1940,26 +1942,26 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
     std::string version;
     GetVersion(version);
 
-    // 云端设备注册
-    json message = {
-        { "authorizationStatus", "已授权"},
-        { "deviceIp", szIP },
-        { "deviceSymbol", "06C38B59EB2D4B7DB67E56E01228574F" },
-        { "memory", memInfo.totalMem },
-        { "softwareVersion", AI_BOX_VERSION },
-        { "status", "正常" },
-        { "storage", falsh_info.total },
-        { "systemVersion", version },
-        { "tenantId", "1" },
-    };
+    // // 云端设备注册
+    // json message = {
+    //     { "authorizationStatus", "已授权"},
+    //     { "deviceIp", szIP },
+    //     { "deviceSymbol", "06C38B59EB2D4B7DB67E56E01228574F" },
+    //     { "memory", memInfo.totalMem },
+    //     { "softwareVersion", AI_BOX_VERSION },
+    //     { "status", "正常" },
+    //     { "storage", falsh_info.total },
+    //     { "systemVersion", version },
+    //     { "tenantId", "1" },
+    // };
 
-    auto params = message.dump();
-    std::string res = BoxHttpRequest::Send("post", 
-                          "http://192.168.0.196:8010/devices/admin/deviceInfo/save", 
-                          "Content-Type: application/json;",
-                          params,
-                          5000);
-    LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
+    // auto params = message.dump();
+    // std::string res = BoxHttpRequest::Send("post", 
+    //                       "http://192.168.0.196:8010/devices/admin/deviceInfo/save", 
+    //                       "Content-Type: application/json;",
+    //                       params,
+    //                       5000);
+    // LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
 
     return AX_TRUE;
 }

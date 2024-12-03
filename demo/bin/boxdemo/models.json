@@ -1,12 +1,28 @@
 {
-    "count": 1,
+    "count": 3,
     "models":[
         {
-            "id": 4,
-            "path": "/opt/bin/BoxDemo/20241113.model",
+            "id": 0,
+            "path": "/opt/bin/BoxDemo/models/person20241113.model",
             "name": "人物检测",
             "desc": "人物检测",
             "warning": "识别到人物",
+            "version": "1.0.1"
+        },
+        {
+            "id": 1,
+            "path": "/opt/bin/BoxDemo/models/lpr20241114.model",
+            "name": "车辆结构化",
+            "desc": "车辆结构化",
+            "warning": "识别到车辆",
+            "version": "1.0.1"
+        },
+        {
+            "id": 2,
+            "path": "/opt/bin/BoxDemo/models/fr20241126.model",
+            "name": "人脸识别",
+            "desc": "人脸识别",
+            "warning": "识别到人脸",
             "version": "1.0.1"
         }
     ]

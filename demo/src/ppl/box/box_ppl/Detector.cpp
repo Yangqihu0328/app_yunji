@@ -108,8 +108,15 @@ AX_VOID CDetector::WorkerThread(AX_U32 nGrd) {
                         auto &item = result.item[i];
                         auto &tBox = item.tBox;
 
-                        item.eType = static_cast<DETECT_TYPE_E>(obj.status);
+                        item.eType = static_cast<DETECT_TYPE_E>(result.nAlgoType);
                         item.nTrackId = obj.track_id;
+
+                        item.quality = obj.face_info.quality;
+                        item.status = obj.person_info.status;
+                        item.cartype = obj.vehicle_info.cartype;
+                        item.b_is_track_plate = obj.vehicle_info.b_is_track_plate;
+                        item.len_plate_id = obj.vehicle_info.len_plate_id;
+                        memcpy(item.plate_id, obj.vehicle_info.plate_id, sizeof(item.plate_id));
 
                         // 提取边界框并校验宽度和高度
                         float x = obj.bbox.x;
@@ -142,150 +149,6 @@ AX_VOID CDetector::WorkerThread(AX_U32 nGrd) {
             axFrame.DecRef();
         }
     }
-}
-
-AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
-    LOG_M_C(DETECTOR, "detect thread is running");
-
-    AX_U32 nCurrGrp = 0;
-    AX_U32 nNextGrp = 0;
-    const AX_U32 TOTAL_GRP_COUNT = m_stAttr.nChannelNum;
-    CAXFrame axFrame;
-    AX_U32 nSkipCount = 0;
-    ax_image_t ax_image{0};
-
-    while (m_DetectThread.IsRunning()) {
-
-        for (nCurrGrp = nNextGrp; nCurrGrp < TOTAL_GRP_COUNT; ++nCurrGrp) {
-            if (m_arrFrameQ[nCurrGrp].Pop(axFrame, 0)) {
-                nSkipCount = 0;
-                break;
-            }
-
-            if (++nSkipCount == TOTAL_GRP_COUNT) {
-                this_thread::sleep_for(chrono::microseconds(1000));
-                nSkipCount = 0;
-            }
-        }
-
-        if (nCurrGrp == TOTAL_GRP_COUNT) {
-            nNextGrp = 0;
-            continue;
-        } else {
-            nNextGrp = nCurrGrp + 1;
-            if (nNextGrp == TOTAL_GRP_COUNT) {
-                nNextGrp = 0;
-            }
-        }
-
-        LOG_M_D(DETECTOR, "runskel vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x",
-                axFrame.nGrp, axFrame.nChn,
-                axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
-                axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0], axFrame.stFrame.stVFrame.stVFrame.u32Width,
-                axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
-                axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
-
-        auto &frame_info = axFrame.stFrame.stVFrame.stVFrame;
-        if (ax_image.pVir == nullptr) {
-            ax_image.nSize = frame_info.u32FrameSize;
-            ax_image.nWidth = frame_info.u32Width;
-            ax_image.nHeight = frame_info.u32Height;
-            ax_image.eDtype = ax_color_space_nv12;
-            ax_image.tStride_W = frame_info.u32PicStride[0];
-            AX_U32 nImgSize = ALIGN_UP(ax_image.nSize, 65536);
-            AX_SYS_MemAlloc(&ax_image.pPhy, &ax_image.pVir, nImgSize, 0x100, (const AX_S8 *)"ax_algo");
-
-            int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
-            if (ret != 0) {
-                LOG_M_E(DETECTOR, "alloc image fail\n");
-                continue;
-            }
-        } else if (frame_info.u32FrameSize != ax_image.nSize) {
-            ax_release_image(&ax_image);
-
-            ax_image.nSize = frame_info.u32FrameSize;
-            ax_image.nWidth = frame_info.u32Width;
-            ax_image.nHeight = frame_info.u32Height;
-            ax_image.eDtype = ax_color_space_nv12;
-            ax_image.tStride_W = frame_info.u32PicStride[0];
-            AX_U32 nImgSize = ALIGN_UP(ax_image.nSize, 65536);
-            AX_SYS_MemAlloc(&ax_image.pPhy, &ax_image.pVir, nImgSize, 0x100, (const AX_S8 *)"ax_algo");
-
-            int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
-            if (ret != 0) {
-                LOG_M_E(DETECTOR, "alloc image fail\n");
-                continue;
-            }
-        }
-
-        for (int index = 0; index < ALGO_MAX_NUM; index++) {
-            if (handle_[nCurrGrp][index] != NULL) {
-
-#ifdef __BOX_DEBUG__
-                ofstream ofs;
-                AX_CHAR szFile[64];
-                sprintf(szFile, "./ai_dump_%d_%lld.yuv", frame_info.u32FrameSize,
-                frame_info.u64SeqNum);
-                ofs.open(szFile, ofstream::out | ofstream::binary | ofstream::trunc);
-                if (0 == frame_info.u64VirAddr[0]) {
-                    frame_info.u64VirAddr[0] =
-                    (AX_U64)AX_POOL_GetBlockVirAddr(frame_info.u32BlkId[0]);
-                }
-                ofs.write((const char*)frame_info.u64VirAddr[0], frame_info.u32FrameSize);
-                ofs.close();
-#endif
-
-                ax_result_t forward_result;
-                ax_algorithm_inference(handle_[nCurrGrp][index], &ax_image, &forward_result);
-
-                DETECT_RESULT_T result;
-                result.nW = frame_info.u32Width;
-                result.nH = frame_info.u32Height;
-                result.nSeqNum = frame_info.u64SeqNum;
-                result.nGrpId = axFrame.nGrp;
-                result.nAlgoType = m_stAttr.tChnAttr[axFrame.nGrp].nPPL[index];
-                result.nCount = forward_result.n_objects;
-
-                for (AX_U32 i = 0; i < result.nCount; ++i) {
-                    const auto& obj = forward_result.objects[i];
-                    auto& item = result.item[i];
-                    auto& tBox = item.tBox;
-
-                    item.eType = static_cast<DETECT_TYPE_E>(obj.status);
-                    item.nTrackId = obj.track_id;
-
-                    // 提取边界框并校验宽度和高度
-                    float x = obj.bbox.x;
-                    float y = obj.bbox.y;
-                    float w = obj.bbox.w;
-                    float h = obj.bbox.h;
-
-                    if (x + w + 1 > frame_info.u32Width) {
-                        w = frame_info.u32Width - x - 1;
-                    }
-
-                    if (y + h + 1 > frame_info.u32Height) {
-                        h = frame_info.u32Height - y - 1;
-                    }
-
-                    tBox.fX = x;
-                    tBox.fY = y;
-                    tBox.fW = std::max(0.0f, w);
-                    tBox.fH = std::max(0.0f, h); // 确保宽高不会为负
-                }
-
-                if (result.nCount > 0) {
-                    CDetectResult::GetInstance()->Set(axFrame.nGrp, result);
-                }
-            }
-        }
-
-        ax_release_image(&ax_image);
-        /* release frame after done */
-        axFrame.DecRef();
-    }
-
-    LOG_M_D(DETECTOR, "%s: ---", __func__);
 }
 
 AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
@@ -325,24 +188,28 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         }
 
         for (size_t i = 0; i < ALGO_MAX_NUM && i < mediasMap[nChn].taskInfo.vAlgo.size(); ++i) {
-            if (mediasMap[nChn].taskInfo.nTaskDelete == 1) {
+            if (mediasMap[nChn].taskInfo.nTaskDelete == 1 || mediasMap[nChn].taskInfo.nTaskStatus == 0) {
                 continue;
             }
 
             AX_U32 algo = mediasMap[nChn].taskInfo.vAlgo[i];
+            if (algo >= modelsMap.size() || algo != modelsMap[algo].nModelId) {
+                LOG_M_E(DETECTOR, "models josn file config error!!!");
+                continue;
+            }
+
+            LOG_M_C(DETECTOR, "model id=%u, model file=%s +++", modelsMap[algo].nModelId, modelsMap[algo].szModelPath);
 
             ax_algorithm_init_t init_info;
-            for (size_t j = 0; j < modelsMap.size(); ++j) {
-                if (algo == modelsMap[j].nModelId) {
-                    strcpy(init_info.model_file, modelsMap[j].szModelPath);
-                    break;
-                }
-            }
-
-            if (ax_algorithm_init(&init_info, &handle_[nChn][i]) != 0) {
-                LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail", __func__);
+            init_info.model_type = static_cast<ax_model_type_e>(modelsMap[algo].nModelId);
+            strcpy(init_info.model_file, modelsMap[algo].szModelPath);
+            int ret = ax_algorithm_init(&init_info, &handle_[nChn][i]);
+            if (ret != 0) {
+                LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail=0x%x", __func__, ret);
                 return AX_FALSE;
             }
+
+            // ax_algorithm_save_debug_image(handle_[nChn][i], false);
         }
     }
 
@@ -352,11 +219,6 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
 
 AX_BOOL CDetector::DeInit(AX_VOID) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
-
-    // if (m_DetectThread.IsRunning()) {
-    //     LOG_M_E(DETECTOR, "%s: detect thread is running", __func__);
-    //     return AX_FALSE;
-    // }
 
     // 获取当前通道信息
     AX_U32 nMediaCnt = 0;
@@ -398,10 +260,6 @@ AX_BOOL CDetector::Start(AX_VOID) {
         th.detach();
     }
 
-    // if (!m_DetectThread.Start([this](AX_VOID *pArg) -> AX_VOID { RunDetect(pArg); }, this, "AppDetect", SCHED_FIFO, 99)) {
-    //     LOG_M_E(DETECTOR, "%s: create detect thread fail", __func__);
-    //     return AX_FALSE;
-    // }
     LOG_M_D(DETECTOR, "%s: ---", __func__);
     return AX_TRUE;
 }
@@ -420,19 +278,23 @@ AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
             }
 
             AX_U32 algo = det_attr.nPPL[i];
+            if (algo >= modelsMap.size() || algo != modelsMap[algo].nModelId) {
+                LOG_M_E(DETECTOR, "models josn file config error!!!");
+                continue;
+            }
+
+            LOG_M_C(DETECTOR, "model id=%u, model file=%s +++", modelsMap[algo].nModelId, modelsMap[algo].szModelPath);
 
             ax_algorithm_init_t init_info;
-            for (size_t j = 0; j < modelsMap.size(); ++j) {
-                if (algo == modelsMap[j].nModelId) {
-                    strcpy(init_info.model_file, modelsMap[j].szModelPath);
-                    break;
-                }
-            }
-
-            if (ax_algorithm_init(&init_info, &handle_[id][i]) != 0) {
-                LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail", __func__);
+            init_info.model_type = static_cast<ax_model_type_e>(modelsMap[algo].nModelId);
+            strcpy(init_info.model_file, modelsMap[algo].szModelPath);
+            int ret = ax_algorithm_init(&init_info, &handle_[id][i]);
+            if (ret != 0) {
+                LOG_M_E(DETECTOR, "%s: ax_algorithm_init fail=0x%x", __func__, ret);
                 return AX_FALSE;
             }
+
+            // ax_algorithm_save_debug_image(handle_[id][i], false);
         }
     } while (0);
 
@@ -444,15 +306,12 @@ AX_BOOL CDetector::Stop(AX_VOID) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
 
     stop_ = AX_TRUE;
-    // m_DetectThread.Stop();
 
     if (m_arrFrameQ) {
         for (AX_U32 i = 0; i < m_stAttr.nChannelNum; ++i) {
             m_arrFrameQ[i].Wakeup();
         }
     }
-
-    // m_DetectThread.Join();
 
     if (m_arrFrameQ) {
         for (AX_U32 i = 0; i < m_stAttr.nChannelNum; ++i) {

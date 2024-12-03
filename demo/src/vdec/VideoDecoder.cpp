@@ -147,7 +147,7 @@ AX_VOID CVideoDecoder::RecvThread(AX_VOID* pArg) {
                 if (0 != ret) {
                     if (AX_ERR_VDEC_FLOW_END == ret || AX_ERR_VDEC_UNEXIST == ret) {
                         setGrps.erase(vdGrp);
-                        LOG_M_C(VDEC, "vdGrp %2d vdChn %d decode flow end, left %2d", vdGrp, vdChn, setGrps.size());
+                        LOG_M_D(VDEC, "vdGrp %2d vdChn %d decode flow end, left %2d", vdGrp, vdChn, setGrps.size());
                         continue;
                     } else if (AX_ERR_VDEC_STRM_ERROR == ret) {
                         LOG_M_N(VDEC, "AX_VDEC_GetChnFrame(vdGrp %d, vdChn %d): stream is undecodeable", vdGrp, vdChn);
@@ -678,7 +678,7 @@ AX_BOOL CVideoDecoder::CreateDecoder(AX_VDEC_GRP vdGrp, const VDEC_GRP_INFO_T& s
     /* let SDK copy input stream buffer */
     stGrpAttr.bSkipSdkStreamPool = AX_FALSE;
 
-    LOG_M_C(VDEC, "create vdGrp %d: codec %d, %dx%d, input mode %d, stream buf size 0x%x, private pool %d", vdGrp, stGrpAttr.enCodecType,
+    LOG_M_D(VDEC, "create vdGrp %d: codec %d, %dx%d, input mode %d, stream buf size 0x%x, private pool %d", vdGrp, stGrpAttr.enCodecType,
             stGrpAttr.u32MaxPicWidth, stGrpAttr.u32MaxPicHeight, stGrpAttr.enInputMode, stGrpAttr.u32StreamBufSize,
             stGrpAttr.bSdkAutoFramePool);
 
@@ -721,7 +721,7 @@ AX_BOOL CVideoDecoder::CreateDecoder(AX_VDEC_GRP vdGrp, const VDEC_GRP_INFO_T& s
             if (stGrpInfo.stAttr.bChnEnable[vdChn]) {
                 const AX_VDEC_CHN_ATTR_T& stChnAttr = stGrpInfo.stAttr.stChnAttr[vdChn];
 
-                LOG_M_C(VDEC, "enable vdGrp %d vdChn %d: %dx%d stride %d padding %d, fifo depth %d, mode %d, compress %d lv %d, fps = %f",
+                LOG_M_D(VDEC, "enable vdGrp %d vdChn %d: %dx%d stride %d padding %d, fifo depth %d, mode %d, compress %d lv %d, fps = %f",
                         vdGrp, vdChn, stChnAttr.u32PicWidth, stChnAttr.u32PicHeight, stChnAttr.u32FrameStride, stChnAttr.u32FramePadding,
                         stChnAttr.u32OutputFifoDepth, stChnAttr.enOutputMode, stChnAttr.stCompressInfo.enCompressMode,
                         stChnAttr.stCompressInfo.u32CompressLevel, stChnAttr.stOutputFrmRate.f32DstFrmRate);

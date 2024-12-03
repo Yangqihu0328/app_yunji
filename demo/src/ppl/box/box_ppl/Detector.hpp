@@ -85,9 +85,8 @@ protected:
     AX_VOID ClearQueue(AX_S32 nGrp);
 
 protected:
-    CAXThread m_DetectThread;
-    CAXLockQ<CAXFrame>* m_arrFrameQ{nullptr};
     DETECTOR_ATTR_T m_stAttr;
+    CAXLockQ<CAXFrame>* m_arrFrameQ{nullptr};
     
     ax_algorithm_handle_t handle_[DETECTOR_MAX_CHN_NUM][ALGO_MAX_NUM]{NULL};
 
