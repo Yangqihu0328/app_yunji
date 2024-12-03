@@ -1384,31 +1384,34 @@ AX_VOID MqttClient::SendLocalAlarmMsg() {
             std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
             std::vector<MODEL_INFO_T> modelsMap = CBoxModelParser::GetInstance()->GetModelsMap(&nModelCnt, streamConfig.strModelPath);
 
-            AX_CHAR modelWarning[32] = { 0 };
+            AX_CHAR modelWarning[32] = {0};
             for (size_t i = 0; i < modelsMap.size(); i++) {
                 if (modelsMap[i].nModelId == nAlgoType) {
                     strcpy(modelWarning, modelsMap[i].szModelWarning);
                     break;
                 }
             }
-            json child = {
-                { "type", "alarmMsg"},
-                { "taskName", mediasMap[nChn].taskInfo.szTaskName },
-                { "Time", currentTimeStr },
-                { "pushStatus", "等待重试" },
-                { "alarmMsg", modelWarning },
-                { "alarmType", modelWarning },
-                { "alarmId", nAlgoType },
-                { "mediaUrl", mediasMap[nChn].szMediaUrl },
-                { "mediaName", mediasMap[nChn].szMediaName },
-                { "jpgPath", jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath },
-            };
-            json root;
-            root["result"] = 0;
-            root["msg"] = "操作成功";
-            root["data"] = child;
-            std::string payload = root.dump();
-            SendMsg("web-message", payload.c_str(), payload.size());
+
+            if (isLogin) {
+                json child = {
+                    {"type", "alarmMsg"},
+                    {"taskName", mediasMap[nChn].taskInfo.szTaskName},
+                    {"Time", currentTimeStr},
+                    {"pushStatus", "等待重试"},
+                    {"alarmMsg", modelWarning},
+                    {"alarmType", modelWarning},
+                    {"alarmId", nAlgoType},
+                    {"mediaUrl", mediasMap[nChn].szMediaUrl},
+                    {"mediaName", mediasMap[nChn].szMediaName},
+                    {"jpgPath", jpg_info.tJpegInfo.tCaptureInfo.tHeaderInfo.szImgPath},
+                };
+                json root;
+                root["result"] = 0;
+                root["msg"] = "操作成功";
+                root["data"] = child;
+                std::string payload = root.dump();
+                SendMsg("web-message", payload.c_str(), payload.size());
+            }
 
             // 播放声音
             AX_CHAR AudioFile[128] = { 0 };
@@ -1420,26 +1423,26 @@ AX_VOID MqttClient::SendLocalAlarmMsg() {
                 LOG_M_E(MQTT_CLIENT, "AudioFile %s not exist", AudioFile);
             }
 
-            // // 短信告警推送
-            // json message = {
-            //     { "alarmDescribe", modelWarning },
-            //     { "alarmTime", currentTimeStr },
-            //     { "channelName", mediasMap[nChn].szMediaName },
-            //     { "deviceSymbol", "06C38B59-EB2D-4B7D-B67E-56E01228574F" },
-            //     { "flowStatus", "1" },
-            //     { "imageData", "#" },
-            //     { "reportInfo", modelWarning },
-            //     { "reportStatus", "1" },
-            //     { "taskDescribe", mediasMap[nChn].taskInfo.szTaskName },
-            //     { "tenantId", "1" },
-            // };
-            // auto params = message.dump();
-            // auto res = BoxHttpRequest::Send("post", 
-            //                     "http://192.168.0.196:8010/devices/admin/deviceAlarm/save", 
-            //                     "Content-Type: application/json;",
-            //                     params,
-            //                     5000);
-            // LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
+            // 短信告警推送
+            json message = {
+                { "alarmDescribe", modelWarning },
+                { "alarmTime", currentTimeStr },
+                { "channelName", mediasMap[nChn].szMediaName },
+                { "deviceSymbol", "06C38B59-EB2D-4B7D-B67E-56E01228574F" },
+                { "flowStatus", "1" },
+                { "imageData", "#" },
+                { "reportInfo", modelWarning },
+                { "reportStatus", "1" },
+                { "taskDescribe", mediasMap[nChn].taskInfo.szTaskName },
+                { "tenantId", "1" },
+            };
+            auto params = message.dump();
+            auto res = BoxHttpRequest::Send("post", 
+                                "http://192.168.0.196:8010/devices/admin/deviceAlarm/save", 
+                                "Content-Type: application/json;",
+                                params,
+                                5000);
+            LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
         }
     }
 }
@@ -1819,26 +1822,24 @@ AX_BOOL MqttClient::OnRecvData(OBS_TARGET_TYPE_E eTarget, AX_U32 nGrp, AX_U32 nC
             return AX_FALSE;
         }
 
-        // if (isLogin) {
-        //     QUEUE_T jpg_info;
-        //     jpg_info.jpg_buf = new AX_U8[MAX_BUF_LENGTH];
-        //     jpg_info.buf_length = pVencPack->u32Len;
-        //     memcpy(jpg_info.jpg_buf, pVencPack->pu8Addr, jpg_info.buf_length);
-        //     jpg_info.u64UserData = pVencPack->u64UserData;
+        QUEUE_T jpg_info;
+        jpg_info.jpg_buf = new AX_U8[MAX_BUF_LENGTH];
+        jpg_info.buf_length = pVencPack->u32Len;
+        memcpy(jpg_info.jpg_buf, pVencPack->pu8Addr, jpg_info.buf_length);
+        jpg_info.u64UserData = pVencPack->u64UserData;
 
-        //     auto &tJpegInfo = jpg_info.tJpegInfo;
-        //     tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc = nGrp;
-        //     tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel = nChn;
-        //     tJpegInfo.tCaptureInfo.tHeaderInfo.nWidth = 1920;
-        //     tJpegInfo.tCaptureInfo.tHeaderInfo.nHeight = 1080;
-        //     CElapsedTimer::GetLocalTime(tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp, 16, '-', AX_FALSE);
+        auto &tJpegInfo = jpg_info.tJpegInfo;
+        tJpegInfo.tCaptureInfo.tHeaderInfo.nSnsSrc = nGrp;
+        tJpegInfo.tCaptureInfo.tHeaderInfo.nChannel = nChn;
+        tJpegInfo.tCaptureInfo.tHeaderInfo.nWidth = 1920;
+        tJpegInfo.tCaptureInfo.tHeaderInfo.nHeight = 1080;
+        CElapsedTimer::GetLocalTime(tJpegInfo.tCaptureInfo.tHeaderInfo.szTimestamp, 16, '-', AX_FALSE);
 
-        //     if (!local_jpeg_queue_->Push(jpg_info)) {
-        //         // 释放内存
-        //         delete[] jpg_info.jpg_buf;
-        //         jpg_info.jpg_buf = nullptr;
-        //     }
-        // }
+        if (!local_jpeg_queue_->Push(jpg_info)) {
+            // 释放内存
+            delete[] jpg_info.jpg_buf;
+            jpg_info.jpg_buf = nullptr;
+        }
     }
 
     return AX_TRUE;
@@ -1939,26 +1940,26 @@ AX_BOOL MqttClient::Init(MQTT_CONFIG_T &mqtt_config) {
     std::string version;
     GetVersion(version);
 
-    // // 云端设备注册
-    // json message = {
-    //     { "authorizationStatus", "已授权"},
-    //     { "deviceIp", szIP },
-    //     { "deviceSymbol", "06C38B59EB2D4B7DB67E56E01228574F" },
-    //     { "memory", memInfo.totalMem },
-    //     { "softwareVersion", AI_BOX_VERSION },
-    //     { "status", "正常" },
-    //     { "storage", falsh_info.total },
-    //     { "systemVersion", version },
-    //     { "tenantId", "1" },
-    // };
+    // 云端设备注册
+    json message = {
+        { "authorizationStatus", "已授权"},
+        { "deviceIp", szIP },
+        { "deviceSymbol", "06C38B59EB2D4B7DB67E56E01228574F" },
+        { "memory", memInfo.totalMem },
+        { "softwareVersion", AI_BOX_VERSION },
+        { "status", "正常" },
+        { "storage", falsh_info.total },
+        { "systemVersion", version },
+        { "tenantId", "1" },
+    };
 
-    // auto params = message.dump();
-    // std::string res = BoxHttpRequest::Send("post", 
-    //                       "http://192.168.0.196:8010/devices/admin/deviceInfo/save", 
-    //                       "Content-Type: application/json;",
-    //                       params,
-    //                       5000);
-    // LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
+    auto params = message.dump();
+    std::string res = BoxHttpRequest::Send("post", 
+                          "http://192.168.0.196:8010/devices/admin/deviceInfo/save", 
+                          "Content-Type: application/json;",
+                          params,
+                          5000);
+    LOG_M_C(MQTT_CLIENT, "response: %s", res.c_str());
 
     return AX_TRUE;
 }

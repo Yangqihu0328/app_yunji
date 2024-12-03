@@ -31,6 +31,119 @@ using namespace std;
 #define ALIGN_UP(x, align) (((x) + ((align)-1)) & ~((align)-1))
 
 #ifdef __USE_AX_ALGO
+
+AX_VOID CDetector::WorkerThread(AX_U32 nGrd) {
+    CAXFrame axFrame;
+    ax_image_t ax_image{0};
+
+    while (!stop_) {
+
+        if (m_arrFrameQ[nGrd].Pop(axFrame, -1)) {
+            LOG_M_D(DETECTOR, "runskel vdGrp %d vdChn %d frame %lld pts %lld phy 0x%llx %dx%d stride %d blkId 0x%x", axFrame.nGrp,
+                    axFrame.nChn, axFrame.stFrame.stVFrame.stVFrame.u64SeqNum, axFrame.stFrame.stVFrame.stVFrame.u64PTS,
+                    axFrame.stFrame.stVFrame.stVFrame.u64PhyAddr[0], axFrame.stFrame.stVFrame.stVFrame.u32Width,
+                    axFrame.stFrame.stVFrame.stVFrame.u32Height, axFrame.stFrame.stVFrame.stVFrame.u32PicStride[0],
+                    axFrame.stFrame.stVFrame.stVFrame.u32BlkId[0]);
+
+            auto &frame_info = axFrame.stFrame.stVFrame.stVFrame;
+            if (ax_image.pVir == nullptr) {
+                ax_image.nSize = frame_info.u32FrameSize;
+                ax_image.nWidth = frame_info.u32Width;
+                ax_image.nHeight = frame_info.u32Height;
+                ax_image.eDtype = ax_color_space_nv12;
+                ax_image.tStride_W = frame_info.u32PicStride[0];
+                AX_U32 nImgSize = ALIGN_UP(ax_image.nSize, 65536);
+                AX_SYS_MemAlloc(&ax_image.pPhy, &ax_image.pVir, nImgSize, 0x100, (const AX_S8 *)"ax_algo");
+
+                int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
+                if (ret != 0) {
+                    LOG_M_E(DETECTOR, "alloc image fail\n");
+                    continue;
+                }
+            } else if (frame_info.u32FrameSize != ax_image.nSize) {
+                ax_release_image(&ax_image);
+
+                ax_image.nSize = frame_info.u32FrameSize;
+                ax_image.nWidth = frame_info.u32Width;
+                ax_image.nHeight = frame_info.u32Height;
+                ax_image.eDtype = ax_color_space_nv12;
+                ax_image.tStride_W = frame_info.u32PicStride[0];
+                AX_U32 nImgSize = ALIGN_UP(ax_image.nSize, 65536);
+                AX_SYS_MemAlloc(&ax_image.pPhy, &ax_image.pVir, nImgSize, 0x100, (const AX_S8 *)"ax_algo");
+
+                int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
+                if (ret != 0) {
+                    LOG_M_E(DETECTOR, "alloc image fail\n");
+                    continue;
+                }
+            }
+
+            for (int index = 0; index < ALGO_MAX_NUM; index++) {
+                if (handle_[nGrd][index] != NULL) {
+#ifdef __BOX_DEBUG__
+                    ofstream ofs;
+                    AX_CHAR szFile[64];
+                    sprintf(szFile, "./ai_dump_%d_%lld.yuv", frame_info.u32FrameSize, frame_info.u64SeqNum);
+                    ofs.open(szFile, ofstream::out | ofstream::binary | ofstream::trunc);
+                    if (0 == frame_info.u64VirAddr[0]) {
+                        frame_info.u64VirAddr[0] = (AX_U64)AX_POOL_GetBlockVirAddr(frame_info.u32BlkId[0]);
+                    }
+                    ofs.write((const char *)frame_info.u64VirAddr[0], frame_info.u32FrameSize);
+                    ofs.close();
+#endif
+
+                    ax_result_t forward_result;
+                    ax_algorithm_inference(handle_[nGrd][index], &ax_image, &forward_result);
+
+                    DETECT_RESULT_T result;
+                    result.nW = frame_info.u32Width;
+                    result.nH = frame_info.u32Height;
+                    result.nSeqNum = frame_info.u64SeqNum;
+                    result.nGrpId = axFrame.nGrp;
+                    result.nAlgoType = m_stAttr.tChnAttr[axFrame.nGrp].nPPL[index];
+                    result.nCount = forward_result.n_objects;
+
+                    for (AX_U32 i = 0; i < result.nCount; ++i) {
+                        const auto &obj = forward_result.objects[i];
+                        auto &item = result.item[i];
+                        auto &tBox = item.tBox;
+
+                        item.eType = static_cast<DETECT_TYPE_E>(obj.status);
+                        item.nTrackId = obj.track_id;
+
+                        // 提取边界框并校验宽度和高度
+                        float x = obj.bbox.x;
+                        float y = obj.bbox.y;
+                        float w = obj.bbox.w;
+                        float h = obj.bbox.h;
+
+                        if (x + w + 1 > frame_info.u32Width) {
+                            w = frame_info.u32Width - x - 1;
+                        }
+
+                        if (y + h + 1 > frame_info.u32Height) {
+                            h = frame_info.u32Height - y - 1;
+                        }
+
+                        tBox.fX = x;
+                        tBox.fY = y;
+                        tBox.fW = std::max(0.0f, w);
+                        tBox.fH = std::max(0.0f, h);  // 确保宽高不会为负
+                    }
+
+                    if (result.nCount > 0) {
+                        CDetectResult::GetInstance()->Set(axFrame.nGrp, result);
+                    }
+                }
+            }
+
+            ax_release_image(&ax_image);
+            /* release frame after done */
+            axFrame.DecRef();
+        }
+    }
+}
+
 AX_VOID CDetector::RunDetect(AX_VOID *pArg) {
     LOG_M_C(DETECTOR, "detect thread is running");
 
@@ -196,7 +309,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         return AX_FALSE;
     } else {
         for (AX_U32 i = 0; i < stAttr.nChannelNum; ++i) {
-            m_arrFrameQ[i].SetCapacity(2);
+            m_arrFrameQ[i].SetCapacity(-1);
         }
     }
 
@@ -240,10 +353,10 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
 AX_BOOL CDetector::DeInit(AX_VOID) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
 
-    if (m_DetectThread.IsRunning()) {
-        LOG_M_E(DETECTOR, "%s: detect thread is running", __func__);
-        return AX_FALSE;
-    }
+    // if (m_DetectThread.IsRunning()) {
+    //     LOG_M_E(DETECTOR, "%s: detect thread is running", __func__);
+    //     return AX_FALSE;
+    // }
 
     // 获取当前通道信息
     AX_U32 nMediaCnt = 0;
@@ -277,10 +390,18 @@ AX_BOOL CDetector::DeInit(AX_VOID) {
 AX_BOOL CDetector::Start(AX_VOID) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
 
-    if (!m_DetectThread.Start([this](AX_VOID *pArg) -> AX_VOID { RunDetect(pArg); }, this, "AppDetect", SCHED_FIFO, 99)) {
-        LOG_M_E(DETECTOR, "%s: create detect thread fail", __func__);
-        return AX_FALSE;
+    stop_ = AX_FALSE;
+    for (AX_U32 i = 0; i < m_stAttr.nChannelNum; ++i) {
+        detect_threads_.emplace_back([this, i]() { this->WorkerThread(i); });
     }
+    for (auto& th : detect_threads_) {
+        th.detach();
+    }
+
+    // if (!m_DetectThread.Start([this](AX_VOID *pArg) -> AX_VOID { RunDetect(pArg); }, this, "AppDetect", SCHED_FIFO, 99)) {
+    //     LOG_M_E(DETECTOR, "%s: create detect thread fail", __func__);
+    //     return AX_FALSE;
+    // }
     LOG_M_D(DETECTOR, "%s: ---", __func__);
     return AX_TRUE;
 }
@@ -322,7 +443,8 @@ AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
 AX_BOOL CDetector::Stop(AX_VOID) {
     LOG_M_D(DETECTOR, "%s: +++", __func__);
 
-    m_DetectThread.Stop();
+    stop_ = AX_TRUE;
+    // m_DetectThread.Stop();
 
     if (m_arrFrameQ) {
         for (AX_U32 i = 0; i < m_stAttr.nChannelNum; ++i) {
@@ -330,7 +452,7 @@ AX_BOOL CDetector::Stop(AX_VOID) {
         }
     }
 
-    m_DetectThread.Join();
+    // m_DetectThread.Join();
 
     if (m_arrFrameQ) {
         for (AX_U32 i = 0; i < m_stAttr.nChannelNum; ++i) {
@@ -356,6 +478,7 @@ AX_BOOL CDetector::StopId(int id) {
         for (AX_U32 i = 0; i < ALGO_MAX_NUM; ++i) {
             if (handle_[id][i] != nullptr) {
                 ax_algorithm_deinit(handle_[id][i]);
+                handle_[id][i] = nullptr;
             }
         }
     }

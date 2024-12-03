@@ -10,6 +10,8 @@
 
 #pragma once
 #include <vector>
+#include <thread>
+
 #include "AXFrame.hpp"
 #include "AXLockQ.hpp"
 #include "AXResource.hpp"
@@ -79,6 +81,7 @@ public:
 protected:
     AX_BOOL SkipFrame(const CAXFrame& axFrame);
     AX_VOID RunDetect(AX_VOID* pArg);
+    AX_VOID WorkerThread(AX_U32 tid);
     AX_VOID ClearQueue(AX_S32 nGrp);
 
 protected:
@@ -87,6 +90,9 @@ protected:
     DETECTOR_ATTR_T m_stAttr;
     
     ax_algorithm_handle_t handle_[DETECTOR_MAX_CHN_NUM][ALGO_MAX_NUM]{NULL};
+
+    std::vector<std::thread> detect_threads_;
+    std::atomic<AX_BOOL> stop_ = {AX_FALSE};
 };
 
 #else
