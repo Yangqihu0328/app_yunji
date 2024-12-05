@@ -69,7 +69,7 @@ typedef struct DETECT_RESULT_S {
     AX_U32 nCount;
     AX_S32 nGrpId;
     AX_U32 nAlgoType;
-    AX_U32 result_diff;
+    AX_BOOL result_diff;
     DETECT_RESULT_ITEM_T item[MAX_DETECT_RESULT_COUNT];
 
     DETECT_RESULT_S(AX_VOID) {
@@ -87,71 +87,21 @@ class CDetectResult : public CAXSingleton<CDetectResult> {
 
 public:
     // 需要在这里进行组合
-    AX_BOOL Set(AX_S32 nGrp, const DETECT_RESULT_T& cur_result) {
+    AX_BOOL Set(AX_S32 nGrp, const DETECT_RESULT_T& result) {
         std::lock_guard<std::mutex> lck(m_mtx);
-        auto &last_result = m_mapRlts[nGrp];
 
         DETECT_RESULT_T new_result;
-        DETECT_RESULT_T few_result;
-        // 说明是推理当前帧的多个算法
-        if (last_result.nSeqNum == cur_result.nSeqNum && last_result.nAlgoType != cur_result.nAlgoType) {
-            // 先判断差异，找到最多的，从最多的增加。
-            if (cur_result.nCount >= last_result.nCount) {
-                new_result = cur_result;
-                few_result = last_result;
-            } else {
-                new_result = last_result;
-                few_result = cur_result;
-                new_result.nAlgoType = cur_result.nAlgoType;
-            }
-
-            int i = new_result.nCount, j = 0;
-            int temp_count = new_result.nCount + last_result.nCount;
-            int sum_count = temp_count < MAX_DETECT_RESULT_COUNT ? temp_count : MAX_DETECT_RESULT_COUNT;
-            for (; i < sum_count; i++ && j++) {
-                new_result.item[i].eType = few_result.item[j].eType;
-                new_result.item[i].nTrackId  = few_result.item[j].nTrackId;
-                new_result.item[i].tBox  = few_result.item[j].tBox;
-            }
-            new_result.nCount = sum_count;
+        if (result.nAlgoType == DETECT_TYPE_E::DETECT_TYPE_PEOPLE) {
+            new_result = HandleDetectPerson(nGrp, result);
+        } else if (result.nAlgoType == DETECT_TYPE_E::DETECT_TYPE_VEHICLE) {
+            new_result = HandleDetectVehicle(nGrp, result);
+        } else if (result.nAlgoType == DETECT_TYPE_E::DETECT_TYPE_FACE) {
+            new_result = HandleDetectFace(nGrp, result);
+        } else if (result.nAlgoType == DETECT_TYPE_E::DETECT_TYPE_FIRE) {
+            new_result = HandleDetectFire(nGrp, result);
         } else {
-            new_result = cur_result;
+            new_result = result;
         }
-
-#ifdef __USE_AX_ALGO
-        for (AX_U32 i = 0; i < new_result.nCount; ++i) {
-            auto id = new_result.item[i].nTrackId;
-            if (last_tracked_ids.find(id) == last_tracked_ids.end()) {
-                new_result.result_diff = true;
-            }
-            last_tracked_ids.insert(id);
-        }
-
-        while (last_tracked_ids.size() > 50) {
-            // 删除最小的元素（set.begin() 指向最小的元素）
-            last_tracked_ids.erase(last_tracked_ids.begin());
-        }
-#else
-        //现在的问题：检测容易漏检，导致跟踪算法容易跟丢,容易出现新的track id
-        //如果某一帧跟丢的话，判断上一帧的结果，下一帧肯定找不到上一帧的track id
-        //两次的数量相同，说明当前是较稳定的,把这个结果保存起来。
-        if (last_result.nCount == new_result.nCount) {
-            //这里的result就是表示上一次稳定目标的结果
-            auto result = channel_result[nGrp];
-
-            if (result.nCount == 0) {
-                new_result.result_diff = true;
-            } else {
-                std::unordered_set<int> last_track_ids = track_id_set(result);
-                //当前结果与上一次稳定结果相比较
-                new_result.result_diff = has_difference(last_track_ids, new_result);
-            }
-
-            if (new_result.result_diff == true) {
-                channel_result[nGrp] = new_result;
-            }
-        }
-#endif
 
         m_mapRlts[nGrp] = new_result;
 
@@ -163,7 +113,6 @@ public:
         return AX_TRUE;
     }
 
-
     AX_BOOL Get(AX_S32 nGrp, DETECT_RESULT_T& result) {
         std::lock_guard<std::mutex> lck(m_mtx);
         if (m_mapRlts.end() == m_mapRlts.find(nGrp)) {
@@ -171,8 +120,53 @@ public:
         }
 
         result = m_mapRlts[nGrp];
-        m_mapRlts.erase(nGrp);
         return AX_TRUE;
+    }
+
+    DETECT_RESULT_T HandleDetectPerson(AX_S32 nGrp, const DETECT_RESULT_T& result) {
+        DETECT_RESULT_T new_result = result;
+        DETECT_RESULT_T last_result = m_mapRlts[nGrp];
+
+        if (result.nCount != last_result.nCount) {
+            new_result.result_diff = AX_TRUE;
+        }
+
+        return new_result;
+    }
+
+    DETECT_RESULT_T HandleDetectVehicle(AX_S32 nGrp, const DETECT_RESULT_T& result) {
+        DETECT_RESULT_T new_result = result;
+        DETECT_RESULT_T last_result = m_mapRlts[nGrp];
+
+        if (result.nCount != last_result.nCount) {
+            new_result.result_diff = AX_TRUE;
+        }
+
+        return new_result;
+    }
+
+    DETECT_RESULT_T HandleDetectFace(AX_S32 nGrp, const DETECT_RESULT_T& result) {
+        DETECT_RESULT_T new_result = result;
+        DETECT_RESULT_T last_result = m_mapRlts[nGrp];
+
+        if (result.nCount != last_result.nCount) {
+            new_result.result_diff = AX_TRUE;
+        }
+
+        return new_result;
+    }
+
+    DETECT_RESULT_T HandleDetectFire(AX_S32 nGrp, const DETECT_RESULT_T& result) {
+        DETECT_RESULT_T new_result = result;
+        DETECT_RESULT_T last_result = m_mapRlts[nGrp];
+
+        if (result.nCount != last_result.nCount) {
+            new_result.result_diff = AX_TRUE;
+        } else {
+            
+        }
+
+        return new_result;
     }
 
     AX_U64 GetTotalCount(DETECT_TYPE_E eType) {
@@ -193,7 +187,6 @@ protected:
 private:
     std::mutex m_mtx;
     std::map<AX_S32, DETECT_RESULT_T> m_mapRlts;
-    std::set<int> last_tracked_ids;
 
     AX_U64 m_arrCount[DETECT_TYPE_TOTAL] = {0};
 };

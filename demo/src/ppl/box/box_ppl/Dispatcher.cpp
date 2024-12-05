@@ -42,7 +42,7 @@ AX_VOID CDispatcher::DispatchThread(AX_VOID* pArg) {
 
                     DrawBox(axFrame, fhvp);
 
-                    if (fhvp.result_diff == true) {
+                    if (fhvp.result_diff == AX_TRUE) {
                         axFrame.nAlgoType = fhvp.nAlgoType;
                         for (auto& m : s_lstObs) {
                             m->ProcessFrame(&axFrame);

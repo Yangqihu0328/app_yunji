@@ -268,16 +268,18 @@ AX_BOOL CDetector::Start(AX_VOID) {
 AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
     LOG_M_W(DETECTOR, "%s: +++", __func__);
     do {
+        AX_U32 nMediaCnt = 0;
         AX_U32 nModelCnt = 0;
         STREAM_CONFIG_T streamConfig = CBoxConfig::GetInstance()->GetStreamConfig();
+        std::vector<MEDIA_INFO_T> mediasMap = CBoxMediaParser::GetInstance()->GetMediasMap(&nMediaCnt, streamConfig.strMediaPath);
         std::vector<MODEL_INFO_T> modelsMap = CBoxModelParser::GetInstance()->GetModelsMap(&nModelCnt, streamConfig.strModelPath);
 
-        for (size_t i = 0; i < ALGO_MAX_NUM; ++i) {
-            if (det_attr.nPPL[i] == 0) {
+        for (size_t i = 0; i < ALGO_MAX_NUM && i < mediasMap[id].taskInfo.vAlgo.size(); ++i) {
+            if (mediasMap[id].taskInfo.nTaskDelete == 1 || mediasMap[id].taskInfo.nTaskStatus == 0) {
                 continue;
             }
 
-            AX_U32 algo = det_attr.nPPL[i];
+            AX_U32 algo = mediasMap[id].taskInfo.vAlgo[i];
             if (algo >= modelsMap.size() || algo != modelsMap[algo].nModelId) {
                 LOG_M_E(DETECTOR, "models josn file config error!!!");
                 continue;

@@ -108,11 +108,11 @@ extern "C"
     int ax_algorithm_inference(ax_algorithm_handle_t handle, ax_image_t *image, ax_result_t *result);
 
     ax_model_type_e ax_algorithm_get_model_type(ax_algorithm_handle_t handle);
-    
+
     /**
      * @brief: save debug image
      * @param[in] handle: algorithm handle
-     * @param[in] enable: 1:enable save debug image, 0: disable
+     * @param[in] enable: 1: enable save debug image, 0: disable
      */
     void ax_algorithm_save_debug_image(ax_algorithm_handle_t handle, int enable);
 
