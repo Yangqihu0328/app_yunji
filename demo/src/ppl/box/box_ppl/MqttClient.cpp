@@ -592,7 +592,7 @@ bool check_RTSP_stream(const std::string& rtspUrl) {
     }
 
     if (0 != box_ping4(rtspUrl.c_str(), 4)) {
-        LOG_M_D(MQTT_CLIENT, "network to %s is down");
+        LOG_M_E(MQTT_CLIENT, "network to %s is down", rtspUrl.c_str());
         return false;
     }
 
@@ -603,7 +603,7 @@ bool check_RTSP_stream(const std::string& rtspUrl) {
     }
 
     if (avformat_open_input(&formatContext, rtspUrl.c_str(), nullptr, nullptr) < 0) {
-        LOG_M_E(MQTT_CLIENT, "Failed to open RTSP stream: ", rtspUrl);
+        LOG_M_E(MQTT_CLIENT, "Failed to open RTSP stream: %s", rtspUrl.c_str());
         return false;
     }
 
