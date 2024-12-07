@@ -875,7 +875,6 @@ static void OnDelAlgoTaskInfo(AX_U32 id) {
         // 更新配置
         CBoxMediaParser::GetInstance()->SetMediasMap(mediasMap);
 
-
         root["result"] = 0;
         root["msg"] = "操作成功";
     } else {
@@ -2016,7 +2015,7 @@ AX_BOOL MqttClient::Start(AX_VOID) {
 
         for (size_t i = 0; i < mediasMap.size(); i++) {
             if (mediasMap[i].taskInfo.nTaskStatus == 1) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
                 StartPreview(i);
 

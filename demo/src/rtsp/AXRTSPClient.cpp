@@ -303,7 +303,7 @@ static void continueAfterPLAY(RTSPClient *rtspClient, int resultCode, char *resu
         StreamClientState &scs = ((CAXRTSPClient *)rtspClient)->scs;  // alias
 
         if (resultCode != 0) {
-            env << *rtspClient << "Failed to start playing session: " << resultString << "\n";
+            env << *rtspClient << "Failed to start playing session: " << resultString << ", code: " << resultCode << "\n";
             break;
         }
 
@@ -400,6 +400,7 @@ static void streamTimerHandler(void *clientData) {
 }
 
 static void shutdownStream(RTSPClient *rtspClient, int exitCode) {
+    printf(">>>>>>>>>>>>>>>>>>>>>> shutdownStream %s+++\n", rtspClient->url());
     StreamClientState &scs = ((CAXRTSPClient *)rtspClient)->scs;
     // UsageEnvironment &env = rtspClient->envir();
     // std::string url = rtspClient->url();
@@ -446,6 +447,7 @@ static void shutdownStream(RTSPClient *rtspClient, int exitCode) {
     }
 #endif
     // env << "shutdownStream " << url.c_str() << "---\n";
+    printf(">>>>>>>>>>>>>>>>>>>>>> shutdownStream %s---\n", rtspClient->url());
 }
 
 // Implementation of "CAXRTSPClient":

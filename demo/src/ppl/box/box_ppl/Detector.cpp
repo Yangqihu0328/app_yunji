@@ -57,7 +57,7 @@ AX_VOID CDetector::WorkerThread(AX_U32 nGrd) {
 
                 int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
                 if (ret != 0) {
-                    LOG_M_E(DETECTOR, "alloc image fail\n");
+                    LOG_M_E(DETECTOR, "AX_IVPS_CmmCopyTdp fail=0x%x\n", ret);
                     continue;
                 }
             } else if (frame_info.u32FrameSize != ax_image.nSize) {
@@ -73,7 +73,7 @@ AX_VOID CDetector::WorkerThread(AX_U32 nGrd) {
 
                 int ret = AX_IVPS_CmmCopyTdp(frame_info.u64PhyAddr[0], ax_image.pPhy, nImgSize);
                 if (ret != 0) {
-                    LOG_M_E(DETECTOR, "alloc image fail\n");
+                    LOG_M_E(DETECTOR, "AX_IVPS_CmmCopyTdp fail=0x%x\n", ret);
                     continue;
                 }
             }
@@ -92,8 +92,13 @@ AX_VOID CDetector::WorkerThread(AX_U32 nGrd) {
                     ofs.close();
 #endif
 
+                    // AX_U64 nStartMs = CElapsedTimer::GetInstance()->GetTickCount();
+
                     ax_result_t forward_result;
                     ax_algorithm_inference(handle_[nGrd][index], &ax_image, &forward_result);
+
+                    // AX_U64 nEndMs = CElapsedTimer::GetInstance()->GetTickCount();
+                    // LOG_M_E(DETECTOR, "ax_algorithm_inference model id=%u, took time=%ldms +++", index, nEndMs - nStartMs);
 
                     DETECT_RESULT_T result;
                     result.nW = frame_info.u32Width;
@@ -172,7 +177,7 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
         return AX_FALSE;
     } else {
         for (AX_U32 i = 0; i < stAttr.nChannelNum; ++i) {
-            m_arrFrameQ[i].SetCapacity(-1);
+            m_arrFrameQ[i].SetCapacity(1);
         }
     }
 
@@ -198,7 +203,8 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
                 continue;
             }
 
-            LOG_M_C(DETECTOR, "model id=%u, model file=%s +++", modelsMap[algo].nModelId, modelsMap[algo].szModelPath);
+            AX_U64 nStartMs = CElapsedTimer::GetInstance()->GetTickCount();
+            LOG_M_E(DETECTOR, "model id=%u, model file=%s +++", modelsMap[algo].nModelId, modelsMap[algo].szModelPath);
 
             ax_algorithm_init_t init_info;
             init_info.model_type = static_cast<ax_model_type_e>(modelsMap[algo].nModelId);
@@ -209,7 +215,9 @@ AX_BOOL CDetector::Init(const DETECTOR_ATTR_T &stAttr) {
                 return AX_FALSE;
             }
 
-            // ax_algorithm_save_debug_image(handle_[nChn][i], false);
+            AX_U64 nEndMs = CElapsedTimer::GetInstance()->GetTickCount();
+            LOG_M_E(DETECTOR, "model id=%u, model file=%s, took time=%ldms +++", modelsMap[algo].nModelId, modelsMap[algo].szModelPath,
+                    nEndMs - nStartMs);
         }
     }
 
@@ -265,7 +273,7 @@ AX_BOOL CDetector::Start(AX_VOID) {
 }
 
 //指定id开始，实际上就是对m_arrFrameQ进行初始化和调用npu接口
-AX_BOOL CDetector::StartId(int id, DETECTOR_CHN_ATTR_T det_attr) {
+AX_BOOL CDetector::StartId(int id) {
     LOG_M_W(DETECTOR, "%s: +++", __func__);
     do {
         AX_U32 nMediaCnt = 0;
